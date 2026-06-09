@@ -1,9 +1,9 @@
-import type { Metadata } from 'next';
-import './globals.css';
+import type { Metadata } from "next";
+import "./globals.css";
 
 export const metadata: Metadata = {
-  title: 'EDEN',
-  description: 'AI 叙事游戏',
+  title: "EDEN",
+  description: "AI 叙事游戏",
 };
 
 export default function RootLayout({
