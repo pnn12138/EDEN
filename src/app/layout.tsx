@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "EDEN",
-  description: "AI 叙事游戏",
+  description: "叙事游戏",
 };
 
 export default function RootLayout({

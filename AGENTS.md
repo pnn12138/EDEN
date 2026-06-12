@@ -122,6 +122,15 @@ EDEN 是面向「AI CAN DO IT｜腾讯云黑客松 游戏开发挑战赛」的�
 * AI 创作说明，包括 AI 创作环节、产出、用途和提示词摘要。
 * 社交媒体发布链接，如准备加分项。
 
+## Project Context Maintenance
+
+* `docs/PROJECT_CONTEXT.md` is the shared project snapshot for agents.
+* Codex must read it before every test/review task.
+* Codex must update it after every test/review round.
+* PRD remains the source of product truth.
+* CodeGraph is used for code-structure discovery.
+* CodeBuddy remains the primary implementation tool.
+
 ## CodeGraph Usage
 
 CodeGraph is used only as a local code-structure index to help agents understand the repository.
