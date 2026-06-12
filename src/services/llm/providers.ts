@@ -115,7 +115,7 @@ export async function callOpenAICompatible(
     const content: string | undefined =
       data?.choices?.[0]?.message?.content ?? undefined;
 
-    if (typeof content !== "string") {
+    if (typeof content !== "string" || content.trim().length === 0) {
       return {
         ok: false,
         error: "provider_request_failed",

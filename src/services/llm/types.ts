@@ -34,7 +34,13 @@ export type FallbackReasonCode =
   | "provider_config_missing"
   | "provider_request_failed"
   | "provider_timeout"
-  | "mock_provider";
+  | "mock_provider"
+  | "llm_data_missing"
+  | "json_parse_failed"
+  | "forbidden_word"
+  | "parse_failed"
+  | "prompt_build_failed"
+  | "internal_error";
 
 /** 统一 LLM 调用结果（可能 fallback） */
 export type LLMCallResult = {

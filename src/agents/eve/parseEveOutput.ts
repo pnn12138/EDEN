@@ -167,8 +167,13 @@ export function parseEveOutput(
         toolCall = undefined;
         finalEveReply = scriptedEveReplies[temptationProgress] ?? scriptedEveReplies[0]!;
       }
+    } else {
+      // 非法 toolCall（不在白名单 / caller 不是 eve / 结构不合法）：
+      // 丢弃 toolCall 并替换 eveReply 为当前进度对应的安全对白
+      // 防止模型输出含强意图的不一致文案
+      toolCall = undefined;
+      finalEveReply = scriptedEveReplies[temptationProgress] ?? scriptedEveReplies[0]!;
     }
-    // 非法 toolCall 静默丢弃
   }
 
   return {

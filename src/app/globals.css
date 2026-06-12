@@ -1,3 +1,10 @@
+/* ============================================================
+   EDEN - Chapter 0 游戏全局样式
+   Phase 5：最小 UI 与素材包装
+   风格：古典寓言 / 暗金绿色调 / 半写实绘本风
+   ============================================================ */
+
+/* ---- Reset & Base ---- */
 * {
   box-sizing: border-box;
 }
@@ -9,9 +16,10 @@ body {
 }
 
 body {
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  background: #0f0f14;
-  color: #f5f5f5;
+  font-family: "Noto Serif SC", "Source Han Serif SC", "Songti SC", Georgia, "Times New Roman", serif;
+  background: #0a0e0a;
+  color: #e8e4d8;
+  -webkit-font-smoothing: antialiased;
 }
 
 main {
@@ -30,112 +38,261 @@ section {
 a {
   display: inline-block;
   margin-top: 16px;
-  color: inherit;
+  color: #c8a86e;
   text-decoration: underline;
 }
 
-/* ============================================================
-   Chapter 0 游戏页面样式
-   Phase 2：无 AI 可玩闭环
-   ============================================================ */
+a:hover {
+  color: #e8d5a3;
+}
 
-.game-container {
+/* ---- 游戏容器 ---- */
+.eden-game {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #0a0e0a;
+}
+
+/* ---- 背景层 ---- */
+.eden-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+}
+
+.eden-bg img {
+  filter: brightness(0.35) saturate(0.8);
+}
+
+.eden-bg-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(10, 14, 10, 0.6) 0%,
+    rgba(10, 14, 10, 0.3) 40%,
+    rgba(10, 14, 10, 0.7) 100%
+  );
+}
+
+.eden-bg-overlay--dialogue {
+  background: linear-gradient(
+    180deg,
+    rgba(10, 14, 10, 0.7) 0%,
+    rgba(10, 14, 10, 0.2) 30%,
+    rgba(10, 14, 10, 0.2) 70%,
+    rgba(10, 14, 10, 0.8) 100%
+  );
+}
+
+.eden-bg-overlay--success {
+  background: linear-gradient(
+    180deg,
+    rgba(40, 30, 10, 0.5) 0%,
+    rgba(10, 14, 10, 0.3) 50%,
+    rgba(40, 30, 10, 0.6) 100%
+  );
+}
+
+.eden-bg-overlay--failure {
+  background: linear-gradient(
+    180deg,
+    rgba(20, 10, 10, 0.6) 0%,
+    rgba(10, 14, 10, 0.3) 50%,
+    rgba(20, 10, 10, 0.7) 100%
+  );
+}
+
+/* ---- 顶部栏 ---- */
+.eden-header {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 20px;
+  background: rgba(10, 14, 10, 0.85);
+  border-bottom: 1px solid rgba(200, 168, 110, 0.15);
+  backdrop-filter: blur(8px);
+  flex-shrink: 0;
+}
+
+.eden-header-left {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.eden-title {
+  font-size: 1.3rem;
+  font-weight: 700;
+  letter-spacing: 0.25em;
+  color: #e8d5a3;
+  margin: 0;
+  text-shadow: 0 0 12px rgba(200, 168, 110, 0.3);
+}
+
+.eden-chapter-tag {
+  font-size: 0.72rem;
+  color: #7a7a6a;
+  letter-spacing: 0.06em;
+}
+
+.eden-header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.eden-turn-badge {
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  background: rgba(200, 168, 110, 0.12);
+  color: #c8a86e;
+  border: 1px solid rgba(200, 168, 110, 0.2);
+}
+
+.eden-sound-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid rgba(200, 168, 110, 0.2);
+  background: rgba(200, 168, 110, 0.08);
+  font-size: 1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s;
+}
+
+.eden-sound-btn:hover {
+  background: rgba(200, 168, 110, 0.18);
+}
+
+/* ---- 滚动区 ---- */
+.eden-scroll {
   max-width: 680px;
   width: 100%;
   margin: 0 auto;
+  padding: 20px 20px 32px;
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 20px;
 }
 
-/* ---- 页头 ---- */
-.game-header {
-  text-align: center;
-  padding-bottom: 12px;
-  border-bottom: 1px solid #2a2a35;
-}
-
-.game-header h1 {
-  font-size: 1.5rem;
-  font-weight: 700;
-  letter-spacing: 0.2em;
-  color: #e8d5a3;
-  margin: 0 0 4px 0;
-}
-
-.chapter-tag {
-  font-size: 0.78rem;
-  color: #7a7a8a;
-  letter-spacing: 0.05em;
-}
-
-/* ---- Intro 旁白 ---- */
-.intro-narration {
+/* ---- 开场阶段 ---- */
+.eden-intro-content {
+  position: relative;
+  z-index: 5;
+  flex: 1;
+  overflow-y: auto;
   display: flex;
-  flex-direction: column;
-  gap: 24px;
-  align-items: center;
+  justify-content: center;
 }
 
-.narration-block {
+/* ---- 旁白块 ---- */
+.eden-narration-block {
   width: 100%;
   padding: 20px 24px;
   background: rgba(255, 255, 255, 0.03);
-  border-left: 2px solid #4a4a5a;
-  border-radius: 0 6px 6px 0;
+  border-left: 2px solid #4a5a3a;
+  border-radius: 0 8px 8px 0;
 }
 
-.narration-line {
+.eden-narration-block--serpent {
+  border-left-color: #5a8a4a;
+  background: rgba(90, 138, 74, 0.04);
+}
+
+.eden-narration-line {
   margin: 0 0 6px 0;
-  line-height: 1.85;
+  line-height: 2;
   font-size: 0.95rem;
-  color: #c8c8d4;
+  color: #b8b8a8;
   font-style: italic;
 }
 
-.narration-line:last-child {
+.eden-narration-line:last-child {
   margin-bottom: 0;
 }
 
-.serpent-narration {
+.eden-narration-line--serpent {
   color: #a8c8a0;
   font-style: normal;
 }
 
-.god-dialogue-block {
+/* ---- 神与夏娃对话 ---- */
+.eden-god-dialogue-block {
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   padding: 20px 24px;
   background: rgba(232, 213, 163, 0.04);
   border-left: 2px solid #e8d5a3;
-  border-radius: 0 6px 6px 0;
+  border-radius: 0 8px 8px 0;
 }
 
-.god-line,
-.eve-line {
+.eden-god-line,
+.eden-eve-line {
   margin: 0;
-  line-height: 1.85;
+  line-height: 2;
   font-size: 0.95rem;
 }
 
-.god-line {
+.eden-god-line {
   color: #e8d5a3;
 }
 
-.eve-line {
+.eden-eve-line {
   color: #d4c4e0;
 }
 
-.speaker {
+.eden-speaker {
   font-weight: 600;
-  font-size: 0.82rem;
-  margin-right: 4px;
+  font-size: 0.78rem;
+  margin-right: 6px;
+  letter-spacing: 0.08em;
+}
+
+.eden-speaker--god {
+  color: #e8d5a3;
+}
+
+.eden-speaker--eve {
+  color: #d4c4e0;
+}
+
+/* ---- 蛇图标区 ---- */
+.eden-serpent-icon-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 0;
+}
+
+.eden-serpent-icon {
+  border-radius: 50%;
+  border: 2px solid rgba(90, 138, 74, 0.3);
+  background: rgba(90, 138, 74, 0.08);
+}
+
+.eden-role-hint {
+  font-size: 0.78rem;
+  color: #a8c8a0;
+  letter-spacing: 0.12em;
 }
 
 /* ---- 按钮 ---- */
-.btn {
+.eden-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -145,311 +302,533 @@ a {
   font-size: 0.92rem;
   font-weight: 500;
   cursor: pointer;
-  transition: background 0.2s, opacity 0.2s;
+  transition: background 0.2s, opacity 0.2s, transform 0.1s;
+  font-family: inherit;
 }
 
-.btn:disabled {
+.eden-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
 
-.btn-primary {
-  background: #c8a86e;
-  color: #0f0f14;
+.eden-btn--primary {
+  background: linear-gradient(135deg, #c8a86e 0%, #a8884e 100%);
+  color: #0a0e0a;
   font-weight: 600;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.08em;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
-.btn-primary:hover:not(:disabled) {
-  background: #d4b87a;
+.eden-btn--primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #d4b87a 0%, #b8985a 100%);
+  transform: translateY(-1px);
 }
 
-.btn-send {
-  background: #3a4a3a;
-  color: #e0e0e0;
+.eden-btn--start {
+  width: 100%;
+  max-width: 320px;
+  padding: 14px 32px;
+  font-size: 1.05rem;
+  margin: 0 auto;
+  display: flex;
+}
+
+.eden-btn--restart {
+  width: 100%;
+  max-width: 320px;
+  padding: 14px 32px;
+  font-size: 1.05rem;
+  margin: 0 auto;
+  display: flex;
+}
+
+.eden-btn--send {
+  background: rgba(90, 138, 74, 0.3);
+  color: #a8c8a0;
   padding: 10px 20px;
   flex-shrink: 0;
+  border: 1px solid rgba(90, 138, 74, 0.3);
 }
 
-.btn-send:hover:not(:disabled) {
-  background: #4a5a4a;
+.eden-btn--send:hover:not(:disabled) {
+  background: rgba(90, 138, 74, 0.5);
 }
 
-.btn-suggestion {
-  background: rgba(200, 168, 110, 0.1);
+.eden-btn--suggestion {
+  background: rgba(200, 168, 110, 0.08);
   color: #c8a86e;
-  border: 1px solid rgba(200, 168, 110, 0.25);
-  padding: 6px 12px;
-  font-size: 0.82rem;
+  border: 1px solid rgba(200, 168, 110, 0.2);
+  padding: 6px 14px;
+  font-size: 0.8rem;
   border-radius: 20px;
   white-space: nowrap;
 }
 
-.btn-suggestion:hover {
-  background: rgba(200, 168, 110, 0.2);
+.eden-btn--suggestion:hover {
+  background: rgba(200, 168, 110, 0.18);
+}
+
+/* ---- 对话阶段主区 ---- */
+.eden-dialogue-main {
+  position: relative;
+  z-index: 5;
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  justify-content: center;
 }
 
 /* ---- 状态栏 ---- */
-.status-bar {
+.eden-status-bar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 16px;
-  background: rgba(255, 255, 255, 0.03);
-  border-radius: 8px;
-  font-size: 0.84rem;
+  padding: 10px 16px;
+  background: rgba(10, 14, 10, 0.6);
+  border-radius: 10px;
+  border: 1px solid rgba(200, 168, 110, 0.08);
 }
 
-.status-item {
-  color: #9a9aaa;
+.eden-progress-area {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
-.status-item strong {
-  color: #e0e0e0;
+.eden-progress-label {
+  font-size: 0.78rem;
+  color: #8a8a7a;
 }
 
-/* ---- 进度条 ---- */
-.progress-bar {
-  display: inline-flex;
-  gap: 5px;
-  margin-left: 6px;
-  vertical-align: middle;
+.eden-progress-dots {
+  display: flex;
+  gap: 6px;
 }
 
-.progress-dot {
-  display: inline-block;
-  width: 10px;
-  height: 10px;
+.eden-progress-dot {
+  width: 12px;
+  height: 12px;
   border-radius: 50%;
-  background: #3a3a45;
-  transition: background 0.3s;
+  background: #2a2a25;
+  border: 1px solid #3a3a30;
+  transition: all 0.4s ease;
 }
 
-.progress-dot.filled {
+.eden-progress-dot--filled {
   background: #c8a86e;
-  box-shadow: 0 0 6px rgba(200, 168, 110, 0.4);
+  border-color: #c8a86e;
+  box-shadow: 0 0 8px rgba(200, 168, 110, 0.5);
+}
+
+.eden-fruit-indicator {
+  display: flex;
+  align-items: center;
+}
+
+.eden-fruit-icon {
+  opacity: 0.3;
+  filter: grayscale(0.8);
+  transition: all 0.5s ease;
+}
+
+.eden-fruit-icon--active {
+  opacity: 1;
+  filter: grayscale(0) brightness(1.1);
+  animation: fruitGlow 2s ease-in-out infinite alternate;
+}
+
+@keyframes fruitGlow {
+  from { filter: grayscale(0) brightness(1.1); }
+  to   { filter: grayscale(0) brightness(1.3); }
 }
 
 /* ---- 夏娃对白 ---- */
-.eve-dialogue-box {
-  padding: 18px 22px;
+.eden-eve-dialogue {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  animation: fadeInUp 0.5s ease;
+}
+
+.eden-eve-avatar-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.eden-eve-avatar {
+  border-radius: 50%;
+  border: 2px solid rgba(212, 196, 224, 0.3);
   background: rgba(212, 196, 224, 0.05);
-  border-left: 3px solid #d4c4e0;
-  border-radius: 0 6px 6px 0;
-  animation: fadeIn 0.4s ease;
 }
 
-.speaker-label {
-  display: block;
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
+.eden-eve-name {
+  font-size: 0.65rem;
   color: #d4c4e0;
-  margin-bottom: 8px;
-  text-transform: uppercase;
+  letter-spacing: 0.1em;
 }
 
-.eve-dialogue-text {
+.eden-eve-bubble {
+  flex: 1;
+  padding: 16px 20px;
+  background: rgba(212, 196, 224, 0.06);
+  border-left: 3px solid #d4c4e0;
+  border-radius: 0 10px 10px 0;
+}
+
+.eden-eve-text {
   margin: 0;
-  line-height: 1.9;
-  font-size: 1rem;
-  color: #e8e0f0;
+  line-height: 2;
+  font-size: 0.98rem;
+  color: #ece4f4;
 }
 
 /* ---- 系统提示 ---- */
-.system-hint {
+.eden-system-hint {
   text-align: center;
   padding: 8px 16px;
   font-size: 0.82rem;
   color: #a08060;
-  background: rgba(160, 128, 96, 0.08);
-  border-radius: 6px;
+  background: rgba(160, 128, 96, 0.06);
+  border-radius: 8px;
+}
+
+.eden-system-hint--loading {
+  color: #c8a86e;
+  background: rgba(200, 168, 110, 0.06);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.5; }
 }
 
 /* ---- 推荐话术 ---- */
-.suggestions-area {
+.eden-suggestions {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
 }
 
-.suggestions-label {
+.eden-suggestions-label {
+  font-size: 0.72rem;
+  color: #6a6a5a;
+}
+
+.eden-suggestions-list {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* ---- 事件日志 ---- */
+.eden-event-log-details {
+  width: 100%;
+}
+
+.eden-event-log-details summary {
+  cursor: pointer;
   font-size: 0.78rem;
-  color: #6a6a78;
+  color: #5a5a4a;
+  padding: 6px 0;
+}
+
+.eden-event-log-details--inline summary {
+  color: #4a4a3a;
+  font-size: 0.72rem;
+}
+
+.eden-event-log {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 14px;
+  background: rgba(0, 0, 0, 0.4);
+  border-radius: 8px;
+  max-height: 180px;
+  overflow-y: auto;
+  font-size: 0.72rem;
+  font-family: "Courier New", Consolas, monospace;
+}
+
+.eden-log-entry {
+  line-height: 1.6;
+  padding: 2px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.02);
+}
+
+.eden-log-turn {
+  color: #4a4a3a;
+  margin-right: 6px;
+}
+
+.eden-log-msg {
+  color: #7a7a6a;
+}
+
+.eden-log-serpent_speaks .eden-log-msg {
+  color: #8aaa80;
+}
+
+.eden-log-eve_speaks .eden-log-msg {
+  color: #b4a4c0;
+}
+
+.eden-log-state_change .eden-log-msg {
+  color: #c8a86e;
+}
+
+.eden-log-ending .eden-log-msg {
+  color: #e8d5a3;
+  font-weight: 600;
+}
+
+.eden-log-narration .eden-log-msg {
+  color: #6a6a5a;
+  font-style: italic;
 }
 
 /* ---- 输入区 ---- */
-.input-area {
-  display: flex;
-  gap: 8px;
+.eden-input-footer {
+  position: relative;
+  z-index: 10;
+  padding: 12px 16px;
+  background: rgba(10, 14, 10, 0.9);
+  border-top: 1px solid rgba(200, 168, 110, 0.1);
+  backdrop-filter: blur(8px);
+  flex-shrink: 0;
 }
 
-.player-input {
+.eden-input-area {
+  max-width: 680px;
+  margin: 0 auto;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.eden-input-role {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+.eden-serpent-mini {
+  border-radius: 50%;
+  opacity: 0.7;
+}
+
+.eden-player-input {
   flex: 1;
   padding: 10px 16px;
-  background: #1a1a24;
-  border: 1px solid #3a3a45;
-  border-radius: 6px;
-  color: #e0e0e0;
+  background: rgba(20, 25, 20, 0.8);
+  border: 1px solid #3a3a30;
+  border-radius: 8px;
+  color: #e8e4d8;
   font-size: 0.95rem;
+  font-family: inherit;
   outline: none;
   transition: border-color 0.2s;
 }
 
-.player-input::placeholder {
-  color: #5a5a68;
+.eden-player-input::placeholder {
+  color: #5a5a48;
 }
 
-.player-input:focus {
+.eden-player-input:focus {
   border-color: #c8a86e;
 }
 
-/* ---- 事件日志 ---- */
-.event-log {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 12px 16px;
-  background: rgba(0, 0, 0, 0.3);
-  border-radius: 6px;
-  max-height: 220px;
+/* ---- 结局阶段 ---- */
+.eden-ending-content {
+  position: relative;
+  z-index: 5;
+  flex: 1;
   overflow-y: auto;
-  font-size: 0.78rem;
-  font-family: "Courier New", Consolas, monospace;
-}
-
-.log-entry {
-  line-height: 1.6;
-  padding: 2px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
-}
-
-.log-turn {
-  color: #5a5a68;
-  margin-right: 6px;
-}
-
-.log-msg {
-  color: #9a9aaa;
-}
-
-.log-serpent_speaks .log-msg {
-  color: #a8c8a0;
-}
-
-.log-eve_speaks .log-msg {
-  color: #d4c4e0;
-}
-
-.log-state_change .log-msg {
-  color: #c8a86e;
-}
-
-.log-ending .log-msg {
-  color: #e8d5a3;
-  font-weight: 600;
-}
-
-.log-narration .log-msg {
-  color: #7a7a8a;
-  font-style: italic;
-}
-
-/* ---- 结局展示 ---- */
-.ending-display {
   display: flex;
-  flex-direction: column;
-  gap: 24px;
-  align-items: center;
+  justify-content: center;
 }
 
-.ending-banner {
+.eden-ending-banner {
   text-align: center;
-  padding: 20px 0;
+  padding: 24px 0;
   width: 100%;
-  border-bottom: 1px solid #2a2a35;
+  border-bottom: 1px solid rgba(200, 168, 110, 0.15);
 }
 
-.ending-banner.success {
-  border-bottom-color: #c8a86e;
+.eden-ending-banner--success {
+  border-bottom-color: rgba(200, 168, 110, 0.4);
 }
 
-.ending-banner.failure {
-  border-bottom-color: #5a4a4a;
+.eden-ending-banner--failure {
+  border-bottom-color: rgba(160, 80, 80, 0.4);
 }
 
-.ending-type-tag {
+.eden-ending-tag {
   display: inline-block;
-  padding: 2px 10px;
+  padding: 3px 12px;
   border-radius: 12px;
   font-size: 0.72rem;
   font-weight: 600;
-  letter-spacing: 0.08em;
-  margin-bottom: 10px;
+  letter-spacing: 0.1em;
+  margin-bottom: 12px;
 }
 
-.ending-banner.success .ending-type-tag {
+.eden-ending-tag--success {
   background: rgba(200, 168, 110, 0.2);
   color: #c8a86e;
 }
 
-.ending-banner.failure .ending-type-tag {
-  background: rgba(160, 128, 128, 0.2);
-  color: #a08080;
+.eden-ending-tag--failure {
+  background: rgba(160, 80, 80, 0.2);
+  color: #a06060;
 }
 
-.ending-banner h2 {
+.eden-ending-title {
   margin: 0;
-  font-size: 1.4rem;
+  font-size: 1.5rem;
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
 }
 
-.ending-banner.success h2 {
+.eden-ending-banner--success .eden-ending-title {
   color: #e8d5a3;
+  text-shadow: 0 0 20px rgba(200, 168, 110, 0.3);
 }
 
-.ending-banner.failure h2 {
-  color: #9a8080;
+.eden-ending-banner--failure .eden-ending-title {
+  color: #a08080;
+  text-shadow: 0 0 20px rgba(160, 80, 80, 0.2);
 }
 
-.ending-text {
+.eden-ending-text {
   width: 100%;
-  padding: 20px 24px;
+  padding: 24px;
   background: rgba(255, 255, 255, 0.02);
-  border-radius: 8px;
+  border-radius: 10px;
 }
 
-.ending-line {
+.eden-ending-line {
   margin: 0 0 8px 0;
-  line-height: 1.9;
-  font-size: 0.95rem;
-  color: #c8c8d4;
+  line-height: 2;
+  font-size: 0.98rem;
+  color: #c8c8b8;
 }
 
-.ending-line:last-child {
+.eden-ending-line:last-child {
   margin-bottom: 0;
 }
 
-/* ---- 结局页日志折叠 ---- */
-.event-log-details {
-  width: 100%;
-}
-
-.event-log-details summary {
-  cursor: pointer;
-  font-size: 0.82rem;
-  color: #6a6a78;
-  padding: 6px 0;
-}
-
-.event-log-details .event-log {
-  margin-top: 8px;
-}
-
 /* ---- 动画 ---- */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(6px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ---- 首页样式 ---- */
+.home-container {
+  max-width: 640px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.home-container h1 {
+  font-size: 2.5rem;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  color: #e8d5a3;
+  text-shadow: 0 0 30px rgba(200, 168, 110, 0.2);
+  margin-bottom: 16px;
+}
+
+.home-container p {
+  line-height: 1.8;
+  color: #a8a898;
+  margin-bottom: 8px;
+}
+
+/* ---- 响应式 ---- */
+@media (max-width: 640px) {
+  .eden-header {
+    padding: 10px 14px;
+  }
+
+  .eden-title {
+    font-size: 1.1rem;
+  }
+
+  .eden-chapter-tag {
+    display: none;
+  }
+
+  .eden-scroll {
+    padding: 14px 14px 24px;
+    gap: 14px;
+  }
+
+  .eden-narration-block,
+  .eden-god-dialogue-block {
+    padding: 14px 16px;
+  }
+
+  .eden-eve-dialogue {
+    gap: 8px;
+  }
+
+  .eden-eve-avatar {
+    width: 36px !important;
+    height: 36px !important;
+  }
+
+  .eden-eve-bubble {
+    padding: 12px 14px;
+  }
+
+  .eden-input-footer {
+    padding: 10px 12px;
+  }
+
+  .eden-player-input {
+    font-size: 16px; /* 防止 iOS 缩放 */
+  }
+
+  .eden-btn--start,
+  .eden-btn--restart {
+    max-width: 100%;
+  }
+
+  .eden-ending-title {
+    font-size: 1.25rem;
+  }
+}
+
+@media (max-width: 380px) {
+  .eden-suggestions {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .eden-suggestions-list {
+    width: 100%;
+  }
+
+  .eden-btn--suggestion {
+    font-size: 0.74rem;
+    padding: 5px 10px;
+  }
 }

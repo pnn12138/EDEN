@@ -19,6 +19,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { runEveAgent, type EveAgentRequest } from "@/agents/eve/eveAgent";
 import type { Chapter0State } from "@/game/types/state";
 import type { EveAgentOutput } from "@/game/types/agent";
+import type { FallbackReasonCode } from "@/services/llm/types";
 import { analyzePlayerInput, isValidInput } from "@/game/rules/progressRules";
 import { validateToolCall } from "@/game/rules/toolRules";
 import { executeEatFruit, logToolRejected } from "@/game/tools/eatFruit";
@@ -44,7 +45,7 @@ type AgentResponseBody = {
   /** EveAgent 是否使用了 fallback */
   usedFallback?: boolean;
   /** fallback 原因码（安全，不含密钥/URL） */
-  fallbackReason?: string;
+  fallbackReason?: FallbackReasonCode;
 };
 
 function cloneState(s: Chapter0State): Chapter0State {
@@ -133,14 +134,23 @@ export async function POST(request: NextRequest) {
     // ---- ToolCall 意图 → 规则层校验 → 执行 ----
     let eveReply: string = agentOutput.eveReply;
 
+    // 决定是否有 eat_fruit 意图：
+    // 1. 模型主动输出 toolCall → 使用模型意图
+    // 2. 模型未输出 toolCall，但规则层判断进度已达标（>=2）→ 后端补充生成意图
+    //    这保证真实 AI 路径下成功结局稳定可达，与本地 fallback 行为一致
+    let effectiveToolCall = agentOutput.toolCall;
+    if (!effectiveToolCall && state.temptationProgress >= 2 && state.phase === "dialogue" && !state.isEnded) {
+      effectiveToolCall = { name: "eat_fruit" as const, caller: "eve" as const, args: {} };
+    }
+
     // 双重保护：即使 parseEveOutput 放行了 toolCall，
     // route 层仍校验 temptationProgress >= 2 + phase + isEnded + hasEatenFruit
-    if (agentOutput.toolCall && state.phase === "dialogue" && !state.isEnded) {
+    if (effectiveToolCall && state.phase === "dialogue" && !state.isEnded) {
       state.eventLog.push(
         makeEvent("tool_request", state.turn, `夏娃向树上的果子伸出了手。`),
       );
 
-      const validation = validateToolCall(state, agentOutput.toolCall);
+      const validation = validateToolCall(state, effectiveToolCall);
 
       if (validation.allowed) {
         const { state: newState } = executeEatFruit(state);
@@ -188,8 +198,13 @@ export async function POST(request: NextRequest) {
       usedFallback: agentResult.usedFallback || undefined,
       fallbackReason: agentResult.fallbackReason || undefined,
     } satisfies AgentResponseBody);
-  } catch {
+  } catch (err: unknown) {
     // ---- 全局异常兜底（不暴露原始错误信息） ----
+    // 内部日志：帮助排查问题，不包含密钥 / URL
+    console.error(
+      "[api/agent] Unhandled error:",
+      err instanceof Error ? err.message : String(err),
+    );
     return NextResponse.json(
       {
         ok: false,

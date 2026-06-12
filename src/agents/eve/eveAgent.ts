@@ -10,6 +10,7 @@
 
 import type { Chapter0State } from "@/game/types/state";
 import type { EveAgentOutput } from "@/game/types/agent";
+import type { FallbackReasonCode } from "@/services/llm/types";
 import { callLLM } from "@/services/llm/client";
 import { buildEvePrompt } from "@/agents/eve/buildEvePrompt";
 import { parseEveOutput, createFallbackOutput } from "@/agents/eve/parseEveOutput";
@@ -26,7 +27,7 @@ export type EveAgentResult = {
   /** 是否使用了 fallback（LLM 失败 / 解析失败 / 禁用词等） */
   usedFallback: boolean;
   /** fallback 原因码（安全，不暴露密钥/URL） */
-  fallbackReason?: string;
+  fallbackReason?: FallbackReasonCode;
 };
 
 /**
@@ -64,15 +65,21 @@ export async function runEveAgent(req: EveAgentRequest): Promise<EveAgentResult>
   });
 
   // LLM 层面的 fallback（config missing / timeout / request failed → mock）
+  // 注：此分支也包含 mock_provider（ok=true 但 usedFallback=true）
   if (!llmResult.ok || llmResult.usedFallback) {
-    // 如果 LLM 返回了 mock 内容，仍尝试解析
+    // 安全的 fallback reason：优先使用 LLM 层已标记的原因码，其次根据 error 映射
+    const llmFallbackReason: FallbackReasonCode =
+      llmResult.fallbackReason ??
+      (llmResult.error === "provider_timeout" ? "provider_timeout" : "internal_error");
+
+    // 如果 LLM 返回了内容（含 mock），仍尝试解析
     if (llmResult.data) {
       const parseResult = parseEveOutput(llmResult.data.content, state.temptationProgress);
       if (parseResult.ok) {
         return {
           output: parseResult.data,
           usedFallback: true,
-          fallbackReason: llmResult.fallbackReason ?? llmResult.error ?? "unknown",
+          fallbackReason: llmFallbackReason,
         };
       }
     }
@@ -80,12 +87,21 @@ export async function runEveAgent(req: EveAgentRequest): Promise<EveAgentResult>
     return {
       output: createFallbackOutput(state.temptationProgress, "LLM fallback"),
       usedFallback: true,
-      fallbackReason: llmResult.fallbackReason ?? llmResult.error ?? "unknown",
+      fallbackReason: llmFallbackReason,
     };
   }
 
-  // ---- 3. 解析输出 ----
-  const parseResult = parseEveOutput(llmResult.data!.content, state.temptationProgress);
+  // ---- 3. 防御：data 必须存在（理论上 ok=true 必有 data，但不依赖非空断言）----
+  if (!llmResult.data) {
+    return {
+      output: createFallbackOutput(state.temptationProgress, "llm_data_missing"),
+      usedFallback: true,
+      fallbackReason: "llm_data_missing",
+    };
+  }
+
+  // ---- 4. 解析输出 ----
+  const parseResult = parseEveOutput(llmResult.data.content, state.temptationProgress);
 
   if (!parseResult.ok) {
     return {
