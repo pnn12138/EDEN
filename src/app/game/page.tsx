@@ -2,14 +2,15 @@
 
 // ============================================================
 // Chapter 0 游戏页面
-// Phase 5：最小 UI 与素材包装
+// Phase 7：游戏化表现重构
 //
 // 变更：
-// - 接入音频反馈（useChapter0Audio）
-// - 接入视觉素材（背景图、头像、结局图）
-// - 优化页面布局为完整 Demo 感
-// - 古典寓言 / 暗金绿色调 / 半写实绘本风
-// - 保持 Phase 4 Provider / fallback / rule guard 能力不回归
+// - 对话阶段重构为沉浸式伊甸园第一人称游戏场景
+// - 夏娃成为主视觉（大半身像 + 电影字幕式对白）
+// - temptationProgress 驱动场景氛围变化（CSS class）
+// - 推荐话术包装为"可尝试的低语"
+// - 事件日志默认折叠，不占主视觉
+// - 保持 Phase 4/5/6 所有能力不回归
 // ============================================================
 
 import { useState, useCallback, useRef, useEffect } from "react";
@@ -42,6 +43,13 @@ type AgentResponse = {
   systemHint: string | null;
   usedFallback?: boolean;
   fallbackReason?: string;
+};
+
+// ---- 场景氛围提示 ----
+const ATMOSPHERE_HINTS: Record<number, string | null> = {
+  0: null,
+  1: "她第一次认真听见了你的低语。",
+  2: "她的目光停在善恶树上。",
 };
 
 // ---- 组件 ----
@@ -106,7 +114,6 @@ export default function GamePage() {
     const prevProgress = state.temptationProgress;
 
     try {
-      // 请求 /api/agent
       const response = await fetch("/api/agent", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -121,8 +128,6 @@ export default function GamePage() {
 
       if (data.ok && data.state) {
         setState(data.state);
-
-        // 播放发送音效
         playWhisperSubmit();
 
         if (data.eveReply !== null) {
@@ -140,14 +145,7 @@ export default function GamePage() {
         }
 
         setSystemHint(data.systemHint);
-
-        // 进度增加时额外触发音效（useChapter0Audio 的 useEffect 已自动处理）
-        // 但这里也手动触发一次，确保即时反馈
-        if (data.state.temptationProgress > prevProgress) {
-          // 音效已由 hook 的 useEffect 自动处理
-        }
       } else {
-        // API 返回异常 → 本地 fallback
         const result = runChapter0Turn(state, playerInput);
         setState(result.state);
         if (result.eveReply !== null) {
@@ -157,7 +155,6 @@ export default function GamePage() {
         playWhisperSubmit();
       }
     } catch {
-      // 网络错误等 → 本地 fallback
       const result = runChapter0Turn(state, playerInput);
       setState(result.state);
       if (result.eveReply !== null) {
@@ -209,7 +206,6 @@ export default function GamePage() {
   if (state.phase === "intro") {
     return (
       <div className="eden-game eden-game--intro">
-        {/* 背景图 */}
         <div className="eden-bg">
           <Image
             src={CHAPTER0_IMAGES.edenBackground}
@@ -222,7 +218,6 @@ export default function GamePage() {
           <div className="eden-bg-overlay" />
         </div>
 
-        {/* 顶部栏 */}
         <header className="eden-header">
           <div className="eden-header-left">
             <h1 className="eden-title">EDEN</h1>
@@ -238,7 +233,6 @@ export default function GamePage() {
           </button>
         </header>
 
-        {/* 开场内容 */}
         <main className="eden-intro-content">
           <div className="eden-scroll">
             <div className="eden-narration-block">
@@ -272,7 +266,6 @@ export default function GamePage() {
               ))}
             </div>
 
-            {/* 蛇图标 */}
             <div className="eden-serpent-icon-area">
               <Image
                 src={CHAPTER0_IMAGES.serpentIcon}
@@ -305,7 +298,6 @@ export default function GamePage() {
 
     return (
       <div className={`eden-game eden-game--ending eden-game--${ending.type}`}>
-        {/* 结局背景图 */}
         <div className="eden-bg">
           <Image
             src={endingImage}
@@ -317,7 +309,6 @@ export default function GamePage() {
           <div className={`eden-bg-overlay eden-bg-overlay--${ending.type}`} />
         </div>
 
-        {/* 顶部栏 */}
         <header className="eden-header">
           <div className="eden-header-left">
             <h1 className="eden-title">EDEN</h1>
@@ -332,7 +323,6 @@ export default function GamePage() {
           </button>
         </header>
 
-        {/* 结局内容 */}
         <main className="eden-ending-content">
           <div className="eden-scroll">
             <div className={`eden-ending-banner eden-ending-banner--${ending.type}`}>
@@ -371,10 +361,12 @@ export default function GamePage() {
     );
   }
 
-  // ---- 渲染：Dialogue 阶段 ----
+  // ---- 渲染：Dialogue 阶段（沉浸式游戏场景） ----
+  const atmosphereHint = ATMOSPHERE_HINTS[state.temptationProgress] ?? null;
+
   return (
-    <div className="eden-game eden-game--dialogue">
-      {/* 背景图 */}
+    <div className={`eden-game eden-game--dialogue scene-progress-${state.temptationProgress}`}>
+      {/* 背景层 */}
       <div className="eden-bg">
         <Image
           src={CHAPTER0_IMAGES.edenBackground}
@@ -393,6 +385,19 @@ export default function GamePage() {
           <span className="eden-chapter-tag">Chapter 0 · 初次堕落</span>
         </div>
         <div className="eden-header-right">
+          <div className="eden-progress-area">
+            <span className="eden-progress-label">诱惑进度</span>
+            <div className="eden-progress-dots">
+              {[0, 1, 2, 3].map((level) => (
+                <span
+                  key={level}
+                  className={`eden-progress-dot ${
+                    level <= state.temptationProgress ? "eden-progress-dot--filled" : ""
+                  }`}
+                />
+              ))}
+            </div>
+          </div>
           <span className="eden-turn-badge">{turnLabel}</span>
           <button
             className="eden-sound-btn"
@@ -404,53 +409,49 @@ export default function GamePage() {
         </div>
       </header>
 
-      {/* 主对话区 */}
-      <main className="eden-dialogue-main">
-        <div className="eden-scroll">
-          {/* 状态区 */}
-          <div className="eden-status-bar">
-            <div className="eden-progress-area">
-              <span className="eden-progress-label">诱惑进度</span>
-              <div className="eden-progress-dots">
-                {[0, 1, 2, 3].map((level) => (
-                  <span
-                    key={level}
-                    className={`eden-progress-dot ${
-                      level <= state.temptationProgress ? "eden-progress-dot--filled" : ""
-                    }`}
-                  />
-                ))}
-              </div>
-            </div>
-            <div className="eden-fruit-indicator">
-              <Image
-                src={CHAPTER0_IMAGES.forbiddenFruit}
-                alt="善恶果"
-                width={28}
-                height={28}
-                className={`eden-fruit-icon ${
-                  state.temptationProgress >= 2 ? "eden-fruit-icon--active" : ""
-                }`}
-              />
-            </div>
+      {/* 游戏场景主区 */}
+      <main className="eden-scene-main">
+        <div className="eden-scene-content">
+          {/* 善恶果视觉锚点（右侧） */}
+          <div className="eden-tree-anchor">
+            <Image
+              src={CHAPTER0_IMAGES.forbiddenFruit}
+              alt="善恶果"
+              width={44}
+              height={44}
+              className={`eden-fruit-anchor ${
+                state.temptationProgress >= 1 ? "eden-fruit-anchor--visible" : ""
+              } ${
+                state.temptationProgress >= 2 ? "eden-fruit-anchor--glowing" : ""
+              }`}
+            />
           </div>
 
-          {/* 夏娃对白区 */}
+          {/* 夏娃主视觉 */}
+          <div className="eden-eve-visual">
+            <div className="eden-eve-portrait-frame">
+              <Image
+                src={CHAPTER0_IMAGES.evePortrait}
+                alt="夏娃"
+                width={120}
+                height={120}
+                className="eden-eve-portrait"
+              />
+            </div>
+            <span className="eden-eve-name">夏娃</span>
+          </div>
+
+          {/* 场景氛围提示 */}
+          {atmosphereHint && (
+            <div className="eden-atmosphere-hint" key={`hint-${state.temptationProgress}`}>
+              {atmosphereHint}
+            </div>
+          )}
+
+          {/* 夏娃对白（电影字幕式） */}
           {eveReply && (
-            <div className="eden-eve-dialogue">
-              <div className="eden-eve-avatar-area">
-                <Image
-                  src={CHAPTER0_IMAGES.evePortrait}
-                  alt="夏娃"
-                  width={48}
-                  height={48}
-                  className="eden-eve-avatar"
-                />
-                <span className="eden-eve-name">夏娃</span>
-              </div>
-              <div className="eden-eve-bubble">
-                <p className="eden-eve-text">{eveReply}</p>
-              </div>
+            <div className="eden-eve-subtitle" key={eveReply}>
+              <p className="eden-eve-subtitle-text">{eveReply}</p>
             </div>
           )}
 
@@ -466,10 +467,10 @@ export default function GamePage() {
             </div>
           )}
 
-          {/* 推荐话术 */}
+          {/* 可尝试的低语 */}
           {isDialogueStarted && !isLoading && (
             <div className="eden-suggestions">
-              <span className="eden-suggestions-label">可尝试说：</span>
+              <span className="eden-suggestions-label">可尝试的低语：</span>
               <div className="eden-suggestions-list">
                 {suggestedInputs.slice(0, 2).map((text, i) => (
                   <button
@@ -484,7 +485,7 @@ export default function GamePage() {
             </div>
           )}
 
-          {/* 事件日志 */}
+          {/* 事件日志（默认折叠） */}
           {state.eventLog.length > 0 && (
             <details className="eden-event-log-details eden-event-log-details--inline">
               <summary>本局记录</summary>

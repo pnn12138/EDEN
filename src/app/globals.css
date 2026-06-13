@@ -1,7 +1,7 @@
 /* ============================================================
    EDEN - Chapter 0 游戏全局样式
-   Phase 5：最小 UI 与素材包装
-   风格：古典寓言 / 暗金绿色调 / 半写实绘本风
+   Phase 7：游戏化表现重构
+   风格：沉浸式伊甸园 / 第一人称叙事游戏 / 电影字幕式对白
    ============================================================ */
 
 /* ---- Reset & Base ---- */
@@ -65,6 +65,7 @@ a:hover {
 
 .eden-bg img {
   filter: brightness(0.35) saturate(0.8);
+  transition: filter 1.2s ease;
 }
 
 .eden-bg-overlay {
@@ -76,15 +77,79 @@ a:hover {
     rgba(10, 14, 10, 0.3) 40%,
     rgba(10, 14, 10, 0.7) 100%
   );
+  transition: background 1.2s ease;
 }
 
 .eden-bg-overlay--dialogue {
   background: linear-gradient(
     180deg,
     rgba(10, 14, 10, 0.7) 0%,
-    rgba(10, 14, 10, 0.2) 30%,
-    rgba(10, 14, 10, 0.2) 70%,
-    rgba(10, 14, 10, 0.8) 100%
+    rgba(10, 14, 10, 0.15) 35%,
+    rgba(10, 14, 10, 0.15) 65%,
+    rgba(10, 14, 10, 0.85) 100%
+  );
+  transition: background 1.2s ease;
+}
+
+/* ---- 场景氛围：temptationProgress 驱动 ---- */
+
+/* progress 0：冷绿，伊甸园初始宁静 */
+.scene-progress-0 .eden-bg img {
+  filter: brightness(0.3) saturate(0.7);
+}
+
+.scene-progress-0 .eden-bg-overlay--dialogue {
+  background: linear-gradient(
+    180deg,
+    rgba(10, 14, 10, 0.75) 0%,
+    rgba(10, 18, 10, 0.15) 35%,
+    rgba(10, 18, 10, 0.15) 65%,
+    rgba(10, 14, 10, 0.85) 100%
+  );
+}
+
+/* progress 1：微暖，夏娃开始动摇 */
+.scene-progress-1 .eden-bg img {
+  filter: brightness(0.38) saturate(0.85);
+}
+
+.scene-progress-1 .eden-bg-overlay--dialogue {
+  background: linear-gradient(
+    180deg,
+    rgba(14, 16, 10, 0.7) 0%,
+    rgba(18, 20, 10, 0.1) 35%,
+    rgba(18, 20, 10, 0.1) 65%,
+    rgba(14, 16, 10, 0.8) 100%
+  );
+}
+
+/* progress 2：暖金，夏娃靠近善恶树 */
+.scene-progress-2 .eden-bg img {
+  filter: brightness(0.42) saturate(0.95);
+}
+
+.scene-progress-2 .eden-bg-overlay--dialogue {
+  background: linear-gradient(
+    180deg,
+    rgba(20, 18, 10, 0.65) 0%,
+    rgba(25, 22, 10, 0.08) 35%,
+    rgba(25, 22, 10, 0.08) 65%,
+    rgba(20, 18, 10, 0.75) 100%
+  );
+}
+
+/* progress 3：金光闪耀，即将摘果 */
+.scene-progress-3 .eden-bg img {
+  filter: brightness(0.48) saturate(1.1);
+}
+
+.scene-progress-3 .eden-bg-overlay--dialogue {
+  background: linear-gradient(
+    180deg,
+    rgba(30, 24, 8, 0.6) 0%,
+    rgba(35, 28, 8, 0.05) 35%,
+    rgba(35, 28, 8, 0.05) 65%,
+    rgba(30, 24, 8, 0.7) 100%
   );
 }
 
@@ -176,7 +241,7 @@ a:hover {
   background: rgba(200, 168, 110, 0.18);
 }
 
-/* ---- 滚动区 ---- */
+/* ---- 滚动区（intro/ending 用） ---- */
 .eden-scroll {
   max-width: 680px;
   width: 100%;
@@ -368,50 +433,197 @@ a:hover {
   background: rgba(200, 168, 110, 0.18);
 }
 
-/* ---- 对话阶段主区 ---- */
-.eden-dialogue-main {
+/* ============================================================
+   游戏场景主区（对话阶段）
+   ============================================================ */
+
+.eden-scene-main {
   position: relative;
   z-index: 5;
   flex: 1;
   overflow-y: auto;
   display: flex;
   justify-content: center;
-}
-
-/* ---- 状态栏 ---- */
-.eden-status-bar {
-  display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 10px 16px;
-  background: rgba(10, 14, 10, 0.6);
-  border-radius: 10px;
-  border: 1px solid rgba(200, 168, 110, 0.08);
+  padding: 0 24px;
 }
 
+.eden-scene-content {
+  max-width: 720px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 0 24px;
+  position: relative;
+}
+
+/* ---- 善恶果视觉锚点（右侧） ---- */
+.eden-tree-anchor {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+}
+
+.eden-fruit-anchor {
+  opacity: 0;
+  filter: grayscale(0.8) brightness(0.5);
+  transition: all 0.8s ease;
+}
+
+.eden-fruit-anchor--visible {
+  opacity: 0.5;
+  filter: grayscale(0.5) brightness(0.7);
+}
+
+.eden-fruit-anchor--glowing {
+  opacity: 1;
+  filter: grayscale(0) brightness(1.2);
+  animation: fruitGlow 2s ease-in-out infinite alternate;
+}
+
+@keyframes fruitGlow {
+  from { filter: grayscale(0) brightness(1.2); }
+  to   { filter: grayscale(0) brightness(1.5); }
+}
+
+/* ---- 夏娃主视觉 ---- */
+.eden-eve-visual {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.eden-eve-portrait-frame {
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 3px solid rgba(212, 196, 224, 0.3);
+  background: rgba(212, 196, 224, 0.05);
+  box-shadow: 0 0 20px rgba(212, 196, 224, 0.08);
+  transition: border-color 1s ease, box-shadow 1s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.eden-eve-portrait {
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+/* 进度驱动的夏娃肖像边框变化 */
+.scene-progress-1 .eden-eve-portrait-frame {
+  border-color: rgba(200, 180, 140, 0.4);
+  box-shadow: 0 0 25px rgba(200, 168, 110, 0.1);
+}
+
+.scene-progress-2 .eden-eve-portrait-frame {
+  border-color: rgba(200, 168, 110, 0.6);
+  box-shadow: 0 0 35px rgba(200, 168, 110, 0.2), 0 0 8px rgba(200, 168, 110, 0.3);
+}
+
+.scene-progress-3 .eden-eve-portrait-frame {
+  border-color: rgba(230, 190, 100, 0.8);
+  box-shadow: 0 0 45px rgba(230, 190, 100, 0.3), 0 0 12px rgba(230, 190, 100, 0.4);
+}
+
+.eden-eve-name {
+  font-size: 0.78rem;
+  color: #d4c4e0;
+  letter-spacing: 0.12em;
+  transition: color 1s ease;
+}
+
+.scene-progress-2 .eden-eve-name {
+  color: #c8a86e;
+}
+
+.scene-progress-3 .eden-eve-name {
+  color: #e8d5a3;
+}
+
+/* ---- 场景氛围提示 ---- */
+.eden-atmosphere-hint {
+  text-align: center;
+  font-size: 0.82rem;
+  color: #a89060;
+  font-style: italic;
+  letter-spacing: 0.06em;
+  animation: fadeInHint 1.5s ease;
+  padding: 4px 0;
+}
+
+@keyframes fadeInHint {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ---- 夏娃对白（电影字幕式） ---- */
+.eden-eve-subtitle {
+  width: 100%;
+  max-width: 560px;
+  text-align: center;
+  padding: 18px 28px;
+  background: rgba(10, 10, 8, 0.7);
+  border-radius: 10px;
+  border: 1px solid rgba(212, 196, 224, 0.1);
+  backdrop-filter: blur(6px);
+  animation: fadeInSubtitle 0.6s ease;
+}
+
+@keyframes fadeInSubtitle {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.eden-eve-subtitle-text {
+  margin: 0;
+  line-height: 2;
+  font-size: 1rem;
+  color: #ece4f4;
+  letter-spacing: 0.03em;
+}
+
+/* 进度驱动的字幕色调变化 */
+.scene-progress-2 .eden-eve-subtitle {
+  border-color: rgba(200, 168, 110, 0.2);
+}
+
+.scene-progress-3 .eden-eve-subtitle {
+  border-color: rgba(200, 168, 110, 0.3);
+  background: rgba(15, 12, 6, 0.75);
+}
+
+/* ---- 诱惑进度条（顶栏内） ---- */
 .eden-progress-area {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .eden-progress-label {
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   color: #8a8a7a;
 }
 
 .eden-progress-dots {
   display: flex;
-  gap: 6px;
+  gap: 5px;
 }
 
 .eden-progress-dot {
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
   background: #2a2a25;
   border: 1px solid #3a3a30;
-  transition: all 0.4s ease;
+  transition: all 0.5s ease;
 }
 
 .eden-progress-dot--filled {
@@ -420,69 +632,15 @@ a:hover {
   box-shadow: 0 0 8px rgba(200, 168, 110, 0.5);
 }
 
-.eden-fruit-indicator {
-  display: flex;
-  align-items: center;
+/* 进度驱动下填充点的颜色变化 */
+.scene-progress-2 .eden-progress-dot--filled {
+  box-shadow: 0 0 12px rgba(200, 168, 110, 0.7);
 }
 
-.eden-fruit-icon {
-  opacity: 0.3;
-  filter: grayscale(0.8);
-  transition: all 0.5s ease;
-}
-
-.eden-fruit-icon--active {
-  opacity: 1;
-  filter: grayscale(0) brightness(1.1);
-  animation: fruitGlow 2s ease-in-out infinite alternate;
-}
-
-@keyframes fruitGlow {
-  from { filter: grayscale(0) brightness(1.1); }
-  to   { filter: grayscale(0) brightness(1.3); }
-}
-
-/* ---- 夏娃对白 ---- */
-.eden-eve-dialogue {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-  animation: fadeInUp 0.5s ease;
-}
-
-.eden-eve-avatar-area {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
-}
-
-.eden-eve-avatar {
-  border-radius: 50%;
-  border: 2px solid rgba(212, 196, 224, 0.3);
-  background: rgba(212, 196, 224, 0.05);
-}
-
-.eden-eve-name {
-  font-size: 0.65rem;
-  color: #d4c4e0;
-  letter-spacing: 0.1em;
-}
-
-.eden-eve-bubble {
-  flex: 1;
-  padding: 16px 20px;
-  background: rgba(212, 196, 224, 0.06);
-  border-left: 3px solid #d4c4e0;
-  border-radius: 0 10px 10px 0;
-}
-
-.eden-eve-text {
-  margin: 0;
-  line-height: 2;
-  font-size: 0.98rem;
-  color: #ece4f4;
+.scene-progress-3 .eden-progress-dot--filled {
+  background: #e8c878;
+  border-color: #e8c878;
+  box-shadow: 0 0 16px rgba(230, 190, 100, 0.8);
 }
 
 /* ---- 系统提示 ---- */
@@ -506,12 +664,13 @@ a:hover {
   50%      { opacity: 0.5; }
 }
 
-/* ---- 推荐话术 ---- */
+/* ---- 可尝试的低语 ---- */
 .eden-suggestions {
   display: flex;
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+  justify-content: center;
 }
 
 .eden-suggestions-label {
@@ -523,23 +682,25 @@ a:hover {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
+  justify-content: center;
 }
 
 /* ---- 事件日志 ---- */
 .eden-event-log-details {
   width: 100%;
+  max-width: 560px;
 }
 
 .eden-event-log-details summary {
   cursor: pointer;
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   color: #5a5a4a;
   padding: 6px 0;
+  text-align: center;
 }
 
 .eden-event-log-details--inline summary {
   color: #4a4a3a;
-  font-size: 0.72rem;
 }
 
 .eden-event-log {
@@ -549,7 +710,7 @@ a:hover {
   padding: 10px 14px;
   background: rgba(0, 0, 0, 0.4);
   border-radius: 8px;
-  max-height: 180px;
+  max-height: 160px;
   overflow-y: auto;
   font-size: 0.72rem;
   font-family: "Courier New", Consolas, monospace;
@@ -604,7 +765,7 @@ a:hover {
 }
 
 .eden-input-area {
-  max-width: 680px;
+  max-width: 720px;
   margin: 0 auto;
   display: flex;
   gap: 8px;
@@ -748,18 +909,36 @@ a:hover {
 }
 
 .home-container h1 {
-  font-size: 2.5rem;
+  font-size: 3rem;
   font-weight: 700;
   letter-spacing: 0.3em;
   color: #e8d5a3;
-  text-shadow: 0 0 30px rgba(200, 168, 110, 0.2);
-  margin-bottom: 16px;
+  text-shadow: 0 0 40px rgba(200, 168, 110, 0.25);
+  margin-bottom: 8px;
 }
 
-.home-container p {
+.home-subtitle {
+  font-size: 0.88rem;
+  color: #7a7a6a;
+  letter-spacing: 0.08em;
+  margin-bottom: 28px;
+}
+
+.home-tagline {
+  font-size: 1.05rem;
+  color: #a8c8a0;
   line-height: 1.8;
-  color: #a8a898;
-  margin-bottom: 8px;
+  margin-bottom: 12px;
+}
+
+.home-description {
+  font-size: 0.88rem;
+  color: #8a8a7a;
+  line-height: 1.8;
+  margin-bottom: 32px;
+  max-width: 420px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 /* ---- 响应式 ---- */
@@ -786,17 +965,32 @@ a:hover {
     padding: 14px 16px;
   }
 
-  .eden-eve-dialogue {
-    gap: 8px;
+  /* 场景移动端适配 */
+  .eden-scene-main {
+    padding: 0 14px;
   }
 
-  .eden-eve-avatar {
-    width: 36px !important;
-    height: 36px !important;
+  .eden-scene-content {
+    gap: 12px;
+    padding: 12px 0 16px;
   }
 
-  .eden-eve-bubble {
-    padding: 12px 14px;
+  .eden-eve-portrait-frame {
+    width: 90px;
+    height: 90px;
+  }
+
+  .eden-eve-subtitle {
+    padding: 14px 18px;
+  }
+
+  .eden-eve-subtitle-text {
+    font-size: 0.92rem;
+  }
+
+  .eden-fruit-anchor {
+    width: 32px !important;
+    height: 32px !important;
   }
 
   .eden-input-footer {
@@ -815,16 +1009,21 @@ a:hover {
   .eden-ending-title {
     font-size: 1.25rem;
   }
+
+  .home-container h1 {
+    font-size: 2.2rem;
+  }
 }
 
 @media (max-width: 380px) {
   .eden-suggestions {
     flex-direction: column;
-    align-items: flex-start;
+    align-items: center;
   }
 
   .eden-suggestions-list {
     width: 100%;
+    justify-content: center;
   }
 
   .eden-btn--suggestion {

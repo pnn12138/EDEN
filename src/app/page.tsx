@@ -18,14 +18,23 @@ export default function HomePage() {
         <div className="eden-bg-overlay" />
       </div>
 
-      {/* 内容 */}
+      {/* 游戏入口内容 */}
       <main style={{ position: "relative", zIndex: 5 }}>
         <section className="home-container">
           <h1>EDEN</h1>
-          <p>叙事游戏</p>
-          <p>玩家将在 Chapter 0 中扮演蛇，通过对话影响夏娃。</p>
-          <Link href="/game" className="eden-btn eden-btn--primary" style={{ textDecoration: "none", marginTop: 24 }}>
-            进入 Demo
+          <p className="home-subtitle">Chapter 0 · 初次堕落</p>
+          <p className="home-tagline">
+            你是蛇。
+          </p>
+          <p className="home-description">
+            在伊甸园的树影下，你的低语将改变夏娃的命运。
+          </p>
+          <Link
+            href="/game"
+            className="eden-btn eden-btn--primary"
+            style={{ textDecoration: "none", marginTop: 0, padding: "14px 40px", fontSize: "1.05rem" }}
+          >
+            进入伊甸园
           </Link>
         </section>
       </main>

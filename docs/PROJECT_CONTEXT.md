@@ -7,17 +7,17 @@
 ## 1. Executive Snapshot
 
 Last updated: `2026-06-13`
-Updated by: `Codex (Phase 6 acceptance test)`
-Current phase: `Phase 6 accepted; final submission preparation`
-Current build status: `build/typecheck/lint all pass`
+Updated by: `Codex (Phase 7 acceptance test)`
+Current phase: `Phase 7 accepted; final submission preparation remains`
+Current build status: `lint/typecheck/build/browser smoke all pass`
 
 一句话项目说明：
 
-> EDEN 是一个浏览器端 AI 叙事游戏 Demo，玩家在 Chapter 0 扮演蛇，通过对话影响夏娃；当前 `/game` 已通过 Phase 3 验收：成功结局经 toolCall + ruleGuard + executeEatFruit，玩家可见日志保持纯圣经寓言式叙事。
+> EDEN 是一个浏览器端 AI 叙事游戏 Demo，玩家在 Chapter 0 扮演蛇，通过对话影响夏娃；当前 `/game` 对话阶段已重构为沉浸式伊甸园游戏场景，temptationProgress 驱动氛围变化，成功结局经 toolCall + ruleGuard + executeEatFruit，玩家可见文本保持纯圣经寓言式叙事。
 
 当前最重要目标：
 
-1. Phase 6 已通过 Codex 验收，可进入最终提交准备。
+1. Phase 7 已通过测试端验收，可作为最终录制与提交准备版本。
 2. 补齐提交材料：在线试玩部署、Demo 视频录制、作品介绍 PPT、CodeBuddy 历史对话导出。
 3. 继续保持：AI 只能请求/表达 toolCall 意图，最终状态变化和工具执行必须由规则层控制。
 
@@ -100,8 +100,8 @@ CodeBuddy 证据链状态：
 | Game Engine / Renderer | missing | 未发现 Phaser、Pixi、Three.js 或 Canvas/WebGL 游戏引擎。当前为 React 页面。 |
 | Language               | TypeScript | `tsconfig.json`、`.tsx`、`.ts` 文件。 |
 | Build Tool             | Next.js build pipeline | `package.json` 中 `build: next build`。 |
-| State Management       | missing | `src/store/` 仅有占位文件，未发现状态库。 |
-| AI API                 | partial/pass | `/api/agent` 已接入 EveAgent 和统一 LLM Provider；默认 Provider 为 Volcengine，DeepSeek/mock 为备选。 |
+| State Management       | React useState + backend rule guard | `src/app/game/page.tsx` useState, `src/game/rules/` rule layer |
+| AI API                 | pass | `/api/agent` 已接入 EveAgent 和统一 LLM Provider；默认 Provider 为 Volcengine，DeepSeek/mock 为备选；temptationProgress>=2 后端兜底。 |
 | Deployment Target      | TODO: confirm | Next.js 浏览器应用，具体部署平台未确认。 |
 
 关键命令：
@@ -153,7 +153,7 @@ eden/
 
 | Path      | Purpose | Current Notes |
 | --------- | ------- | ------------- |
-| `src/`    | Web 应用源码、游戏逻辑、Agent、内容和服务目录。 | 多数游戏和 AI 子目录仍为占位。 |
+| `src/`    | Web 应用源码、游戏逻辑、Agent、内容和服务目录。 | 游戏核心逻辑、AI Agent、LLM Provider、音频 Hook、素材常量均已实现。 |
 | `public/` | 静态公开资源。 | `public/assets/chapter0/images/` (6 张) + `public/assets/chapter0/audio/` (5 个)。 |
 | `assets/` | 游戏素材目录。 | 已整合到 `public/assets/`。 |
 | `docs/`   | Agent 项目上下文快照。 | 本次按任务要求创建；注意 README/AGENTS 原约定为不要新建 `docs/`，后续需人工确认是否长期保留。 |
@@ -174,7 +174,7 @@ eden/
 
 用游戏开发视角说明当前运行架构：
 
-> 当前运行架构是 Next.js App Router 应用。浏览器访问 `/` 后由 React 页面展示首页，用户点击进入 `/game`。`/game` 目前仅渲染静态占位内容，尚未连接玩家输入、游戏状态、AI Agent 或结局判断。`/api/agent` 已存在服务端 API 路由，但 GET/POST 只返回占位 JSON，没有调用 LLM 或执行工具。`/ending` 可直接访问，但未与游戏流程联动。
+> 当前运行架构是 Next.js App Router 应用。浏览器访问 `/` 看到游戏入口页（EDEN / Chapter 0 / 你是蛇 / 进入伊甸园），点击进入 `/game`。`/game` 对话阶段为沉浸式伊甸园游戏场景，夏娃 120px 大肖像居中+电影字幕式对白+善恶果视觉锚点，temptationProgress 驱动场景氛围变化。`/api/agent` 接收玩家输入，调用 EveAgent 生成夏娃回应，经规则层校验后返回状态和回复，含 temptationProgress>=2 后端兜底。`/ending` 由游戏流程自动跳转。
 
 核心数据流：
 
@@ -201,10 +201,10 @@ browser route request
 
 | Module | File / Folder | Responsibility | Dependencies |
 | ------ | ------------- | -------------- | ------------ |
-| HomePage | `src/app/page.tsx` | 首页展示与进入 Demo 链接。 | `next/link`, `next/image`, `@/game/assets` |
-| GamePage | `src/app/game/page.tsx` | Chapter 0 游戏页面，含 intro/dialogue/ending 三阶段，接入音频和视觉素材。 | `next/link`, `next/image`, `@/hooks/useChapter0Audio`, `@/game/assets` |
+| HomePage | `src/app/page.tsx` | 游戏入口页，EDEN / Chapter 0 / 你是蛇 / 进入伊甸园。 | `next/link`, `next/image`, `@/game/assets` |
+| GamePage | `src/app/game/page.tsx` | Chapter 0 游戏页面，含 intro/dialogue/ending 三阶段，沉浸式伊甸园游戏场景，temptationProgress 驱动氛围变化。 | `next/link`, `next/image`, `@/hooks/useChapter0Audio`, `@/game/assets` |
 | EndingPage | `src/app/ending/page.tsx` | 结局页占位。 | `next/link` |
-| Agent API | `src/app/api/agent/route.ts` | 接收玩家输入，调用 EveAgent，再由规则层处理进度、toolCall 与结局。 | Next.js Route Handler |
+| Agent API | `src/app/api/agent/route.ts` | 接收玩家输入，调用 EveAgent，再由规则层处理进度、toolCall 与结局。含 temptationProgress>=2 后端兜底和 hasEatenFruit 检查。 | Next.js Route Handler |
 | AgentOrchestrator | `src/agents/orchestrator.ts` | 未来协调各 AI Agent。 | none |
 
 ## 7. Gameplay Systems
@@ -218,7 +218,7 @@ browser route request
 | Game State              | pass | `src/game/types/state.ts`, `src/game/core/runChapter0Turn.ts`, `src/game/rules/progressRules.ts` | toolCall→ruleGuard→execute 流程；默认 fallback → irrelevant。 |
 | Tool System             | pass | `src/game/tools/eatFruit.ts`, `src/game/rules/toolRules.ts`, `src/game/types/tool.ts` | eat_fruit 工具定义、白名单、canEatFruit、validateToolCall、executeEatFruit。 |
 | Ending Logic            | pass | `src/game/rules/endingRules.ts`, `src/content/endings/chapter0_endings.ts` | eat_fruit→eve_eats_fruit（经规则层）；god_arrives（applyGodArrivesEnding）。 |
-| UI Feedback             | pass | `src/app/game/page.tsx`, `src/app/globals.css`, `src/hooks/useChapter0Audio.ts` | 回合、诱惑进度、日志、结局和重开；音频反馈（5 种音效）；视觉素材（背景、头像、结局图）；声音开关；响应式布局。 |
+| UI Feedback             | pass | `src/app/game/page.tsx`, `src/app/globals.css`, `src/hooks/useChapter0Audio.ts` | 沉浸式伊甸园游戏场景（120px 夏娃肖像+电影字幕式对白+善恶果视觉锚点）；temptationProgress 驱动氛围变化（scene-progress-0/1/2/3 CSS class：背景亮度/色调/肖像光晕/果发光/进度点颜色渐进）；氛围提示文本；回合、诱惑进度、日志、结局和重开；音频反馈（5 种音效）；视觉素材（背景、头像、结局图）；声音开关；响应式布局。 |
 
 关键游戏状态：
 
@@ -313,12 +313,12 @@ Reviewed by: `Codex`
 | Check             | Command | Result | Notes |
 | ----------------- | ------- | ------ | ----- |
 | Install           | `npm install` | not run | `node_modules/` 与 `package-lock.json` 已存在，本轮未重新安装。 |
-| Build             | `npm run build` | pass | 2026-06-13 Phase 6 acceptance 运行通过，Next.js 14.2.35 构建成功，生成 `/`, `/game`, `/ending`, `/api/agent`。 |
-| Type Check        | `npx tsc --noEmit` | pass | 2026-06-13 Phase 6 acceptance 单独运行通过。 |
-| Lint              | `npm run lint` | pass | 2026-06-13 Phase 6 acceptance 通过，无 ESLint warnings/errors。 |
+| Build             | `npm run build` | pass | 2026-06-13 Phase 7 acceptance 运行通过，Next.js 14.2.35 构建成功，生成 `/`, `/game`, `/ending`, `/api/agent`。 |
+| Type Check        | `npx tsc --noEmit` | pass | 2026-06-13 Phase 7 acceptance 单独运行通过。 |
+| Lint              | `npm run lint` | pass | 2026-06-13 Phase 7 acceptance 通过，无 ESLint warnings/errors。 |
 | Test              | TODO: confirm | not run | `package.json` 未定义 test 脚本。 |
-| Manual Smoke Test | API retest with local fake provider | pass | 2026-06-13 Phase 6 acceptance：临时 fake-provider env 下 `node scripts/test-agent-api.mjs` 复验 9 场景，45 passed / 0 failed。 |
-| Real Provider Test | Direct `/api/agent` sequence on local dev server | pass | 2026-06-13 Phase 6 acceptance：真实 Volcengine 单轮返回 HTTP 200、`ok=true`、`usedFallback=false`；两句有效诱导进入 `eve_eats_fruit`，三句无关输入进入 `god_arrives`。 |
+| Manual Smoke Test | API retest with local fake provider | pass | 2026-06-13 Phase 7 acceptance：临时 fake-provider env 下复验 9 场景，45 passed / 0 failed。 |
+| Real Provider Test | Direct `/api/agent` sequence on local dev server | pass | 2026-06-13 Phase 7 acceptance：真实 Volcengine 单轮返回 HTTP 200、`ok=true`；两句有效诱导进入 `eve_eats_fruit`，三句无关输入进入 `god_arrives`，低进度命令不触发，已结束状态不重复推进。 |
 
 手动冒烟测试清单：
 
@@ -327,14 +327,16 @@ Reviewed by: `Codex`
 | 打开首页 | pass | `/` 返回 200，页面存在进入 Demo 链接。 |
 | 开始游戏 | pass | `/game` intro 阶段展示开场文本和「开始低语」。 |
 | 输入玩家文本 | pass | dialogue 阶段可输入、发送和点击推荐话术。 |
-| 触发 AI 响应 | pass | DeepSeek 真实调用成功，返回夏娃对白且未出现禁用词。 |
+| 触发 AI 响应 | pass | Volcengine 真实调用成功，返回夏娃对白且未出现玩家可见禁用词。 |
 | 状态发生变化 | pass | 有效诱导增加进度；无效输入不增加进度。 |
 | 触发结局 | pass | 2026-06-13 复验：有效诱导第 2 句进入 `eve_eats_fruit`；无关输入 3 次进入 `god_arrives`。 |
 | AI 接口失败兜底 | pass | fake provider 覆盖空 content、非法 JSON、禁用词、非法 inputTag、非法 toolCall 和 toolCall 边界，均安全返回。 |
+| Phase 7 视觉表现 | pass | `/game` 对话阶段存在 `eden-scene-main`、夏娃主视觉、电影字幕式对白、善恶果锚点、`scene-progress-N` 氛围 class，事件日志默认折叠。 |
+| Mobile 390x844 | pass | 输入框与发送按钮在视口内，图片加载完成，无横向溢出。 |
 
 最近一轮结论：
 
-> 当前项目可构建、可启动，Phase 6 已通过 Codex 验收；真实 AI/后端路径成功结局稳定可达，失败路径、工具边界、素材资源和提交准备文档未发现阻塞问题。可进入最终提交准备。
+> 当前项目可构建、可启动，Phase 7 已通过 Codex 验收；真实 AI/后端路径成功结局稳定可达，失败路径、工具边界、沉浸式视觉、移动端基础布局、素材资源、禁用词和密钥检查未发现阻塞问题。可进入最终视频录制、部署和提交材料收口。
 
 ## 12. Known Issues & Risks
 
@@ -355,7 +357,7 @@ Reviewed by: `Codex`
 | K007 | Fixed | 缺少视觉和音频资产管线。 | Phase 5 已创建 `public/assets/chapter0/images/` 和 `public/assets/chapter0/audio/`，6 张图片 + 5 个音频素材已接入，AI_ASSET_RECORD.md 已创建。 | Closed in Phase 5. |
 | K014 | Fixed | 真实 AI 浏览器路径无法稳定触发成功结局。 | 2026-06-13 Codex 复验：真实 `/api/agent` 有效诱导路径第 2 句进入 `eve_eats_fruit`，`hasEatenFruit=true`，phase=`ending`；浏览器 `/game` 提交两句有效诱导后显示成功结局「她吃下了果子」并记录吃果事件；无关输入 3 次仍进入 `god_arrives`；低进度命令不触发吃果；已结束状态不重复执行。 | Closed in Phase 5 re-acceptance. |
 | K015 | Medium | 背景音频文件偏大。 | `public/assets/chapter0/audio/eden_ambient_loop.mp3` 约 25MB。 | 压缩或裁剪循环音频，降低部署体积和首次播放等待。 |
-| K016 | Low | 浏览器自动化工具本轮不稳定。 | Browser 插件初始化失败；Chrome DevTools 交互命令未稳定返回。HTTP 页面、API 状态流和素材资源检查均已通过。 | 不阻塞提交；如需视频录制前人工 UI 巡检，直接用浏览器操作 `/game`。 |
+| K016 | Fixed | 浏览器自动化工具本轮不稳定。 | 2026-06-13 Phase 7 复验：Browser 插件可用，已完成首页、/game、成功/失败路径和移动端 390x844 浏览器验证。 | Closed in Phase 7 acceptance. |
 
 风险等级说明：
 
@@ -389,6 +391,8 @@ Reviewed by: `Codex`
 
 | Date | Reviewer | Area | Summary |
 | ---- | -------- | ---- | ------- |
+| 2026-06-13 | Codex | Phase 7 Acceptance Test | Phase 7 PASSED. Fresh verification: `npm run lint`, `npx tsc --noEmit`, and `npm run build` pass. Real Volcengine `/api/agent` retest passes: two valid诱导 inputs reach `eve_eats_fruit`; irrelevant input `今天天气不错。` x3 reaches `god_arrives`; low-progress direct command does not eat fruit; ended-state repeat does not advance. Fake provider integration retest passes 45/45. Browser retest: home enters `/game`; intro assets load; dialogue stage is an immersive Eden scene with `eden-scene-main`, Eve visual, cinematic subtitle, fruit anchor, `scene-progress-N`, and collapsed event log; empty input only shows hint; success and failure endings are reachable and remove the input. Mobile 390x844 has visible input/send button, loaded images, and no horizontal overflow. Console only shows Next.js fixed/sticky auto-scroll warnings. Player-visible text scan found no AI/Agent/NPC/模型/程序/沙盒/系统 terms; `.env.local` is ignored/not tracked and source scan found no real key shape. Remaining manual submission items: deploy link, demo video, PPT, CodeBuddy history export, asset license confirmation, and ambient audio compression. |
+| 2026-06-13 | CodeBuddy | Phase 7 Gamification Refactor | 完成 Phase 7 游戏化表现重构。(1) 重构 /game 对话阶段为沉浸式伊甸园游戏场景：移除 680px 聊天容器，夏娃 120px 大肖像+电影字幕式对白+善恶果右侧视觉锚点，推荐话术改为"可尝试的低语"，事件日志默认折叠。(2) 新增 temptationProgress 驱动场景氛围变化：scene-progress-0/1/2/3 CSS class，背景亮度/色调/夏娃肖像边框光晕/善恶果发光/进度点颜色渐进变化，氛围提示文本。(3) 修复 route.ts 自动补充条件增加 !state.flags.hasEatenFruit。(4) 首页游戏化：EDEN / Chapter 0 / 你是蛇 / 进入伊甸园。(5) 更新开发文档、PROJECT_CONTEXT.md 过时描述。待测试端验收。 |
 | 2026-06-13 | Codex | Phase 6 Acceptance Test | Phase 6 PASSED. Fresh verification: `npm run lint`, `npx tsc --noEmit`, and `npm run build` pass. Fake provider integration test passes 45/45. Real Volcengine `/api/agent` single-turn request returns HTTP 200, `ok=true`, `usedFallback=false`, with no forbidden engineering terms in Eve reply. Real state-flow test: two valid诱导 inputs reach `eve_eats_fruit` with `hasEatenFruit=true`; irrelevant input `今天天气不错。` x3 reaches `god_arrives` with progress 0; low-progress direct command does not eat fruit. `/`, `/game`, `/ending`, 6 image assets, and 5 audio assets all return 200. `.env.local` is not tracked; source/key scan found no real key outside ignored env. Phase 6 docs are present: README, AI_ASSET_RECORD, DEMO_VIDEO_SCRIPT, PPT_OUTLINE, and PHASE6_TEST_REPORT. Browser plugin/CDP automation was unstable this round, so browser click verification was downgraded to HTTP/API/resource checks. Remaining submission tasks are manual: deploy link, demo video, PPT, CodeBuddy history export, asset license confirmation, and ambient audio compression. |
 | 2026-06-13 | CodeBuddy | Phase 6 Submission Preparation | 完成 Phase 6 提交准备开发任务。(1) 完善 README.md：项目简介、核心玩法、AI 使用点、素材使用点、本地运行、环境变量说明、提交材料、项目结构、技术栈。(2) 完善 doc/AI_ASSET_RECORD.md：补充运行路径、文件大小、素材目录分工说明、AI 创作说明。(3) 新增 doc/DEMO_VIDEO_SCRIPT.md：3 分钟 Demo 视频脚本。(4) 新增 doc/PPT_OUTLINE.md：8 页 PPT 大纲。(5) 素材路径检查：代码仅引用 public/assets/chapter0/，不引用 doc/引言/；doc/引言/ 存档与 public/assets/ 有重复但用途不同，不删除。(6) 最终检查：lint/tsc/build 全部通过；.env.local 未被 git 跟踪；源码无硬编码密钥。待测试端验收。 |
 | 2026-06-13 | Codex | Phase 5 Fix Re-acceptance | Phase 5 fix PASSED. Fresh verification: `npm run lint`, `npx tsc --noEmit`, and `npm run build` all pass. `node scripts/test-real-provider.mjs` returns HTTP 200/ok=true. `node scripts/test-agent-api.mjs` passes 45/45 when Next is launched with the fake-provider env override. Real `/api/agent` retest: valid诱导 path reaches `eve_eats_fruit` on the second input with `hasEatenFruit=true`; irrelevant input `今天天气不错。` x3 reaches `god_arrives` with progress 0; low-progress command does not eat fruit; ended-state repeat returns unchanged state and no reply. Browser retest on `/game`: start dialogue, submit two valid诱导 lines, success ending appears with pure narrative event log and ending image loaded; console has no warn/error. Mobile 390x844 check: input and send button remain visible, images load, no horizontal overflow. Phase 5 may proceed to Phase 6; remaining non-blocking risks are K003, K005, K015, and asset license TODOs. |

@@ -139,7 +139,7 @@ export async function POST(request: NextRequest) {
     // 2. 模型未输出 toolCall，但规则层判断进度已达标（>=2）→ 后端补充生成意图
     //    这保证真实 AI 路径下成功结局稳定可达，与本地 fallback 行为一致
     let effectiveToolCall = agentOutput.toolCall;
-    if (!effectiveToolCall && state.temptationProgress >= 2 && state.phase === "dialogue" && !state.isEnded) {
+    if (!effectiveToolCall && state.temptationProgress >= 2 && state.phase === "dialogue" && !state.isEnded && !state.flags.hasEatenFruit) {
       effectiveToolCall = { name: "eat_fruit" as const, caller: "eve" as const, args: {} };
     }
 
