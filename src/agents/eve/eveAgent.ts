@@ -1,15 +1,16 @@
 // ============================================================
 // EveAgent 编排器
-// Phase 4：接入 EveAgent 与大模型（多 Provider）
+// Phase 4 + Agent 架构升级
 //
-// 变更：
-// - 使用统一的 callLLM(messages)
-// - 传递 LLMCallResult 的 usedFallback / fallbackReason
-// - 禁用词检查扩展
+// Agent 架构升级变更：
+// - 接收记忆碎片并传入 buildEvePrompt
+// - 返回 beliefDelta / memoryRefs / unlockedSkills 新字段
+// - 保留 fallback 链不变
 // ============================================================
 
 import type { Chapter0State } from "@/game/types/state";
 import type { EveAgentOutput } from "@/game/types/agent";
+import type { MemoryFragment } from "@/game/types/agent";
 import type { FallbackReasonCode } from "@/services/llm/types";
 import { callLLM } from "@/services/llm/client";
 import { buildEvePrompt } from "@/agents/eve/buildEvePrompt";
@@ -24,6 +25,8 @@ export type EveAgentRequest = {
   projectedProgress?: number;
   /** 是否为强诱导（完整经典蛇语三层同时出现） */
   isStrongTemptation?: boolean;
+  /** Agent 架构升级：检索到的记忆碎片 */
+  memoryFragments?: MemoryFragment[];
 };
 
 export type EveAgentResult = {
@@ -50,7 +53,7 @@ export type EveAgentResult = {
  * 8. 禁用词 → 本地固定回复 (forbidden_word)
  */
 export async function runEveAgent(req: EveAgentRequest): Promise<EveAgentResult> {
-  const { state, playerInput, conversationHistory, projectedProgress, isStrongTemptation } = req;
+  const { state, playerInput, conversationHistory, projectedProgress, isStrongTemptation, memoryFragments } = req;
 
   // ---- 1. 构建 prompt ----
   let messages: ReturnType<typeof buildEvePrompt>;
@@ -58,8 +61,9 @@ export async function runEveAgent(req: EveAgentRequest): Promise<EveAgentResult>
     messages = buildEvePrompt(state, playerInput, conversationHistory, {
       projectedProgress,
       isStrongTemptation,
+      memoryFragments,
     });
-  } catch (err) {
+  } catch {
     return {
       output: createFallbackOutput(state.temptationProgress, "prompt_build_failed"),
       usedFallback: true,
@@ -73,15 +77,12 @@ export async function runEveAgent(req: EveAgentRequest): Promise<EveAgentResult>
     maxTokens: 512,
   });
 
-  // LLM 层面的 fallback（config missing / timeout / request failed → mock）
-  // 注：此分支也包含 mock_provider（ok=true 但 usedFallback=true）
+  // LLM 层面的 fallback
   if (!llmResult.ok || llmResult.usedFallback) {
-    // 安全的 fallback reason：优先使用 LLM 层已标记的原因码，其次根据 error 映射
     const llmFallbackReason: FallbackReasonCode =
       llmResult.fallbackReason ??
       (llmResult.error === "provider_timeout" ? "provider_timeout" : "internal_error");
 
-    // 如果 LLM 返回了内容（含 mock），仍尝试解析
     if (llmResult.data) {
       const parseResult = parseEveOutput(llmResult.data.content, state.temptationProgress);
       if (parseResult.ok) {
@@ -100,7 +101,7 @@ export async function runEveAgent(req: EveAgentRequest): Promise<EveAgentResult>
     };
   }
 
-  // ---- 3. 防御：data 必须存在（理论上 ok=true 必有 data，但不依赖非空断言）----
+  // ---- 3. 防御：data 必须存在 ----
   if (!llmResult.data) {
     return {
       output: createFallbackOutput(state.temptationProgress, "llm_data_missing"),

@@ -2,9 +2,27 @@
 
 > 项目：EDEN / 第二伊甸园  
 > 用于 PPT 和提交说明的 AI 设计总览  
-> 日期：2026-06-14
+> 日期：2026-06-14（2026-06-18 Agent 架构升级更新）
 
-> Agent 机制升级详见：`design/AGENT_ARCHITECTURE_UPGRADE.md`。该文档将 RAG、MCP/工具协议、Agent Loop、Skills、Memory 和 Guardrails 游戏化为“记忆之井、伊甸园协议、认知循环、认知能力觉醒、低语余痕和神的禁令”，用于指导下一阶段 CodeBuddy 开发。
+> Agent 机制升级详见：`design/AGENT_ARCHITECTURE_UPGRADE.md`。该文档将 RAG、MCP/工具协议、Agent Loop、Skills、Memory 和 Guardrails 游戏化为"记忆之井、伊甸园协议、认知循环、认知能力觉醒、低语余痕和神的禁令"，用于指导下一阶段 CodeBuddy 开发。
+
+## 0. Agent 架构升级摘要（2026-06-18）
+
+Chapter 0 已从"对话推进进度"升级为"玩家低语 -> Agent 记忆检索 -> 信念变化 -> Skills 觉醒 -> 工具调用 -> 结局"的认知博弈机制。
+
+核心变化：
+- **四轴信念状态**：`curiosity` / `obedience` / `trustInSerpent` / `selfJudgement`（0-100），取代单一 `temptationProgress` 作为核心认知模型。`temptationProgress` 保留为兼容派生值。
+- **本地记忆碎片检索（RAG 游戏化）**：6 类记忆碎片（`divine_command` / `adam_retelling` / `death_trace` / `fruit_aura` / `self_reflection` / `serpent_history`），8 条固定片段，根据语义线索检索 1-3 条传入 Agent Prompt。不接向量数据库，不引入大型依赖。
+- **认知能力觉醒（Skills）**：5 种 Skills（`ask_why` / `compare_sources` / `name_fear` / `self_judge` / `resist_coercion`），通过信念状态和记忆触发解锁，影响回复深度和可请求工具。
+- **工具链扩展（MCP 游戏化）**：新增 `look_at_tree` / `approach_tree` / `touch_fruit` / `ask_about_death`，保留 `eat_fruit`。每个工具有白名单权限、phase 校验、状态门槛、重复调用保护。
+- **刺猬环境反馈 Agent**：根据 `divineAttention`、`approach_tree`、输入类型显示不同行为状态（idle / alert / hiding / unresponsive），不接 LLM，不影响结局门槛。
+- **结局复盘增强**：新增认知记录展示——本局检索过的记忆、解锁过的认知能力、触发过的工具链。
+
+安全规则不变：
+- 规则层仍是状态变化和工具执行的唯一权威。
+- LLM 只能输出意图，不能直接改最终状态。
+- API 失败时保留本地 fallback。
+- 玩家可见文本不出现 Agent、RAG、MCP、Tool Call、API、模型、程序、系统、测试、研究员、模拟、实验等工程词。
 
 ## 1. EveAgent 角色与 Prompt 约束
 
@@ -16,11 +34,18 @@
 
 Prompt 约束：
 
-- 玩家可见禁用词：研究员、人工智能、智能体、模型、程序、虚拟世界、模拟、实验、系统、测试、玩家样本。
+- 玩家可见禁用词：研究员、人工智能、智能体、模型、程序、虚拟世界、模拟、实验、系统、测试、玩家样本、Agent、RAG、MCP、Tool Call、API。
 - 夏娃不能直接执行 `eat_fruit`，只能表达意图。
 - 回复必须符合伊甸园神话叙事，不能出现现代技术概念。
 
 Prompt 构建见 `src/agents/eve/buildEvePrompt.ts`。
+
+Agent 架构升级后，EveAgent Prompt 新增：
+- 当前四轴信念状态描述（`describeBeliefForPrompt`）
+- 检索到的记忆碎片文本（`formatMemoryForPrompt`）
+- 已解锁的认知能力说明（`describeSkillsForPrompt`）
+- 可请求工具列表（含新增工具）
+- 输出协议新增 `beliefDelta` / `memoryRefs` / `unlockedSkills` 字段
 
 ## 2. LLM Provider 与 Fallback
 
@@ -144,7 +169,7 @@ Chapter 0 不直接揭示外层真相。玩家可见文本只呈现伊甸园神�
 - 后续可扩展为服务端 TTS（离线生成 mp3），但 Browser TTS 仍需作为 fallback。
 - 服务端 TTS API（`src/app/api/tts/eve/route.ts`）为后续项，当前 Demo 暂未实现。
   - `.env.example` 中 `TTS_*` 均为占位值，`TTS_PROVIDER=browser`，未接入任何真实服务端 TTS。
-  - `useEveVoice` 的 `generated`（高质量生成语音）模式当前不可用，UI 显示“暂不可用”，选中后自动降级为 `browser_soft`。
+  - `useEveVoice` 的 `generated`（高质量生成语音）模式当前不可用，UI 显示"暂不可用"，选中后自动降级为 `browser_soft`。
   - 待 TTS provider 与协议确定后再补该 API；前端只调用该路由，不读取任何 TTS key。
 
 ## 7. 语音菜单层级

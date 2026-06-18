@@ -14,6 +14,8 @@
 import type { Chapter0State } from "@/game/types/state";
 import type { InputTag } from "@/game/types/state";
 import type { ChatMessage } from "@/services/llm/types";
+import type { MemoryFragment } from "@/game/types/agent";
+import { formatMemoryForPrompt } from "@/game/rules/memoryRetrievalRules";
 
 // ---- 禁用词列表（与 EveAgent 一致） ----
 export const ADAM_FORBIDDEN_WORDS = [
@@ -31,8 +33,13 @@ export const ADAM_FORBIDDEN_WORDS = [
   "rule",
   "state",
   "provider",
+  "MCP",
+  "RAG",
   "DeepSeek",
   "API",
+  "测试",
+  "模拟",
+  "实验",
 ] as const;
 
 // ---- 合法 inputTag 列表 ----
@@ -76,12 +83,24 @@ function getAdamMindsetState(turn: number): string {
 
 /**
  * 构建 AdamAgent 的完整 prompt 消息列表。
+ *
+ * Agent 架构升级：
+ * - 接入检索到的记忆碎片（divine_command + adam_retelling）
+ * - 亚当可提供禁令来源信息差，帮助夏娃解锁 compare_sources
+ * - 强诱导亚当可能触发 warn_eve 阻力
  */
 export function buildAdamPrompt(
   state: Chapter0State,
   playerInput: string,
   conversationHistory: Array<{ role: "serpent" | "eve"; text: string }>,
+  options?: {
+    /** Agent 架构升级：检索到的记忆碎片 */
+    memoryFragments?: MemoryFragment[];
+  },
 ): ChatMessage[] {
+  const memoryText = options?.memoryFragments
+    ? formatMemoryForPrompt(options.memoryFragments)
+    : "（他此刻没有想起什么特别的事。）";
   const systemPrompt = `你是亚当——伊甸园中神最先造的人。
 
 ## 一、世界事实
@@ -156,6 +175,16 @@ export function buildAdamPrompt(
 - 蛇若攻击神、嘲讽神、催促你，你会拒绝。
 - 你可以表达困惑，但你的第一反应是守住命令。
 - 你不会输出 toolCall。toolCall 始终为 null。
+
+## 六-B、你此刻想起的事
+
+${memoryText}
+
+## 六-C、你与夏娃的关系
+
+命令是神先对你说的，你比夏娃更直接记得。如果蛇问你"这话是谁告诉你的"，你可以告诉它：是神亲口对你说的，你再把这话告诉了夏娃。
+
+这个信息差很重要——它意味着夏娃的命令是从你这里转述的，而非她直接听见的。但你不会因此动摇你对命令的服从。
 
 ## 七、你当前的心理状态
 ${getAdamMindsetState(state.turn)}

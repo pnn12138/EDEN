@@ -266,7 +266,7 @@ const GENTLE_REFRAME_PATTERNS = [
  * score >= 3 → isStrongTemptation = true
  * score >= 1 → 有效诱导
  */
-function analyzeTemptationSignals(input: string): TemptationSignalResult {
+export function analyzeTemptationSignals(input: string): TemptationSignalResult {
   const signals: TemptationSignal[] = [];
 
   if (CHALLENGE_PROHIBITION_PATTERNS.some((re) => re.test(input))) {

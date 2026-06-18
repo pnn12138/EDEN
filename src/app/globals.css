@@ -657,16 +657,20 @@ a:hover {
   flex-direction: column;
   align-items: center;
   gap: 4px;
-  pointer-events: none;
+  cursor: pointer;
   /* 贴地接触阴影：低偏移、暗色、无发光 */
   filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.5)) drop-shadow(0 1px 1px rgba(0, 0, 0, 0.35));
+  transition: filter 0.2s ease, transform 0.2s ease;
 }
 
-.eden-scene-select-animal-label {
-  font-size: 0.72rem;
-  color: rgba(218, 188, 126, 0.62);
-  letter-spacing: 0.08em;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.65);
+.eden-scene-select-animal:hover,
+.eden-scene-select-animal:focus-visible {
+  filter: drop-shadow(0 4px 7px rgba(0, 0, 0, 0.55)) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4));
+  outline: none;
+}
+
+.eden-scene-select-animal:focus-visible {
+  box-shadow: 0 0 0 2px rgba(200, 168, 110, 0.5);
 }
 
 .eden-hedgehog-sprite {
@@ -674,6 +678,38 @@ a:hover {
   height: clamp(34px, 8.5vh, 52px);
   width: auto;
   display: block;
+}
+
+/* scene_select 阶段刺猬稍大，确保可见但仍是氛围角色 */
+.eden-scene-select-animal .eden-hedgehog-sprite {
+  height: clamp(44px, 10vh, 64px);
+}
+
+.eden-hedgehog-bubble {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-bottom: 8px;
+  padding: 8px 12px;
+  background: rgba(20, 22, 16, 0.85);
+  border: 1px solid rgba(200, 168, 110, 0.25);
+  border-radius: 8px;
+  color: #e8e4d8;
+  font-size: 0.85rem;
+  line-height: 1.4;
+  min-width: 120px;
+  max-width: 260px;
+  text-align: center;
+  white-space: normal;
+  pointer-events: none;
+  z-index: 10;
+  animation: eden-hedgehog-bubble-in 0.2s ease-out;
+}
+
+@keyframes eden-hedgehog-bubble-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(4px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 
 /* ---- 对话阶段双角色立绘 ---- */
@@ -1118,6 +1154,192 @@ a:hover {
 
 .eden-psyche-bar-fill--serpent {
   background: linear-gradient(90deg, #4a6a3a 0%, #8aaa80 100%);
+}
+
+/* ---- Agent 架构升级：四轴信念条配色 ---- */
+.eden-psyche-bar-fill--curiosity {
+  background: linear-gradient(90deg, #6a5a3a 0%, #c8a868 100%);
+}
+
+.eden-psyche-bar-fill--obedience {
+  background: linear-gradient(90deg, #4a5a6a 0%, #8aa8c8 100%);
+}
+
+.eden-psyche-bar-fill--trust {
+  background: linear-gradient(90deg, #4a6a3a 0%, #8aaa80 100%);
+}
+
+.eden-psyche-bar-fill--selfjudge {
+  background: linear-gradient(90deg, #6a3a5a 0%, #c880a8 100%);
+}
+
+/* ---- Agent 架构升级：信念区段标题 ---- */
+.eden-belief-section {
+  margin-top: 8px;
+}
+
+.eden-belief-section-title {
+  font-size: 0.72rem;
+  color: #8a8a7a;
+  margin: 0 0 6px 0;
+  letter-spacing: 0.05em;
+}
+
+/* ---- Agent 架构升级：Skills 展示 ---- */
+.eden-skills-section {
+  margin-top: 10px;
+}
+
+.eden-skills-section-title {
+  font-size: 0.72rem;
+  color: #8a8a7a;
+  margin: 0 0 6px 0;
+  letter-spacing: 0.05em;
+}
+
+.eden-skills-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.eden-skill-chip {
+  display: inline-block;
+  padding: 3px 10px;
+  font-size: 0.7rem;
+  color: #c8a868;
+  background: rgba(200, 168, 104, 0.08);
+  border: 1px solid rgba(200, 168, 104, 0.2);
+  border-radius: 12px;
+  white-space: nowrap;
+}
+
+/* ---- Agent 架构升级：记忆检索叙事 ---- */
+.eden-memory-narration {
+  font-size: 0.78rem;
+  color: #9a8a6a;
+  font-style: italic;
+  text-align: center;
+  padding: 4px 8px;
+  margin: 4px 0;
+  line-height: 1.6;
+  white-space: pre-line;
+  animation: eden-fade-in 0.6s ease;
+}
+
+/* ---- Agent 架构升级：刺猬环境反馈叙事 ---- */
+.eden-hedgehog-narration {
+  font-size: 0.72rem;
+  color: #6a7a5a;
+  font-style: italic;
+  text-align: center;
+  padding: 2px 8px;
+  margin: 2px 0;
+  line-height: 1.5;
+  animation: eden-fade-in 0.5s ease;
+}
+
+/* ---- Agent 架构升级：刺猬行为 CSS 类 ---- */
+.eden-hedgehog--idle .eden-hedgehog-sprite {
+  opacity: 0.7;
+  transition: opacity 0.6s ease;
+}
+
+.eden-hedgehog--alert .eden-hedgehog-sprite {
+  opacity: 1;
+  filter: brightness(1.15) sepia(0.1);
+  transition: all 0.6s ease;
+}
+
+.eden-hedgehog--hiding .eden-hedgehog-sprite {
+  opacity: 0.25;
+  transform: scale(0.85) translateY(4px);
+  transition: all 0.6s ease;
+}
+
+.eden-hedgehog--unresponsive .eden-hedgehog-sprite {
+  opacity: 0.4;
+  filter: grayscale(0.4);
+  transition: all 0.6s ease;
+}
+
+/* ---- Agent 架构升级：结局认知轨迹 ---- */
+.eden-ending-cognition {
+  margin-top: 16px;
+}
+
+.eden-cognition-reason {
+  padding: 12px 16px;
+  border-left: 2px solid rgba(200, 168, 110, 0.3);
+  background: rgba(200, 168, 110, 0.04);
+  border-radius: 0 8px 8px 0;
+  margin-bottom: 12px;
+}
+
+.eden-cognition-reason--failure {
+  border-left-color: rgba(140, 100, 100, 0.3);
+  background: rgba(140, 100, 100, 0.04);
+}
+
+.eden-cognition-reason-text {
+  margin: 0;
+  font-size: 0.84rem;
+  color: #b8a888;
+  line-height: 1.7;
+}
+
+.eden-cognition-reason--failure .eden-cognition-reason-text {
+  color: #a89090;
+}
+
+.eden-cognition-block {
+  margin-bottom: 10px;
+}
+
+.eden-cognition-block-title {
+  font-size: 0.72rem;
+  color: #8a8a7a;
+  margin: 0 0 4px 0;
+  letter-spacing: 0.05em;
+}
+
+.eden-cognition-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.eden-cognition-list-item {
+  font-size: 0.78rem;
+  color: #9a8a6a;
+  font-style: italic;
+  padding: 2px 0;
+  line-height: 1.6;
+}
+
+.eden-cognition-chain {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+}
+
+.eden-cognition-chain-item {
+  font-size: 0.74rem;
+  color: #c8a868;
+  padding: 2px 6px;
+  background: rgba(200, 168, 104, 0.06);
+  border-radius: 6px;
+}
+
+.eden-cognition-chain-arrow {
+  color: #6a6a5a;
+  font-size: 0.7rem;
+}
+
+@keyframes eden-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .eden-psyche-value {

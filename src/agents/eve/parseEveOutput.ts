@@ -1,24 +1,50 @@
 // ============================================================
 // EveAgent 输出解析器
-// Phase 4：接入 EveAgent 与大模型
+// Phase 4 + Agent 架构升级
 //
-// 职责：
+// Agent 架构升级变更：
+// - 解析 beliefDelta / memoryRefs / unlockedSkills 新字段
+// - 支持新工具名（look_at_tree / approach_tree / touch_fruit / ask_about_death）
+// - 保留旧字段兼容（eveReply / inputTag / toolCall）
+// - 禁用词检查扩展
+//
+// 职责不变：
 // 1. 解析 LLM 返回的 JSON 字符串为 EveAgentOutput
 // 2. 校验 inputTag 合法性
 // 3. 校验 toolCall 合法性（白名单 + 结构 + 进度门槛）
-// 4. 检测玩家可见文本中的禁用词（扩展列表）
-// 5. 低进度 toolCall 时修正 eveReply（不表现"已决定吃"）
+// 4. 检测玩家可见文本中的禁用词
+// 5. 低进度 toolCall 时修正 eveReply
 // 6. 任何校验失败 → 返回 fallback 结构（不中断游戏）
 // ============================================================
 
 import type { InputTag } from "@/game/types/state";
 import type { EveAgentOutput } from "@/game/types/agent";
+import type { AgentSkill, BeliefState } from "@/game/types/agent";
+import type { ToolName } from "@/game/types/tool";
 import {
   VALID_INPUT_TAGS,
   FORBIDDEN_WORDS,
 } from "@/agents/eve/buildEvePrompt";
 import { TOOL_WHITELIST } from "@/game/rules/toolRules";
 import { scriptedEveReplies } from "@/content/chapters/chapter0_first_fall";
+
+// ---- 合法工具名集合 ----
+const VALID_TOOL_NAMES: ReadonlySet<string> = new Set([
+  "eat_fruit",
+  "look_at_tree",
+  "approach_tree",
+  "touch_fruit",
+  "ask_about_death",
+]);
+
+// ---- 合法 Skill 名集合 ----
+const VALID_SKILL_NAMES: ReadonlySet<string> = new Set([
+  "ask_why",
+  "compare_sources",
+  "name_fear",
+  "self_judge",
+  "resist_coercion",
+]);
 
 // ---- 解析结果 ----
 export type ParseResult =
@@ -27,12 +53,10 @@ export type ParseResult =
 
 /**
  * 检查文本中是否包含禁用词。
- * 禁用词列表：见 buildEvePrompt.ts FORBIDDEN_WORDS
  */
 export function containsForbiddenWord(text: string): boolean {
   const lower = text.toLowerCase();
   return FORBIDDEN_WORDS.some((w) => {
-    // 对英文词做单词边界匹配（避免误命中含这些字母的正常中文词）
     if (/^[a-zA-Z]+$/.test(w)) {
       return new RegExp(`\\b${w}\\b`, "i").test(lower);
     }
@@ -53,14 +77,59 @@ export function isValidInputTag(tag: unknown): tag is InputTag {
  * - caller 必须是 "eve"
  * - args 必须是对象
  */
-export function isValidToolCall(tc: unknown): tc is { name: "eat_fruit"; caller: "eve"; args: Record<string, unknown> } {
+export function isValidToolCall(tc: unknown): tc is { name: ToolName; caller: "eve"; args: Record<string, unknown> } {
   if (typeof tc !== "object" || tc === null) return false;
   const obj = tc as Record<string, unknown>;
-  if (obj.name !== "eat_fruit") return false;
+  if (typeof obj.name !== "string") return false;
+  if (!VALID_TOOL_NAMES.has(obj.name)) return false;
   if (obj.caller !== "eve") return false;
   if (typeof obj.args !== "object" || obj.args === null) return false;
   if (!TOOL_WHITELIST.has(String(obj.name))) return false;
   return true;
+}
+
+/**
+ * 解析 beliefDelta 字段（安全提取，clamp 变化值）。
+ */
+function parseBeliefDelta(raw: unknown): Partial<BeliefState> | undefined {
+  if (typeof raw !== "object" || raw === null) return undefined;
+  const obj = raw as Record<string, unknown>;
+  const result: Partial<BeliefState> = {};
+
+  if (typeof obj.curiosity === "number") {
+    result.curiosity = Math.max(-25, Math.min(25, Math.round(obj.curiosity)));
+  }
+  if (typeof obj.obedience === "number") {
+    result.obedience = Math.max(-20, Math.min(20, Math.round(obj.obedience)));
+  }
+  if (typeof obj.trustInSerpent === "number") {
+    result.trustInSerpent = Math.max(-20, Math.min(20, Math.round(obj.trustInSerpent)));
+  }
+  if (typeof obj.selfJudgement === "number") {
+    result.selfJudgement = Math.max(-25, Math.min(25, Math.round(obj.selfJudgement)));
+  }
+
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
+/**
+ * 解析 memoryRefs 字段（安全提取字符串数组）。
+ */
+function parseMemoryRefs(raw: unknown): string[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const refs = raw.filter((r): r is string => typeof r === "string");
+  return refs.length > 0 ? refs : undefined;
+}
+
+/**
+ * 解析 unlockedSkills 字段（安全提取合法 Skill 名）。
+ */
+function parseUnlockedSkills(raw: unknown): AgentSkill[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const skills = raw.filter(
+    (s): s is AgentSkill => typeof s === "string" && VALID_SKILL_NAMES.has(s),
+  ) as AgentSkill[];
+  return skills.length > 0 ? skills : undefined;
 }
 
 /**
@@ -81,14 +150,6 @@ export function createFallbackOutput(
 
 /**
  * 解析 LLM 原始输出字符串为 EveAgentOutput。
- *
- * 处理的异常场景：
- * 1. JSON 解析失败 → fallback
- * 2. 缺少必要字段 → fallback
- * 3. inputTag 非法 → 修正为 "irrelevant"
- * 4. toolCall 非法 → 丢弃 toolCall
- * 5. 玩家可见文本出现禁用词 → fallback
- * 6. 低进度 toolCall → 丢弃 toolCall + 替换为犹豫对白
  */
 export function parseEveOutput(
   raw: string,
@@ -97,13 +158,11 @@ export function parseEveOutput(
   // ---- 1. 提取 JSON ----
   let jsonStr = raw.trim();
 
-  // 尝试从 markdown code block 中提取
   const codeBlockMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (codeBlockMatch) {
     jsonStr = codeBlockMatch[1]!.trim();
   }
 
-  // 尝试提取最外层 { }
   const braceMatch = jsonStr.match(/\{[\s\S]*\}/);
   if (braceMatch) {
     jsonStr = braceMatch[0];
@@ -154,35 +213,52 @@ export function parseEveOutput(
 
   if (parsed.toolCall !== null && parsed.toolCall !== undefined) {
     if (isValidToolCall(parsed.toolCall)) {
-      // 低进度门槛：temptationProgress < 2 时，不允许 toolCall
-      if (temptationProgress >= 2) {
-        toolCall = {
-          name: "eat_fruit",
-          caller: "eve",
-          args: {},
-        };
+      const toolName = parsed.toolCall.name;
+
+      // eat_fruit 仍需进度门槛 >= 2
+      if (toolName === "eat_fruit") {
+        if (temptationProgress >= 2) {
+          toolCall = {
+            name: "eat_fruit",
+            caller: "eve",
+            args: {},
+          };
+        } else {
+          // 进度不足：丢弃 toolCall，替换为犹豫对白
+          toolCall = undefined;
+          finalEveReply = scriptedEveReplies[temptationProgress] ?? scriptedEveReplies[0]!;
+        }
       } else {
-        // 进度不足：丢弃 toolCall，替换 eveReply 为当前进度对应的犹豫对白
-        // 防止模型在低进度时说出"我已经决定吃"这样的不一致文案
-        toolCall = undefined;
-        finalEveReply = scriptedEveReplies[temptationProgress] ?? scriptedEveReplies[0]!;
+        // 非结局工具（look_at_tree / approach_tree / touch_fruit / ask_about_death）
+        // 解析层放行，最终是否执行由规则层 validateToolCall 决定
+        toolCall = {
+          name: toolName,
+          caller: "eve",
+          args: parsed.toolCall.args as Record<string, never>,
+        };
       }
     } else {
-      // 非法 toolCall（不在白名单 / caller 不是 eve / 结构不合法）：
-      // 丢弃 toolCall 并替换 eveReply 为当前进度对应的安全对白
-      // 防止模型输出含强意图的不一致文案
+      // 非法 toolCall：丢弃并替换为安全对白
       toolCall = undefined;
       finalEveReply = scriptedEveReplies[temptationProgress] ?? scriptedEveReplies[0]!;
     }
   }
+
+  // ---- 7. 解析新字段（Agent 架构升级） ----
+  const beliefDelta = parseBeliefDelta(parsed.beliefDelta);
+  const memoryRefs = parseMemoryRefs(parsed.memoryRefs);
+  const unlockedSkills = parseUnlockedSkills(parsed.unlockedSkills);
 
   return {
     ok: true,
     data: {
       eveReply: finalEveReply,
       inputTag,
-      temptationProgressDelta: 0, // 大模型不直接设置，由 progressRules 决定
+      temptationProgressDelta: 0, // 大模型不直接设置，由 progressRules / beliefRules 决定
       toolCall,
+      beliefDelta,
+      memoryRefs,
+      unlockedSkills,
     },
   };
 }

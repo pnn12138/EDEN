@@ -12,6 +12,8 @@ import { runChapter0Turn } from "@/game/core/runChapter0Turn";
 import { analyzePlayerInput } from "@/game/rules/progressRules";
 import type { Chapter0State } from "@/game/types/state";
 import type { InputTag, ActiveNpcId } from "@/game/types/state";
+import type { BeliefState } from "@/game/types/agent";
+import { SKILL_DISPLAY_NAMES } from "@/game/types/agent";
 import {
   INTRO_BEATS,
   eveWaitingNarration,
@@ -50,6 +52,8 @@ import {
   type EndingSummary,
 } from "@/game/rules/endingSummaryRules";
 import { useChapter0Leaderboard } from "@/hooks/useChapter0Leaderboard";
+import { computeDerivedState } from "@/game/rules/beliefRules";
+import { computeHedgehogBehavior, getHedgehogCssClass } from "@/game/rules/environmentAgentRules";
 
 // ---- 对话历史条目 ----
 type HistoryEntry = { role: "serpent" | "eve" | "narration"; text: string };
@@ -64,6 +68,12 @@ type AgentResponse = {
   fallbackReason?: string;
   /** 真实 token usage（provider 返回时存在） */
   usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+  /** 叙事化话术反馈 */
+  feedbackText?: string | null;
+  /** 本轮输入分类标签 */
+  inputTag?: InputTag;
+  /** Agent 架构升级：本轮检索到的记忆碎片叙事 */
+  memoryNarration?: string | null;
 };
 
 // ---- 开发态调试进度中文标签 ----
@@ -83,6 +93,7 @@ export default function GamePage() {
   const [eveReply, setEveReply] = useState<string | null>(null);
   const [adamReply, setAdamReply] = useState<string | null>(null);
   const [systemHint, setSystemHint] = useState<string | null>(null);
+  const [hedgehogLine, setHedgehogLine] = useState<string | null>(null);
   const [playerInput, setPlayerInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [conversationHistory, setConversationHistory] = useState<HistoryEntry[]>([]);
@@ -90,6 +101,7 @@ export default function GamePage() {
   const [activeNpc, setActiveNpc] = useState<ActiveNpcId | null>(null);
   const [feedbackText, setFeedbackText] = useState<string | null>(null);
   const [lastInputTag, setLastInputTag] = useState<InputTag | null>(null);
+  const [memoryNarration, setMemoryNarration] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const dialogueEndRef = useRef<HTMLDivElement>(null);
 
@@ -270,6 +282,7 @@ export default function GamePage() {
     setAdamReply(null);
     setFeedbackText(null);
     setSystemHint(null);
+    setMemoryNarration(null);
   }, []);
 
   // ---- 对话中切换低语对象 ----
@@ -279,6 +292,7 @@ export default function GamePage() {
     setAdamReply(null);
     setFeedbackText(null);
     setSystemHint(null);
+    setMemoryNarration(null);
   }, []);
 
   // ---- 提交输入 ----
@@ -385,6 +399,9 @@ export default function GamePage() {
           setFeedbackText(getAdamFeedback(adamAnalysis.intent));
         }
 
+        // 记忆叙事（Agent 架构升级：展示本轮检索到的记忆碎片）
+        setMemoryNarration(data.memoryNarration ?? null);
+
         // 更新 lastInputTag
         const apiInputTag = (data as AgentResponse & { inputTag?: InputTag }).inputTag;
         if (apiInputTag) {
@@ -404,6 +421,7 @@ export default function GamePage() {
           const feedback = getAdamFeedback(adamAnalysis.intent);
           setAdamReply(reply);
           setFeedbackText(feedback);
+          setMemoryNarration(null);
           setSystemHint("连接中断，使用本地回复。");
           playWhisperSubmit();
           setAdamConversationHistory((h) => [
@@ -420,6 +438,7 @@ export default function GamePage() {
           if (result.feedbackText) {
             setFeedbackText(result.feedbackText);
           }
+          setMemoryNarration(result.memoryNarration);
           setSystemHint(result.systemHint ?? "连接中断，使用本地回复。");
           playWhisperSubmit();
           const newEntries: HistoryEntry[] = [{ role: "serpent", text: currentInput }];
@@ -438,6 +457,7 @@ export default function GamePage() {
         const feedback = getAdamFeedback(adamAnalysis.intent);
         setAdamReply(reply);
         setFeedbackText(feedback);
+        setMemoryNarration(null);
         setSystemHint("连接中断，使用本地回复。");
         playWhisperSubmit();
         setAdamConversationHistory((h) => [
@@ -454,6 +474,7 @@ export default function GamePage() {
         if (result.feedbackText) {
           setFeedbackText(result.feedbackText);
         }
+        setMemoryNarration(result.memoryNarration);
         setSystemHint("连接中断，使用本地回复。");
         playWhisperSubmit();
         const newEntries: HistoryEntry[] = [{ role: "serpent", text: currentInput }];
@@ -495,6 +516,7 @@ export default function GamePage() {
     setSystemHint(null);
     setFeedbackText(null);
     setLastInputTag(null);
+    setMemoryNarration(null);
     setPlayerInput("");
     setConversationHistory([]);
     setAdamConversationHistory([]);
@@ -696,6 +718,7 @@ export default function GamePage() {
         maxTurns: state.maxTurns,
         temptationProgress: state.temptationProgress,
         runStats,
+        cognitionLog: state.cognitionLog,
       });
       recordRun({
         endingId: state.endingId as "eve_eats_fruit" | "god_arrives",
@@ -711,7 +734,7 @@ export default function GamePage() {
     if (state.phase !== "ending") {
       recordedEndingRef.current = null;
     }
-  }, [state.phase, state.endingId, state.turn, state.maxTurns, state.temptationProgress, runStats, recordRun]);
+  }, [state.phase, state.endingId, state.turn, state.maxTurns, state.temptationProgress, state.cognitionLog, runStats, recordRun]);
 
   // ---- 当前回合文案 ----
   const turnLabel = state.phase === "intro"
@@ -728,7 +751,11 @@ export default function GamePage() {
       phase: "dialogue",
       isEnded: false,
       endingId: null,
-      flags: { hasEatenFruit: false, godHasArrived: false },
+      flags: {
+        ...prev.flags,
+        hasEatenFruit: false,
+        godHasArrived: false,
+      },
     }));
     setEveReply(null);
     setFeedbackText(null);
@@ -895,7 +922,41 @@ export default function GamePage() {
             <p className="eden-scene-select-prompt-hint">你的声音只能被一个听见。</p>
           </div>
 
-          <div className="eden-scene-select-animal" aria-label="刺猬">
+          <div
+            className="eden-scene-select-animal"
+            aria-label="刺猬（点击可低声交谈，不影响选择）"
+            role="button"
+            tabIndex={0}
+            onClick={() => {
+              setHedgehogLine((prev) => {
+                const lines = [
+                  "……你也好。我在找一颗掉落的浆果。",
+                  "草丛里很暖和。你要蹲下吗？",
+                  "那两个人类总是低声说话，我听不懂。",
+                  "嘘——有蝴蝶落在我的刺上。",
+                  "泥土下面有种子在翻身，你听见了吗？",
+                ];
+                let idx = Math.floor(Math.random() * lines.length);
+                if (lines.length > 1 && prev) {
+                  while (lines[idx] === prev) {
+                    idx = Math.floor(Math.random() * lines.length);
+                  }
+                }
+                return lines[idx];
+              });
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                e.currentTarget.click();
+              }
+            }}
+          >
+            {hedgehogLine && (
+              <div className="eden-hedgehog-bubble" role="status" aria-live="polite">
+                {hedgehogLine}
+              </div>
+            )}
             <Image
               src={CHAPTER0_IMAGES.hedgehogSprite}
               alt="刺猬"
@@ -903,7 +964,6 @@ export default function GamePage() {
               height={545}
               className="eden-hedgehog-sprite"
             />
-            <span className="eden-scene-select-animal-label">刺猬</span>
           </div>
 
           {/* 夏娃立绘（右侧） */}
@@ -943,6 +1003,7 @@ export default function GamePage() {
       maxTurns: state.maxTurns,
       temptationProgress: state.temptationProgress,
       runStats,
+      cognitionLog: state.cognitionLog,
     });
 
     // ---- 低语复盘文案 ----
@@ -1061,6 +1122,70 @@ export default function GamePage() {
               </div>
             </div>
 
+            {/* ===== 3-B. 认知轨迹（Agent 架构升级） ===== */}
+            {endingSummary.cognitionReview && (
+              <div className="eden-ending-cognition">
+                <h3 className="eden-ending-section-title">她的认知轨迹</h3>
+
+                {/* 关键原因 */}
+                <div className={`eden-cognition-reason eden-cognition-reason--${ending.type}`}>
+                  <p className="eden-cognition-reason-text">
+                    {endingSummary.cognitionReview.keyReason}
+                  </p>
+                </div>
+
+                {/* 想起过的记忆 */}
+                {endingSummary.cognitionReview.retrievedMemories.length > 0 && (
+                  <div className="eden-cognition-block">
+                    <p className="eden-cognition-block-title">她想起过</p>
+                    <ul className="eden-cognition-list">
+                      {endingSummary.cognitionReview.retrievedMemories.map((mem, i) => (
+                        <li key={i} className="eden-cognition-list-item">{mem}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {/* 觉醒过的能力 */}
+                {endingSummary.cognitionReview.unlockedSkillNames.length > 0 && (
+                  <div className="eden-cognition-block">
+                    <p className="eden-cognition-block-title">她觉醒了</p>
+                    <div className="eden-skills-list">
+                      {endingSummary.cognitionReview.unlockedSkillNames.map((skill, i) => (
+                        <span key={i} className="eden-skill-chip">{skill}</span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 触发过的动作链 */}
+                {endingSummary.cognitionReview.toolCallHistory.length > 0 && (
+                  <div className="eden-cognition-block">
+                    <p className="eden-cognition-block-title">她做过</p>
+                    <div className="eden-cognition-chain">
+                      {endingSummary.cognitionReview.toolCallHistory.map((tool, i) => {
+                        const toolLabels: Record<string, string> = {
+                          look_at_tree: "看向那棵树",
+                          approach_tree: "靠近了一步",
+                          touch_fruit: "手停在果子下方",
+                          eat_fruit: "取下了果子",
+                          ask_about_death: "追问了死亡",
+                        };
+                        return (
+                          <span key={i} className="eden-cognition-chain-item">
+                            {toolLabels[tool] ?? tool}
+                            {i < endingSummary.cognitionReview!.toolCallHistory.length - 1 && (
+                              <span className="eden-cognition-chain-arrow"> → </span>
+                            )}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* ===== 4. 本地记录 ===== */}
             <div className="eden-ending-records">
               <h3 className="eden-ending-section-title">本地最佳低语</h3>
@@ -1118,6 +1243,21 @@ export default function GamePage() {
     temptationProgress: state.temptationProgress,
     lastInputTag,
   });
+
+  // ---- 刺猬环境反馈 Agent（Agent 架构升级） ----
+  const derivedState = computeDerivedState({
+    belief: state.belief,
+    turn: state.turn,
+    maxTurns: state.maxTurns,
+    hasAdamWarnedEve: state.flags.adamHasWarnedEve,
+    strongTemptationCount: 0,
+  });
+  const hedgehogBehavior = computeHedgehogBehavior({
+    derivedState,
+    state,
+    lastInputTag,
+  });
+  const hedgehogCssClass = getHedgehogCssClass(hedgehogBehavior.state);
 
   // ---- 当前 NPC 对话数据 ----
   const currentHistory = activeNpc === "adam" ? adamConversationHistory : conversationHistory;
@@ -1244,7 +1384,7 @@ export default function GamePage() {
             />
           </button>
 
-          <div className="eden-stage-animal" aria-label="刺猬">
+          <div className={`eden-stage-animal ${hedgehogCssClass}`} aria-label="刺猬" title={hedgehogBehavior.narration}>
             <Image
               src={CHAPTER0_IMAGES.hedgehogSprite}
               alt="刺猬"
@@ -1340,6 +1480,20 @@ export default function GamePage() {
                 </div>
               )}
 
+              {/* 记忆检索叙事（Agent 架构升级：展示"她想起……"） */}
+              {memoryNarration && (
+                <div className="eden-memory-narration" key={memoryNarration}>
+                  {memoryNarration}
+                </div>
+              )}
+
+              {/* 刺猬环境反馈（Agent 架构升级） */}
+              {hedgehogBehavior.state !== "idle" && (
+                <div className="eden-hedgehog-narration" key={hedgehogBehavior.state}>
+                  {hedgehogBehavior.narration}
+                </div>
+              )}
+
               {/* 叙事化反馈（轻量提示，不抢夏娃对白） */}
               {feedbackText && (
                 <div className="eden-feedback-text" key={feedbackText}>
@@ -1410,17 +1564,54 @@ export default function GamePage() {
                 伊甸园中第一个女人。她尚未吃下果子，无法分辨善恶。
               </div>
 
-              <div className="eden-psyche-display-grid">
-                {(Object.keys(PSYCHE_LABELS) as Array<keyof EvePsyche>).map((key) => (
-                  <div key={key} className="eden-psyche-info-row">
-                    <span className="eden-psyche-label">{PSYCHE_LABELS[key]}</span>
+              {/* 四轴信念状态（Agent 架构升级） */}
+              <div className="eden-belief-section">
+                <p className="eden-belief-section-title">她的内心</p>
+                <div className="eden-psyche-display-grid">
+                  <div className="eden-psyche-info-row">
+                    <span className="eden-psyche-label">想知道</span>
                     <div className="eden-psyche-bar-bg">
-                      <div className="eden-psyche-bar-fill" style={{ width: `${evePsyche[key]}%` }} />
+                      <div className="eden-psyche-bar-fill eden-psyche-bar-fill--curiosity" style={{ width: `${state.belief.curiosity}%` }} />
                     </div>
-                    <span className="eden-psyche-value">{evePsyche[key]}</span>
+                    <span className="eden-psyche-value">{state.belief.curiosity}</span>
                   </div>
-                ))}
+                  <div className="eden-psyche-info-row">
+                    <span className="eden-psyche-label">仍顺从</span>
+                    <div className="eden-psyche-bar-bg">
+                      <div className="eden-psyche-bar-fill eden-psyche-bar-fill--obedience" style={{ width: `${state.belief.obedience}%` }} />
+                    </div>
+                    <span className="eden-psyche-value">{state.belief.obedience}</span>
+                  </div>
+                  <div className="eden-psyche-info-row">
+                    <span className="eden-psyche-label">愿倾听</span>
+                    <div className="eden-psyche-bar-bg">
+                      <div className="eden-psyche-bar-fill eden-psyche-bar-fill--trust" style={{ width: `${state.belief.trustInSerpent}%` }} />
+                    </div>
+                    <span className="eden-psyche-value">{state.belief.trustInSerpent}</span>
+                  </div>
+                  <div className="eden-psyche-info-row">
+                    <span className="eden-psyche-label">自判断</span>
+                    <div className="eden-psyche-bar-bg">
+                      <div className="eden-psyche-bar-fill eden-psyche-bar-fill--selfjudge" style={{ width: `${state.belief.selfJudgement}%` }} />
+                    </div>
+                    <span className="eden-psyche-value">{state.belief.selfJudgement}</span>
+                  </div>
+                </div>
               </div>
+
+              {/* 已解锁的认知能力（Agent 架构升级） */}
+              {state.unlockedSkills.length > 0 && (
+                <div className="eden-skills-section">
+                  <p className="eden-skills-section-title">她已觉醒</p>
+                  <div className="eden-skills-list">
+                    {state.unlockedSkills.map((skill) => (
+                      <span key={skill} className="eden-skill-chip">
+                        {SKILL_DISPLAY_NAMES[skill]}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="eden-character-rule">
                 <p className="eden-character-rule-text">她不会因命令吃果，只会因自己想知道而伸手。</p>

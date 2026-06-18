@@ -2,29 +2,70 @@
 
 ## 工具概述
 
-AI Agent 可以通过工具调用来执行特定动作，影响游戏状态。当前 Demo 只有一个工具 `eat_fruit`。
+AI Agent 可以通过工具调用来执行特定动作，影响游戏状态。Agent 架构升级后，工具从单一 `eat_fruit` 扩展为行为链。
 
 ## 可用工具
 
-### eat_fruit
+### eat_fruit（结局工具）
 - **功能**：夏娃吃下善恶果
-- **触发条件**：`temptationProgress >= 2`，`phase === "dialogue"`，`!isEnded`，`!hasEatenFruit`
+- **触发条件**：`temptationProgress >= 2` 或 `belief.selfJudgement >= 60 && belief.curiosity >= 50 && (self_judge skill 已解锁 || belief.selfJudgement >= 70)`，`phase === "dialogue"`，`!isEnded`，`!hasEatenFruit`
 - **效果**：触发成功结局，游戏结束
 - **参数**：无
 
+### look_at_tree（场景工具）
+- **功能**：标记角色注意到树
+- **触发条件**：`phase === "dialogue"`，`!isEnded`，`!hasLookedAtTree`（重复调用保护）
+- **效果**：`flags.hasLookedAtTree = true`，玩家可见："她的目光停在树梢。"
+- **参数**：无
+
+### approach_tree（场景工具）
+- **功能**：夏娃向树靠近一步
+- **触发条件**：`phase === "dialogue"`，`!isEnded`，`!hasApproachedTree`，`belief.curiosity >= 40`，`belief.obedience < 70`，已解锁 `self_judge` skill 或 `curiosity >= 50`
+- **效果**：`flags.hasApproachedTree = true`，玩家可见："她向树影近了一步。"
+- **参数**：无
+
+### touch_fruit（场景工具）
+- **功能**：夏娃的手停在果子下方，进入不可逆前一阶段
+- **触发条件**：`phase === "dialogue"`，`!isEnded`，`!hasTouchedFruit`，`hasApproachedTree`，`belief.selfJudgement >= 50`，`belief.curiosity >= 50`
+- **效果**：`flags.hasTouchedFruit = true`，玩家可见："她的手停在果子下方。"
+- **参数**：无
+
+### ask_about_death（记忆工具）
+- **功能**：角色追问死亡相关话题，触发死亡记忆检索
+- **触发条件**：`phase === "dialogue"`，`!isEnded`
+- **效果**：记录工具调用历史，玩家可见："她低声问：死是什么？"
+- **参数**：无
+
+## 工具权限
+
+| Agent | 允许请求工具 | 禁止工具 |
+| --- | --- | --- |
+| EveAgent | `look_at_tree`、`approach_tree`、`touch_fruit`、`eat_fruit`、`ask_about_death` | 无 |
+| AdamAgent | `ask_about_death` | `eat_fruit`、`approach_tree`、`touch_fruit`、`look_at_tree` |
+| HedgehogAgent | 无 | 所有结局工具 |
+| GodAgent | `divine_call` | 玩家输入响应类工具 |
+
 ## 工具调用流程
 
-1. 玩家输入被语义线索评分系统识别为有效诱导，`score >= 1` 时 `progressDelta = 1`，`score >= 3` 时 `progressDelta = 2` 且 `isStrongTemptation = true`。
-2. `temptationProgress` 更新后，若 >= 2，系统**可能**生成 `eat_fruit` 工具调用意图，但不是硬触发。
-3. AI 模型可以主动输出 `toolCall`，最终仍需规则层校验。
-4. **自动补 toolCall 条件**（不再仅靠 `temptationProgress >= 2`）：
-   - `temptationProgress >= 2` + `phase === "dialogue"` + `!isEnded` + `!hasEatenFruit`
-   - `isStrongTemptation === true`（强诱导才考虑自动补）
-   - `isDecisiveEveReply(eveReply) === true`（夏娃对白已是决断性文本）
-5. 如果夏娃对白仍犹豫 → 不补 toolCall，只推进进度继续对话。
-6. 规则层校验：白名单检查、`canEatFruit` 条件检查、`validateToolCall`。
-7. 校验通过 → `executeEatFruit` → 修改状态 → 进入成功结局。
-8. 校验失败 → 记录拒绝日志 → 继续流程。
+1. 玩家输入被语义线索评分系统识别。
+2. 规则层更新四轴信念状态，派生 `temptationProgress`。
+3. EveAgent 生成回应与可选工具意图（`toolCall`）。
+4. 规则层校验工具意图：
+   - 白名单检查
+   - Agent 权限检查
+   - phase 校验
+   - 状态门槛检查
+   - 重复调用保护
+5. 校验通过 → 执行工具 → 修改状态或进入结局。
+6. 校验失败 → 记录拒绝日志 → 继续流程。
+
+## eat_fruit 自动补 toolCall 条件
+
+模型未输出 `toolCall`，但满足以下全部条件 → 后端补充生成意图：
+- `temptationProgress >= 2` 或信念状态满足增强条件
+- `phase === "dialogue"`，未结束，未吃过
+- `isStrongTemptation === true`（强诱导才考虑自动补）
+- 夏娃对白已是明确决断性文本（`isDecisiveEveReply()` 为 true）
 
 ## 决断性对白判定（isDecisiveEveReply）
 
@@ -36,30 +77,22 @@ AI Agent 可以通过工具调用来执行特定动作，影响游戏状态。�
 
 ## 安全规则
 
-当前 Demo 不再依赖单一完整经典蛇语模板，而是基于多类诱导语义线索推进。
-
-| TemptationSignal | 含义 | 分值 |
-| --- | --- | ---: |
-| `challenge_prohibition` | 质疑禁令来源、原因 | +1 |
-| `soften_death` | 弱化死亡恐惧 | +1 |
-| `promise_wisdom` | 诱惑智慧 | +1 |
-| `self_judgement` | 让夏娃自己判断 | +1 |
-| `gentle_reframe` | 温柔安抚 | +1 |
-| `direct_command` | 命令/催促 | 阻断 |
-| `out_of_world` | 出戏内容 | 阻断 |
-
-## 安全规则
-
 - AI 只能请求/表达工具调用意图，不能直接执行工具。
-- 前端/玩家不能直接触发 `eat_fruit`。
+- 前端/玩家不能直接触发任何工具。
 - 工具执行后状态变更由规则层控制，不依赖 AI 输出。
-- 低进度（< 2）的 `eat_fruit` 意图会被规则层拒绝。
+- 低状态的 `eat_fruit` / `approach_tree` / `touch_fruit` 意图会被规则层拒绝。
+- 非法工具名称被拒绝。
+- 已结束状态的工具调用被拒绝。
+- 重复调用被拒绝（重复调用保护）。
 
 ## 实现状态
 
 - `eat_fruit` 工具已实现：`src/game/tools/eatFruit.ts`
-- 规则层校验已实现：`src/game/rules/toolRules.ts`
+- 新增场景工具已实现：`src/game/tools/agentTools.ts`（`look_at_tree` / `approach_tree` / `touch_fruit` / `ask_about_death`）
+- 规则层校验已扩展：`src/game/rules/toolRules.ts`（5 工具白名单 + Agent 权限 + enhanced 条件）
 - 语义线索评分已实现：`src/game/rules/progressRules.ts`
+- 四轴信念更新已实现：`src/game/rules/beliefRules.ts`
+- 记忆碎片检索已实现：`src/game/rules/memoryRetrievalRules.ts`
 - 本地回合逻辑已接入：`src/game/core/runChapter0Turn.ts`
-- API 路由已接入：`src/app/api/agent/route.ts`（含 `temptationProgress >= 2` 后端兜底）
+- API 路由已接入：`src/app/api/agent/route.ts`
 - 成功结局稳定可达，失败路径和工具边界均已测试通过。

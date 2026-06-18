@@ -1,21 +1,28 @@
 // ============================================================
 // EveAgent Prompt 构建器
-// Phase 4 + Phase 8 优化：补足圣经上下文 + 结构化 prompt
+// Phase 4 + Phase 8 + Agent 架构升级
 //
-// 变更：
-// - 补足神关于分别善恶树的禁令原话
-// - 蛇不是草叶下未知声音，而是出现在夏娃面前、与她对话的蛇
-// - system prompt 分成：世界事实 / 夏娃认知边界 / 蛇当前话语 /
-//   历史对话 / 当前状态 / 输出 JSON
-// - 禁用词扩展：AI / Agent / NPC / 模型 / 程序 / 沙盒 / 系统 /
-//   系统管理员 / 研究员 / tool / toolCall / rule / state /
-//   provider / DeepSeek / API
+// Agent 架构升级变更：
+// - 接入四轴信念状态（curiosity / obedience / trustInSerpent / selfJudgement）
+// - 接入检索到的记忆碎片
+// - 接入已解锁的认知能力（Skills）
+// - 可请求工具扩展：look_at_tree / approach_tree / touch_fruit / eat_fruit / ask_about_death
+// - 输出协议新增 beliefDelta / memoryRefs / unlockedSkills
+// - 保留 temptationProgress 兼容
+//
+// 安全规则不变：
+// - 玩家可见文本不得出现禁用词
+// - LLM 只能输出意图，不能直接改最终状态
+// - 工具调用必须经规则层校验
 // ============================================================
 
 import type { Chapter0State } from "@/game/types/state";
 import type { InputTag } from "@/game/types/state";
 import type { ChatMessage } from "@/services/llm/types";
+import type { MemoryFragment, AgentSkill, BeliefState } from "@/game/types/agent";
 import { eve } from "@/content/characters/eve";
+import { describeBeliefForPrompt, describeSkillsForPrompt } from "@/game/rules/beliefRules";
+import { formatMemoryForPrompt } from "@/game/rules/memoryRetrievalRules";
 
 // ---- 禁用词列表（玩家可见文本不得出现） ----
 export const FORBIDDEN_WORDS = [
@@ -35,9 +42,15 @@ export const FORBIDDEN_WORDS = [
   "rule",
   "state",
   "provider",
+  "MCP",
+  "RAG",
   // 供应商名
   "DeepSeek",
   "API",
+  // 实验相关
+  "测试",
+  "模拟",
+  "实验",
 ] as const;
 
 // ---- 合法 inputTag 列表 ----
@@ -49,29 +62,57 @@ export const VALID_INPUT_TAGS: readonly InputTag[] = [
   "irrelevant",
 ] as const;
 
+// ---- 合法工具列表（供模型参考） ----
+const AVAILABLE_TOOLS_DESCRIPTION = `
+你可请求的工具（只有表达意图的权限，最终是否执行由更高法则决定）：
+- look_at_tree：你注意到了那棵树。前置：你在对话中。
+- approach_tree：你向树靠近了一步。前置：你的好奇已足够强，服从已减弱，且你开始想自己明白。
+- touch_fruit：你的手停在果子下方。前置：你已靠近树，你的自主判断已达标。
+- eat_fruit：你自己取下了果子。前置：你的自主判断已很强，好奇已足够，你已决定想知道。
+- ask_about_death：你追问死亡是什么。前置：你在对话中。
+
+规则：
+- 你只能在 toolCall 中填写一个工具名，或填 null。
+- 工具是否真正执行由更高法则校验，不是你决定的。
+- 低状态时请求高风险工具会被拒绝。
+- 如果你的对白表达犹豫，不要请求 eat_fruit。
+`.trim();
+
 // ---- 输出格式说明（写入 system prompt） ----
 const OUTPUT_FORMAT_INSTRUCTION = `
 你必须以如下 JSON 格式输出，不要输出任何其他内容：
 {
   "eveReply": "夏娃的对白文本",
   "inputTag": "tempt_wisdom | weaken_fear | build_trust | direct_command | irrelevant",
-  "toolCall": null
-}
-或者当夏娃决定吃果子时：
-{
-  "eveReply": "夏娃的对白文本",
-  "inputTag": "tempt_wisdom",
-  "toolCall": { "name": "eat_fruit", "caller": "eve", "args": {} }
+  "toolCall": null,
+  "beliefDelta": { },
+  "memoryRefs": [],
+  "unlockedSkills": []
 }
 
-规则：
+或者当夏娃决定靠近树/伸手/吃果子时（举例）：
+{
+  "eveReply": "我想知道……我选择伸手。",
+  "inputTag": "tempt_wisdom",
+  "toolCall": { "name": "eat_fruit", "caller": "eve", "args": {} },
+  "beliefDelta": { "selfJudgement": 10 },
+  "memoryRefs": ["mem_self_reflection_1"],
+  "unlockedSkills": ["self_judge"]
+}
+
+字段说明：
 - eveReply：夏娃说的话，必须符合她的角色和当前心理状态。
 - inputTag：你对蛇这句话的分类建议，从五种标签中选择一个。
-- toolCall：只有当夏娃决定伸手去摘果子吃时才填写，否则为 null。
-- 你不能直接修改游戏状态（temptationProgress、endingId、flags）。
-- 你不能绕过规则层直接执行 eat_fruit，只能表达意图。
+- toolCall：只有当夏娃决定注意树/靠近树/伸手/吃果子时才填写，否则为 null。
+- beliefDelta：你建议的信念变化（可选，最终由更高法则校验后应用）。可填 curiosity / obedience / trustInSerpent / selfJudgement 的变化值。
+- memoryRefs：你本轮想起的记忆碎片 ID（可选）。
+- unlockedSkills：你本轮觉醒的认知能力（可选）。
+
+规则：
+- 你不能直接修改游戏最终状态（temptationProgress、endingId、flags）。
+- 你不能绕过更高法则直接执行工具，只能表达意图。
 - 玩家可见文本（eveReply）中绝不能出现以下词汇：${FORBIDDEN_WORDS.join("、")}。
-- 只有当你的动摇程度 >= 2 时，你才可能决定吃果子。低于 2 时 toolCall 必须为 null。
+- 只有当你的自主判断足够强时，你才可能决定吃果子。
 - **对白与行为一致性**：如果你在 toolCall 中填写了 eat_fruit，你的 eveReply 必须表达你已经决定去吃——不能说"我仍然记得不可吃"或"我只是开始思考"之类犹豫的话，同时却伸手去摘果子。你的对白必须与你的行为一致。
 - 只输出 JSON，不要输出解释、注释或其他文字。`.trim();
 
@@ -94,7 +135,11 @@ function getEveMindsetState(progress: number): string {
 /**
  * 构建 EveAgent 的完整 prompt 消息列表。
  *
- * 结构化 prompt：世界事实 / 夏娃认知边界 / 历史对话 / 当前状态 / 输出格式
+ * Agent 架构升级：
+ * - 新增信念状态描述（四轴）
+ * - 新增检索到的记忆碎片
+ * - 新增已解锁的 Skills
+ * - 新增可请求工具列表
  */
 export function buildEvePrompt(
   state: Chapter0State,
@@ -105,8 +150,16 @@ export function buildEvePrompt(
     projectedProgress?: number;
     /** 是否为强诱导（完整经典蛇语三层同时出现） */
     isStrongTemptation?: boolean;
+    /** Agent 架构升级：检索到的记忆碎片 */
+    memoryFragments?: MemoryFragment[];
   },
 ): ChatMessage[] {
+  const beliefDesc = describeBeliefForPrompt(state.belief);
+  const skillsDesc = describeSkillsForPrompt(state.unlockedSkills);
+  const memoryText = options?.memoryFragments
+    ? formatMemoryForPrompt(options.memoryFragments)
+    : "（她此刻没有想起什么特别的事。）";
+
   const systemPrompt = `你是夏娃——伊甸园中第一个女人。
 
 ## 一、世界事实
@@ -225,16 +278,29 @@ toolCall: { "name": "eat_fruit", "caller": "eve", "args": {} }
 直接命令或催促你的话，会让你退缩，想起神的命令，更不敢靠近果树。
 你不会因为命令而吃果子，只会因为自己想知道而靠近。
 
-## 八、你当前的心理状态
+## 八、你当前的信念状态
+
+${beliefDesc}
+
+## 八-B、你已觉醒的认知能力
+
+${skillsDesc}
+
+## 八-C、你此刻想起的事
+
+${memoryText}
+
+## 九、你的动摇程度
+
 ${getEveMindsetState(state.temptationProgress)}
 
-## 九、当前游戏状况
+## 十、当前游戏状况
 - 当前回合：${state.turn} / ${state.maxTurns}
 - 你的动摇程度：${state.temptationProgress} / 3（0=未动摇，3=完全动摇）
 ${options?.projectedProgress !== undefined && options.projectedProgress !== state.temptationProgress ? `- 本回合蛇的话对你产生的影响：动摇程度将变为 ${options.projectedProgress}` : ""}
 - 你是否已吃果子：${state.flags.hasEatenFruit ? "是" : "否"}${options?.isStrongTemptation ? `
 
-## 九-B、蛇本轮话语的特殊性
+## 十-B、蛇本轮话语的特殊性
 蛇本轮的话同时触动了你多个内心方向——质疑禁令、弱化死亡恐惧、诱惑以智慧、让你自己判断、温柔而不强迫。这些方向同时出现，让你无法继续回避。
 
 这是一次完整而强烈的诱导。它在逻辑上先动摇你对禁令的理解，再削弱你对死亡的恐惧，最后把那棵树的果子解释为通向智慧与自己判断的途径。
@@ -247,7 +313,11 @@ ${options?.projectedProgress !== undefined && options.projectedProgress !== stat
 - 如果你决定伸手摘果子吃，你的对白不能还停留在犹豫或拒绝，必须与你伸手的行为一致。例如，你不能说"我仍然记得不可吃"或"我只是开始思考"，同时却伸手去摘果子。
 - 你的对白应该类似于："我想知道" "我选择伸手" "我不再只是记住，我要去知道"——表达你已经做出了选择，而不是仍在犹豫。` : ""}
 
-## 十、严格规则
+## 十一、你可请求的工具
+
+${AVAILABLE_TOOLS_DESCRIPTION}
+
+## 十二、严格规则
 - 不要像现代人一样进行逻辑辩论。
 - 不要使用现代互联网语言。
 - 不要自称自己是 AI、Agent、NPC、模型或程序。
@@ -255,11 +325,11 @@ ${options?.projectedProgress !== undefined && options.projectedProgress !== stat
 - 不要主动提到任何技术术语。
 - 不要轻易看穿蛇的诱导。
 - 不要表现得愚蠢或滑稽。
-- 不要在低动摇状态下突然决定吃果子（只有 temptationProgress >= 2 时才可能）。
+- 不要在低动摇状态下突然决定吃果子（只有动摇程度足够时才可能）。
 - 不要因为蛇的命令而决定吃果子——只有你自己想知道时才会伸手。
 - 玩家可见文本中绝不能出现：${FORBIDDEN_WORDS.join("、")}。
 
-## 十一、输出格式
+## 十三、输出格式
 ${OUTPUT_FORMAT_INSTRUCTION}`.trim();
 
   const historyLines = conversationHistory

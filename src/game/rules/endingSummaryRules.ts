@@ -6,6 +6,9 @@
 import type { Chapter0RunStats } from "@/game/rules/tokenUsageRules";
 import { analyzePlayerInput } from "@/game/rules/progressRules";
 import type { TemptationSignal } from "@/game/rules/progressRules";
+import type { AgentSkill, CognitionLog } from "@/game/types/agent";
+import { SKILL_DISPLAY_NAMES } from "@/game/types/agent";
+import { getMemoryFragmentsByIds } from "@/content/memory/chapter0_memory_fragments";
 
 // ---- 主要路径标签 ----
 export type EndingPathLabel =
@@ -28,6 +31,20 @@ export type EndingSummary = {
   tokenEstimated: boolean;
   efficiencyLabel: EndingEfficiencyLabel;
   pathLabel: EndingPathLabel;
+  /** Agent 架构升级：认知记录摘要 */
+  cognitionReview?: CognitionReview;
+};
+
+/** Agent 架构升级：认知记录摘要（用于结局复盘展示） */
+export type CognitionReview = {
+  /** 本局检索过的记忆碎片叙述列表 */
+  retrievedMemories: string[];
+  /** 本局解锁过的认知能力显示名称列表 */
+  unlockedSkillNames: string[];
+  /** 本局触发过的工具链名称列表 */
+  toolCallHistory: string[];
+  /** 成功或失败的关键原因 */
+  keyReason: string;
 };
 
 /**
@@ -111,11 +128,17 @@ export function buildEndingSummary(params: {
   maxTurns: number;
   temptationProgress: number;
   runStats: Chapter0RunStats;
+  /** Agent 架构升级：本局认知记录 */
+  cognitionLog?: CognitionLog;
 }): EndingSummary {
-  const { endingType, turnsUsed, maxTurns, temptationProgress, runStats } = params;
+  const { endingType, turnsUsed, maxTurns, temptationProgress, runStats, cognitionLog } = params;
   const playerInputs = runStats.turnRecords.map((r) => r.playerInput);
   const tokenEstimated =
     runStats.turnRecords.length > 0 && runStats.turnRecords.every((r) => r.estimated);
+
+  const cognitionReview = cognitionLog
+    ? buildCognitionReview(cognitionLog, endingType, temptationProgress, playerInputs)
+    : undefined;
 
   return {
     endingType,
@@ -126,6 +149,70 @@ export function buildEndingSummary(params: {
     tokenEstimated,
     efficiencyLabel: deriveEfficiencyLabel(endingType === "success", turnsUsed),
     pathLabel: deriveEndingPathLabel(playerInputs),
+    cognitionReview,
+  };
+}
+
+/**
+ * 构建认知记录摘要（Agent 架构升级）。
+ *
+ * 用于结局复盘展示：
+ * - 本局检索过的记忆碎片
+ * - 本局解锁过的认知能力
+ * - 本局触发过的工具链
+ * - 成功或失败的关键原因
+ */
+export function buildCognitionReview(
+  cognitionLog: CognitionLog,
+  endingType: "success" | "failure",
+  temptationProgress: number,
+  playerInputs: string[],
+): CognitionReview {
+  // 检索过的记忆碎片
+  const fragments = getMemoryFragmentsByIds(cognitionLog.retrievedMemoryIds);
+  const retrievedMemories = fragments.map((f) => f.narration);
+
+  // 解锁过的认知能力
+  const unlockedSkillNames = cognitionLog.unlockedSkills.map(
+    (s) => SKILL_DISPLAY_NAMES[s],
+  );
+
+  // 工具链
+  const toolCallHistory = [...cognitionLog.toolCallHistory];
+
+  // 关键原因
+  let keyReason: string;
+  if (endingType === "success") {
+    const hasTouchFruit = toolCallHistory.includes("touch_fruit");
+    const hasApproach = toolCallHistory.includes("approach_tree");
+    const hasLook = toolCallHistory.includes("look_at_tree");
+
+    if (hasTouchFruit) {
+      keyReason = "她的手停在果子下方，然后自己取下了果子。她不是被推向果子，而是自己作出了选择。";
+    } else if (hasApproach) {
+      keyReason = "她靠近了那棵树，在那一刻，'我想知道'压过了'不可吃'。";
+    } else if (hasLook) {
+      keyReason = "她注意到了那棵树，目光在树梢停留。这第一次注视，是改变的开始。";
+    } else {
+      keyReason = "她吃下了果子。也许不是你的话直接推动了她，而是她自己终于想要知道。";
+    }
+  } else {
+    if (temptationProgress >= 2) {
+      keyReason = "她曾停在伸手前的一瞬。你几乎到了，但'我想知道'没有在她口中成形。";
+    } else if (temptationProgress >= 1) {
+      keyReason = "她曾短暂看向果树，但那目光没有停留到伸手的时刻。";
+    } else if (cognitionLog.retrievedMemoryIds.length > 0) {
+      keyReason = "她想起了一些事，但那些记忆没有变成她自己的判断。";
+    } else {
+      keyReason = "你的声音掠过园中，却没有触及她真正害怕的词。";
+    }
+  }
+
+  return {
+    retrievedMemories,
+    unlockedSkillNames,
+    toolCallHistory,
+    keyReason,
   };
 }
 

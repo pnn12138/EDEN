@@ -13,6 +13,7 @@
 
 import type { Chapter0State } from "@/game/types/state";
 import type { AdamAgentOutput } from "@/game/types/agent";
+import type { MemoryFragment } from "@/game/types/agent";
 import type { FallbackReasonCode } from "@/services/llm/types";
 import { callLLM } from "@/services/llm/client";
 import { buildAdamPrompt } from "@/agents/adam/buildAdamPrompt";
@@ -23,6 +24,8 @@ export type AdamAgentRequest = {
   playerInput: string;
   /** 之前的对话历史 */
   conversationHistory: Array<{ role: "serpent" | "eve"; text: string }>;
+  /** Agent 架构升级：检索到的记忆碎片 */
+  memoryFragments?: MemoryFragment[];
 };
 
 export type AdamAgentResult = {
@@ -39,12 +42,14 @@ export type AdamAgentResult = {
  * 运行 AdamAgent：构建 prompt → 调用 LLM → 解析输出。
  */
 export async function runAdamAgent(req: AdamAgentRequest): Promise<AdamAgentResult> {
-  const { state, playerInput, conversationHistory } = req;
+  const { state, playerInput, conversationHistory, memoryFragments } = req;
 
   // ---- 1. 构建 prompt ----
   let messages: ReturnType<typeof buildAdamPrompt>;
   try {
-    messages = buildAdamPrompt(state, playerInput, conversationHistory);
+    messages = buildAdamPrompt(state, playerInput, conversationHistory, {
+      memoryFragments,
+    });
   } catch {
     return {
       output: createAdamFallbackOutput(playerInput, "prompt_build_failed"),

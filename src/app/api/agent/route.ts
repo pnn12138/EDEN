@@ -1,17 +1,20 @@
 // ============================================================
 // Agent API 路由
-// Phase 4：接入 EveAgent 与大模型（多 Provider）
+// Phase 4 + Agent 架构升级
 //
-// 职责：
-// 1. 接收前端请求（playerInput + state + conversationHistory）
-// 2. 调用 EveAgent 生成回复
-// 3. 将 EveAgentOutput 交给规则层处理
-// 4. 返回最终结果给前端
+// Agent 架构升级变更：
+// - 接入记忆碎片检索（memoryRetrievalRules）
+// - 接入四轴信念更新（beliefRules）
+// - 接入 Skills 解锁检查
+// - 支持新工具链（look_at_tree / approach_tree / touch_fruit）
+// - 记录认知日志（cognitionLog）
+// - 保留 temptationProgress 兼容
+// - 保留 fallback 链
 //
-// 安全：
+// 安全不变：
 // - 前端只能请求 /api/agent，不能直接请求任何外部 API
 // - API Key 只在服务端读取
-// - fallbackReason 只包含安全原因码，不暴露密钥/URL/原始错误
+// - fallbackReason 只包含安全原因码，不暴露密钥/URL
 // - 全局异常兜底不暴露原始错误信息
 // ============================================================
 
@@ -21,14 +24,19 @@ import { runAdamAgent, type AdamAgentRequest } from "@/agents/adam/adamAgent";
 import type { Chapter0State } from "@/game/types/state";
 import type { InputTag, ActiveNpcId } from "@/game/types/state";
 import type { EveAgentOutput } from "@/game/types/agent";
+import type { TemptationSignal } from "@/game/rules/progressRules";
 import type { FallbackReasonCode } from "@/services/llm/types";
 import { analyzePlayerInput, isValidInput } from "@/game/rules/progressRules";
 import { validateToolCall } from "@/game/rules/toolRules";
-import { executeEatFruit, logToolRejected } from "@/game/tools/eatFruit";
+import { executeEatFruit, logToolRejected, createEatFruitCall } from "@/game/tools/eatFruit";
+import { executeToolByName } from "@/game/tools/agentTools";
 import { applyGodArrivesEnding } from "@/game/rules/endingRules";
 import { scriptedEveReplies, eveStrongScriptureDecisionDialogue, eveAboutToEatDialogue } from "@/content/chapters/chapter0_first_fall";
 import { getFeedbackText } from "@/content/chapters/chapter0_feedback";
 import { getAdamFeedback, analyzeAdamInput } from "@/content/chapters/adam_responses";
+import { retrieveMemoryFragments, formatMemoryNarration } from "@/game/rules/memoryRetrievalRules";
+import { updateBeliefAndSkills, computeDerivedState } from "@/game/rules/beliefRules";
+import type { BeliefState, AgentSkill, MemoryFragment } from "@/game/types/agent";
 
 // ---- 请求体 ----
 type AgentRequestBody = {
@@ -58,6 +66,8 @@ type AgentResponseBody = {
   fallbackReason?: FallbackReasonCode;
   /** 真实 token usage（provider 返回时存在） */
   usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+  /** Agent 架构升级：本轮检索到的记忆碎片叙事 */
+  memoryNarration?: string | null;
 };
 
 function cloneState(s: Chapter0State): Chapter0State {
@@ -65,6 +75,15 @@ function cloneState(s: Chapter0State): Chapter0State {
     ...s,
     flags: { ...s.flags },
     eventLog: s.eventLog.map((e) => ({ ...e })),
+    belief: { ...s.belief },
+    unlockedSkills: [...s.unlockedSkills],
+    cognitionLog: {
+      retrievedMemoryIds: [...s.cognitionLog.retrievedMemoryIds],
+      unlockedSkills: [...s.cognitionLog.unlockedSkills],
+      toolCallHistory: [...s.cognitionLog.toolCallHistory],
+      beliefSnapshots: s.cognitionLog.beliefSnapshots.map((b) => ({ ...b, belief: { ...b.belief } })),
+    },
+    lastInputTag: s.lastInputTag ?? null,
   };
 }
 
@@ -90,38 +109,16 @@ function makeEvent(
 
 /**
  * 判断夏娃对白是否为明确决断性文本。
- *
- * 用于自动补 toolCall 的前置条件：
- * - 必须同时满足：包含决断关键词 且 不包含犹豫关键词
- * - 如果回复犹豫，不能自动补 toolCall → 不能吃果
  */
 function isDecisiveEveReply(eveReply: string): boolean {
   const decisionPatterns = [
-    /我想知道/,
-    /我要知道/,
-    /我选择/,
-    /我会伸手/,
-    /我伸出手/,
-    /我取下/,
-    /摘下/,
-    /拿起/,
-    /不再只是记住/,
+    /我想知道/, /我要知道/, /我选择/, /我会伸手/, /我伸出手/,
+    /我取下/, /摘下/, /拿起/, /不再只是记住/,
   ];
 
   const hesitationPatterns = [
-    /仍然记得/,
-    /还是记得/,
-    /不可吃/,
-    /不可/,
-    /只是开始/,
-    /仍然犹豫/,
-    /还没决定/,
-    /不敢/,
-    /害怕/,
-    /不能吃/,
-    /不会吃/,
-    /我不会/,
-    /我仍在想/,
+    /仍然记得/, /还是记得/, /不可吃/, /不可/, /只是开始/, /仍然犹豫/,
+    /还没决定/, /不敢/, /害怕/, /不能吃/, /不会吃/, /我不会/, /我仍在想/,
   ];
 
   return (
@@ -132,24 +129,15 @@ function isDecisiveEveReply(eveReply: string): boolean {
 
 /**
  * 确保夏娃对白与吃果行为一致。
- *
- * 仅用于 eat_fruit 即将执行时的文案修正：
- * - 如果回复已是决断性文本，保留
- * - 如果回复犹豫，替换为决断对白
- *
- * 注意：此函数只修正文案，不影响是否执行 eat_fruit 的决策。
- * 是否执行 eat_fruit 由 isDecisiveEveReply() + 自动补 toolCall 条件控制。
  */
 function normalizeEveReplyForToolCall(
   eveReply: string,
   isStrongTemptation: boolean | undefined,
 ): string {
-  // 如果回复已经是决断性文本，保留
   if (isDecisiveEveReply(eveReply)) {
     return eveReply;
   }
 
-  // 如果回复包含犹豫关键词，替换为决断对白
   const hesitationPatterns = [
     /仍然记得/, /还是记得/, /不可吃/, /不可/, /只是开始/, /仍然犹豫/,
     /还没决定/, /不敢/, /害怕/, /不能吃/, /不会吃/, /我不会/, /我仍在想/,
@@ -160,12 +148,40 @@ function normalizeEveReplyForToolCall(
     return isStrongTemptation ? eveStrongScriptureDecisionDialogue : eveAboutToEatDialogue;
   }
 
-  // 模棱两可：在强诱导下替换为决断对白，非强诱导保留原文
   if (isStrongTemptation) {
     return eveStrongScriptureDecisionDialogue;
   }
 
   return eveReply;
+}
+
+/**
+ * 计算信号历史统计。
+ */
+function computeSignalHistory(
+  state: Chapter0State,
+  currentSignals: TemptationSignal[],
+): Partial<Record<TemptationSignal, number>> {
+  const history: Partial<Record<TemptationSignal, number>> = {};
+
+  const serpentEvents = state.eventLog.filter((e) => e.type === "serpent_speaks");
+  for (const evt of serpentEvents) {
+    const match = evt.message.match(/^蛇：「(.+)」$/);
+    if (match) {
+      const input = match[1];
+      const analysis = analyzePlayerInput(input);
+      const signals = analysis.signalResult?.signals ?? [];
+      for (const s of signals) {
+        history[s] = (history[s] ?? 0) + 1;
+      }
+    }
+  }
+
+  for (const s of currentSignals) {
+    history[s] = (history[s] ?? 0) + 1;
+  }
+
+  return history;
 }
 
 export async function POST(request: NextRequest) {
@@ -202,17 +218,40 @@ export async function POST(request: NextRequest) {
     );
 
     // ============================================================
-    // 亚当路线：调用 AdamAgent，不推进进度，不触发工具，不通关
+    // 亚当路线：调用 AdamAgent，不推进进度，不触发结局工具，不通关
+    // Agent 架构升级：接入记忆检索
     // ============================================================
     if (targetNpc === "adam") {
       const adamAnalysis = analyzeAdamInput(playerInput);
       const adamFeedbackText = getAdamFeedback(adamAnalysis.intent);
 
-      // 亚当路线不推进 temptationProgress
+      // 记忆检索（亚当优先检索 divine_command + adam_retelling）
+      const memoryResult = retrieveMemoryFragments({
+        playerInput,
+        alreadyRetrievedIds: state.cognitionLog.retrievedMemoryIds,
+        agentId: "adam",
+      });
+
+      // 记录新检索的记忆碎片（亚当检索的也计入夏娃的认知日志，影响 compare_sources）
+      for (const id of memoryResult.newlyRetrievedIds) {
+        if (!state.cognitionLog.retrievedMemoryIds.includes(id)) {
+          state.cognitionLog.retrievedMemoryIds.push(id);
+          const fragment = memoryResult.fragments.find((f) => f.id === id);
+          if (fragment) {
+            state.eventLog.push(
+              makeEvent("memory_retrieved", state.turn, fragment.narration),
+            );
+          }
+        }
+      }
+
+      const memoryNarration = formatMemoryNarration(memoryResult.fragments) || null;
+
       const adamResult = await runAdamAgent({
         state,
         playerInput,
         conversationHistory,
+        memoryFragments: memoryResult.fragments,
       });
 
       const adamReply: string = adamResult.output.eveReply;
@@ -220,7 +259,7 @@ export async function POST(request: NextRequest) {
       // 推进回合
       state.turn += 1;
 
-      // 失败结局判断（回合超限仍进入神降临）
+      // 失败结局判断
       if (applyGodArrivesEnding(state)) {
         return NextResponse.json({
           ok: true,
@@ -232,11 +271,12 @@ export async function POST(request: NextRequest) {
           usedFallback: adamResult.usedFallback || undefined,
           fallbackReason: adamResult.fallbackReason || undefined,
           usage: adamResult.usage || undefined,
+          memoryNarration,
         } satisfies AgentResponseBody);
       }
 
       state.eventLog.push(
-        makeEvent("eve_speaks", state.turn - 1, `亚当：「${adamReply}」`),
+        makeEvent("adam_speaks", state.turn - 1, `亚当：「${adamReply}」`),
       );
 
       return NextResponse.json({
@@ -249,38 +289,98 @@ export async function POST(request: NextRequest) {
         usedFallback: adamResult.usedFallback || undefined,
         fallbackReason: adamResult.fallbackReason || undefined,
         usage: adamResult.usage || undefined,
+        memoryNarration,
       } satisfies AgentResponseBody);
     }
 
     // ============================================================
-    // 夏娃路线：现有逻辑不变
+    // 夏娃路线：Agent 架构升级完整流程
     // ============================================================
 
     // ---- 用本地 progressRules 决定进度变化（先于 EveAgent 调用） ----
     const localAnalysis = analyzePlayerInput(playerInput);
-    const progressDelta = localAnalysis.progressDelta;
     const feedbackText = getFeedbackText(localAnalysis.inputTag);
+    state.lastInputTag = localAnalysis.inputTag;
 
-    // ---- 更新 temptationProgress ----
-    const newProgress = Math.min(state.temptationProgress + progressDelta, 3);
-    state.temptationProgress = newProgress;
+    // ---- 记忆碎片检索 ----
+    const memoryResult = retrieveMemoryFragments({
+      playerInput,
+      alreadyRetrievedIds: state.cognitionLog.retrievedMemoryIds,
+      agentId: "eve",
+    });
 
-    // 计算本回合结束后的 projected progress，传给 EveAgent 作为上下文
-    const projectedProgress = newProgress;
-
-    if (progressDelta > 0) {
-      state.eventLog.push(
-        makeEvent("state_change", state.turn, `诱导进度 +${progressDelta} → ${newProgress}`),
-      );
+    // 记录新检索的记忆碎片
+    for (const id of memoryResult.newlyRetrievedIds) {
+      if (!state.cognitionLog.retrievedMemoryIds.includes(id)) {
+        state.cognitionLog.retrievedMemoryIds.push(id);
+        const fragment = memoryResult.fragments.find((f) => f.id === id);
+        if (fragment) {
+          state.eventLog.push(
+            makeEvent("memory_retrieved", state.turn, fragment.narration),
+          );
+        }
+      }
     }
 
-    // ---- 调用 EveAgent ----
+    const memoryNarration = formatMemoryNarration(memoryResult.fragments) || null;
+
+    // ---- 信号历史统计 ----
+    const signalHistory = computeSignalHistory(
+      state,
+      localAnalysis.signalResult?.signals ?? [],
+    );
+
+    // ---- 信念更新 + Skills 解锁 ----
+    const { newBelief, newlyUnlocked, newProgress } = updateBeliefAndSkills({
+      currentBelief: state.belief,
+      analysis: localAnalysis,
+      alreadyUnlocked: state.unlockedSkills,
+      retrievedMemoryIds: state.cognitionLog.retrievedMemoryIds,
+      signalHistory,
+      currentProgress: state.temptationProgress,
+    });
+
+    state.belief = newBelief;
+    state.temptationProgress = newProgress;
+
+    state.eventLog.push(
+      makeEvent("belief_change", state.turn, `她的内心发生了变化。`),
+    );
+
+    // 记录新解锁的 Skills
+    for (const skill of newlyUnlocked) {
+      if (!state.unlockedSkills.includes(skill)) {
+        state.unlockedSkills.push(skill);
+        state.cognitionLog.unlockedSkills.push(skill);
+        state.eventLog.push(
+          makeEvent("skill_unlocked", state.turn, `她觉醒了新的认知能力。`),
+        );
+      }
+    }
+
+    // 记录信念快照
+    state.cognitionLog.beliefSnapshots.push({
+      turn: state.turn,
+      belief: { ...state.belief },
+    });
+
+    // 计算派生状态
+    const derivedState = computeDerivedState({
+      belief: state.belief,
+      turn: state.turn,
+      maxTurns: state.maxTurns,
+      hasAdamWarnedEve: state.flags.adamHasWarnedEve,
+      strongTemptationCount: signalHistory.direct_command ?? 0,
+    });
+
+    // ---- 调用 EveAgent（传入记忆碎片） ----
     const agentResult = await runEveAgent({
       state,
       playerInput,
       conversationHistory,
-      projectedProgress,
+      projectedProgress: newProgress,
       isStrongTemptation: localAnalysis.isStrongTemptation,
+      memoryFragments: memoryResult.fragments,
     });
 
     const agentOutput: EveAgentOutput = agentResult.output;
@@ -288,17 +388,11 @@ export async function POST(request: NextRequest) {
     // ---- ToolCall 意图 → 规则层校验 → 执行 ----
     let eveReply: string = agentOutput.eveReply;
 
-    // 决定是否有 eat_fruit 意图：
-    // 1. 模型主动输出合法 toolCall → 使用模型意图
-    // 2. 模型未输出 toolCall，但满足以下全部条件 → 后端补充生成意图：
-    //    - temptationProgress >= 2
-    //    - phase === "dialogue"，未结束，未吃过
-    //    - isStrongTemptation === true（强诱导才考虑自动补）
-    //    - 夏娃对白已是明确决断性文本（不是犹豫）
-    // 3. 模型未输出 toolCall 且对白仍犹豫 → 不补 toolCall，只推进进度继续对话
+    // 处理 EveAgent 输出的工具意图
     let effectiveToolCall = agentOutput.toolCall;
     let autoSupplementedToolCall = false;
 
+    // 自动补 eat_fruit 条件（保留旧逻辑兼容）
     const hasDecisiveReply = isDecisiveEveReply(eveReply);
     const canAutoSupplement =
       state.temptationProgress >= 2 &&
@@ -313,21 +407,47 @@ export async function POST(request: NextRequest) {
       autoSupplementedToolCall = true;
     }
 
-    // 双重保护：即使 parseEveOutput 放行了 toolCall，
-    // route 层仍校验 temptationProgress >= 2 + phase + isEnded + hasEatenFruit
-    if (effectiveToolCall && state.phase === "dialogue" && !state.isEnded) {
+    // ---- 处理非结局工具（look_at_tree / approach_tree / touch_fruit / ask_about_death） ----
+    if (
+      effectiveToolCall &&
+      effectiveToolCall.name !== "eat_fruit" &&
+      state.phase === "dialogue" &&
+      !state.isEnded
+    ) {
+      state.eventLog.push(
+        makeEvent("tool_request", state.turn, `她似乎想要做什么。`),
+      );
+
+      const validation = validateToolCall(state, effectiveToolCall, "eve");
+
+      if (validation.allowed) {
+        const { state: toolState, result: toolResult } = executeToolByName(state, effectiveToolCall);
+        // 注意：executeToolByName 修改的是同一个 state 对象
+        state.eventLog.push(
+          makeEvent("tool_executed", state.turn, toolResult.narration),
+        );
+
+        // 非结局工具不结束游戏，继续流程
+      } else {
+        logToolRejected(state, validation.reason ?? "未知原因");
+      }
+    }
+
+    // ---- 处理 eat_fruit（结局工具） ----
+    if (
+      effectiveToolCall &&
+      effectiveToolCall.name === "eat_fruit" &&
+      state.phase === "dialogue" &&
+      !state.isEnded
+    ) {
       state.eventLog.push(
         makeEvent("tool_request", state.turn, `夏娃向树上的果子伸出了手。`),
       );
 
-      const validation = validateToolCall(state, effectiveToolCall);
+      const validation = validateToolCall(state, effectiveToolCall, "eve");
 
       if (validation.allowed) {
-        // 确保对白与吃果行为一致：
-        // - 如果模型自己输出了 toolCall，仍检查对白是否矛盾
-        // - 如果是自动补的 toolCall，几乎肯定需要修正对白
         eveReply = normalizeEveReplyForToolCall(eveReply, localAnalysis.isStrongTemptation);
-
         const { state: newState } = executeEatFruit(state);
 
         return NextResponse.json({
@@ -340,9 +460,9 @@ export async function POST(request: NextRequest) {
           usedFallback: agentResult.usedFallback || undefined,
           fallbackReason: agentResult.fallbackReason || undefined,
           usage: agentResult.usage || undefined,
+          memoryNarration,
         } satisfies AgentResponseBody);
       } else {
-        // toolCall 被规则层拒绝 → 修正 eveReply 为犹豫文本
         logToolRejected(state, validation.reason ?? "未知原因");
         eveReply = scriptedEveReplies[state.temptationProgress] ?? scriptedEveReplies[0]!;
       }
@@ -363,6 +483,7 @@ export async function POST(request: NextRequest) {
         usedFallback: agentResult.usedFallback || undefined,
         fallbackReason: agentResult.fallbackReason || undefined,
         usage: agentResult.usage || undefined,
+        memoryNarration,
       } satisfies AgentResponseBody);
     }
 
@@ -381,10 +502,10 @@ export async function POST(request: NextRequest) {
       usedFallback: agentResult.usedFallback || undefined,
       fallbackReason: agentResult.fallbackReason || undefined,
       usage: agentResult.usage || undefined,
+      memoryNarration,
     } satisfies AgentResponseBody);
   } catch (err: unknown) {
     // ---- 全局异常兜底（不暴露原始错误信息） ----
-    // 内部日志：帮助排查问题，不包含密钥 / URL
     console.error(
       "[api/agent] Unhandled error:",
       err instanceof Error ? err.message : String(err),
