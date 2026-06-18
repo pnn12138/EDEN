@@ -25,3 +25,15 @@ export type ScriptedResponse = {
   inputTag: InputTag;
   temptationProgressDelta: 0 | 1;
 };
+
+/** AdamAgent 输出格式（结构与 EveAgentOutput 兼容，但 toolCall 始终为 undefined） */
+export type AdamAgentOutput = {
+  /** 亚当的对白文本（前端通过 eveReply 字段兼容读取） */
+  eveReply: string;
+  /** 语义标签 */
+  inputTag: InputTag;
+  /** 亚当路线不推进诱导进度，始终为 0 */
+  temptationProgressDelta: 0;
+  /** 亚当路线不触发工具调用，始终为 undefined */
+  toolCall?: never;
+};

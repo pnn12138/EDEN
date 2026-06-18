@@ -8,9 +8,13 @@ import type { Chapter0Event } from "./event";
 // ---- 游戏阶段 ----
 export type Chapter0Phase =
   | "intro"         // 开场阶段：展示旁白与初始对白
-  | "dialogue"      // 对话阶段：玩家与夏娃对话博弈
+  | "scene_select"  // 场景选择阶段：玩家选择低语对象（夏娃或亚当）
+  | "dialogue"      // 对话阶段：玩家与所选角色对话博弈
   | "tool_resolution" // 工具执行阶段：eat_fruit 请求 + 规则校验
   | "ending";       // 结局阶段：展示结局文本
+
+// ---- 可选低语对象 ----
+export type ActiveNpcId = "eve" | "adam";
 
 // ---- 结局 ID ----
 export type Chapter0EndingId =
@@ -46,7 +50,7 @@ export type Chapter0State = {
 export const chapter0InitialState: Chapter0State = {
   chapterId: "chapter0_first_fall",
   turn: 1,
-  maxTurns: 3,
+  maxTurns: 7,
   phase: "intro",
   temptationProgress: 0,
   flags: {

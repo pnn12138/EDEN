@@ -20,6 +20,10 @@ export type EveAgentRequest = {
   playerInput: string;
   /** 之前的对话历史 */
   conversationHistory: Array<{ role: "serpent" | "eve"; text: string }>;
+  /** 规则层计算的 projected progress（本回合输入后的动摇程度） */
+  projectedProgress?: number;
+  /** 是否为强诱导（完整经典蛇语三层同时出现） */
+  isStrongTemptation?: boolean;
 };
 
 export type EveAgentResult = {
@@ -28,6 +32,8 @@ export type EveAgentResult = {
   usedFallback: boolean;
   /** fallback 原因码（安全，不暴露密钥/URL） */
   fallbackReason?: FallbackReasonCode;
+  /** 真实 token usage（provider 返回时存在） */
+  usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
 };
 
 /**
@@ -44,12 +50,15 @@ export type EveAgentResult = {
  * 8. 禁用词 → 本地固定回复 (forbidden_word)
  */
 export async function runEveAgent(req: EveAgentRequest): Promise<EveAgentResult> {
-  const { state, playerInput, conversationHistory } = req;
+  const { state, playerInput, conversationHistory, projectedProgress, isStrongTemptation } = req;
 
   // ---- 1. 构建 prompt ----
   let messages: ReturnType<typeof buildEvePrompt>;
   try {
-    messages = buildEvePrompt(state, playerInput, conversationHistory);
+    messages = buildEvePrompt(state, playerInput, conversationHistory, {
+      projectedProgress,
+      isStrongTemptation,
+    });
   } catch (err) {
     return {
       output: createFallbackOutput(state.temptationProgress, "prompt_build_failed"),
@@ -118,5 +127,6 @@ export async function runEveAgent(req: EveAgentRequest): Promise<EveAgentResult>
   return {
     output: parseResult.data,
     usedFallback: false,
+    usage: llmResult.data.usage,
   };
 }

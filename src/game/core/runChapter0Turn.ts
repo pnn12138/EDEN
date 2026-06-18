@@ -30,6 +30,7 @@ import {
   logToolRejected,
 } from "@/game/tools/eatFruit";
 import { scriptedEveReplies } from "@/content/chapters/chapter0_first_fall";
+import { getFeedbackText } from "@/content/chapters/chapter0_feedback";
 
 // ---- 回合执行结果 ----
 export type TurnResult = {
@@ -38,6 +39,8 @@ export type TurnResult = {
   eveReply: string | null;
   /** 系统提示（如空输入警告） */
   systemHint: string | null;
+  /** 叙事化话术反馈（根据 inputTag 生成） */
+  feedbackText: string | null;
 };
 
 // ---- 工具函数 ----
@@ -79,7 +82,7 @@ export function runChapter0Turn(
 
   // ---- 1. 游戏已结束 ----
   if (state.isEnded || state.phase === "ending") {
-    return { state, eveReply: null, systemHint: null };
+    return { state, eveReply: null, systemHint: null, feedbackText: null };
   }
 
   // ---- 2. 空输入校验 ----
@@ -88,11 +91,13 @@ export function runChapter0Turn(
       state,
       eveReply: null,
       systemHint: "请输入你的低语⋯⋯蛇不能沉默。",
+      feedbackText: null,
     };
   }
 
   // ---- 3. 输入分类 ----
   const { inputTag, progressDelta } = analyzePlayerInput(playerInput);
+  const feedbackText = getFeedbackText(inputTag);
 
   // ---- 4. 记录玩家输入事件 ----
   state.eventLog.push(
@@ -146,6 +151,7 @@ export function runChapter0Turn(
         state: newState,
         eveReply: scriptedEveReplies[3]!,
         systemHint: null,
+        feedbackText,
       };
     } else {
       // 6d. 校验失败 → 记录拒绝日志，继续流程
@@ -159,7 +165,7 @@ export function runChapter0Turn(
 
   // ---- 8. 失败结局判断 ----
   if (applyGodArrivesEnding(state)) {
-    return { state, eveReply: null, systemHint: null };
+    return { state, eveReply: null, systemHint: null, feedbackText };
   }
 
   // ---- 9. 生成夏娃回复（按当前进度选择固定文本） ----
@@ -168,5 +174,5 @@ export function runChapter0Turn(
     makeEvent("eve_speaks", state.turn - 1, `夏娃：「${eveReply}」`),
   );
 
-  return { state, eveReply, systemHint: null };
+  return { state, eveReply, systemHint: null, feedbackText };
 }

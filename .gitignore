@@ -37,3 +37,7 @@ next-env.d.ts
 
 # codegraph
 .codegraph
+
+# local Codex test artifacts
+.codex-*.png
+.codex-*.log

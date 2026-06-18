@@ -8,14 +8,16 @@ export default function HomePage() {
       {/* 背景 */}
       <div className="eden-bg">
         <Image
-          src={CHAPTER0_IMAGES.edenBackground}
+          src={CHAPTER0_IMAGES.secondEdenBackground}
           alt="伊甸园"
           fill
           priority
           sizes="100vw"
           style={{ objectFit: "cover" }}
         />
-        <div className="eden-bg-overlay" />
+        <div className="eden-bg-overlay eden-bg-overlay--home" />
+        <div className="eden-second-eden-sheen" />
+        <div className="eden-boundary-glimmer" />
       </div>
 
       {/* 游戏入口内容 */}
@@ -24,17 +26,17 @@ export default function HomePage() {
           <h1>EDEN</h1>
           <p className="home-subtitle">Chapter 0 · 初次堕落</p>
           <p className="home-tagline">
-            你是蛇。
+            园中尚无疑问。
           </p>
           <p className="home-description">
-            在伊甸园的树影下，你的低语将改变夏娃的命运。
+            第一声低语，还未被听见。
           </p>
           <Link
             href="/game"
             className="eden-btn eden-btn--primary"
             style={{ textDecoration: "none", marginTop: 0, padding: "14px 40px", fontSize: "1.05rem" }}
           >
-            进入伊甸园
+            进入园中
           </Link>
         </section>
       </main>

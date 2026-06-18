@@ -4,6 +4,10 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "EDEN",
   description: "叙事游戏",
+  icons: {
+    icon: "/favicon.svg",
+    shortcut: "/favicon.svg",
+  },
 };
 
 export default function RootLayout({

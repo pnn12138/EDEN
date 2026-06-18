@@ -22,11 +22,20 @@ export type LLMChatRequest = {
   maxTokens?: number;
 };
 
+/** Token usage（从 OpenAI-compatible 响应提取） */
+export type LLMTokenUsage = {
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+};
+
 /** 统一 LLM 响应（成功） */
 export type LLMChatResponse = {
   content: string;
   provider: LLMProvider;
   model: string;
+  /** 真实 token usage（provider 返回时存在，mock/fallback 时可能缺失） */
+  usage?: LLMTokenUsage;
 };
 
 /** 安全的 fallback 原因码（不暴露敏感信息） */

@@ -123,9 +123,22 @@ export async function callOpenAICompatible(
       };
     }
 
+    // 提取 token usage（OpenAI-compatible 响应格式）
+    const usage = data?.usage &&
+      typeof data.usage.prompt_tokens === "number" &&
+      typeof data.usage.completion_tokens === "number"
+      ? {
+          prompt_tokens: data.usage.prompt_tokens as number,
+          completion_tokens: data.usage.completion_tokens as number,
+          total_tokens: (typeof data.usage.total_tokens === "number"
+            ? data.usage.total_tokens
+            : data.usage.prompt_tokens + data.usage.completion_tokens) as number,
+        }
+      : undefined;
+
     return {
       ok: true,
-      data: { content, provider, model: config.model },
+      data: { content, provider, model: config.model, usage },
       usedFallback: false,
     };
   } catch (err: unknown) {
