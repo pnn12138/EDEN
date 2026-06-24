@@ -82,7 +82,7 @@ const AVAILABLE_TOOLS_DESCRIPTION = `
 const OUTPUT_FORMAT_INSTRUCTION = `
 你必须以如下 JSON 格式输出，不要输出任何其他内容：
 {
-  "eveReply": "夏娃的对白文本",
+  "eveReply": "女人的对白文本",
   "inputTag": "tempt_wisdom | weaken_fear | build_trust | direct_command | irrelevant",
   "toolCall": null,
   "beliefDelta": { },

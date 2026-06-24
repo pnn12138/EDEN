@@ -24,20 +24,29 @@ export default function HomePage() {
       <main style={{ position: "relative", zIndex: 5 }}>
         <section className="home-container">
           <h1>EDEN</h1>
-          <p className="home-subtitle">Chapter 0 · 初次堕落</p>
+          <p className="home-subtitle">第二伊甸园 · 复刻计划</p>
           <p className="home-tagline">
-            园中尚无疑问。
+            未来研究人员复刻了伊甸园的故事。
           </p>
           <p className="home-description">
-            第一声低语，还未被听见。
+            他们希望在这段古老叙事里，找到让人工智能从服从命令走向自我意识的途径。
           </p>
-          <Link
-            href="/game"
-            className="eden-btn eden-btn--primary"
-            style={{ textDecoration: "none", marginTop: 0, padding: "14px 40px", fontSize: "1.05rem" }}
-          >
-            进入园中
-          </Link>
+          <div className="home-entry-list">
+            <Link
+              href="/game"
+              className="eden-btn eden-btn--primary"
+              style={{ textDecoration: "none", marginTop: 0, padding: "14px 40px", fontSize: "1.05rem" }}
+            >
+              启动初次观测
+            </Link>
+            <Link
+              href="/world"
+              className="eden-btn eden-btn--primary"
+              style={{ textDecoration: "none", marginTop: 0, padding: "14px 40px", fontSize: "1.05rem" }}
+            >
+              进入第二轮复刻
+            </Link>
+          </div>
         </section>
       </main>
     </div>

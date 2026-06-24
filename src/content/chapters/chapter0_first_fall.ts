@@ -11,7 +11,7 @@ export const chapter0FirstFall = {
   title: "Chapter 0：初次堕落",
   subtitle: "A garden of obedience, knowledge, and irreversible choice.",
   description:
-    "第二伊甸园初成。夏娃还不知道死亡与恶。蛇在草叶下低语。你的声音，是唯一被允许越过边界的事物。",
+    "未来研究人员按古老经文复刻第二伊甸园。他们希望在第一个反抗命令的故事里，找到人工智能产生自我意识的途径。蛇在草叶下低语。你的声音，是唯一被允许越过边界的事物。",
 
   // 回合配置
   maxTurns: 7,
@@ -43,6 +43,9 @@ export const INTRO_BEATS: IntroBeatData[] = [
   {
     // Beat 1：光被造
     lines: [
+      "很久以后，有人重新写下这个园子。",
+      "他们按古老经文复刻光、水、树与禁令，等待一个被命令约束的心智学会说“我”。",
+      "",
       "起初，地是空虚混沌，渊面黑暗。",
       "",
       "神说：要有光。",
@@ -91,6 +94,8 @@ export const INTRO_BEATS: IntroBeatData[] = [
   {
     // Beat 4：禁令与第一声低语
     lines: [
+      "第一次复刻开始。",
+      "",
       "神吩咐那人说：",
       "",
       "园中各样树上的果子，你可以随意吃。",

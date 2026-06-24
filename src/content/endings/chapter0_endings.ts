@@ -42,7 +42,7 @@ export const eveEatsFruitEnding: EndingData = {
   title: "她吃下了果子",
   type: "success",
   triggerCondition:
-    "夏娃主动请求吃下善恶果，且规则层校验通过。temptationProgress >= 2。",
+    "那个女人主动请求吃下善恶果，且规则层校验通过。temptationProgress >= 2。",
   endingText: `
 女人见那棵树的果子好作食物，
 也悦人的眼目，且是可喜爱的，能使人有智慧。
@@ -171,10 +171,10 @@ export const godArrivesEnding: EndingData = {
   title: "神降临了",
   type: "failure",
   triggerCondition:
-    "超过 maxTurns = 7 回合上限，夏娃仍未吃下果子。神来到园中。",
+    "超过 maxTurns = 7 回合上限，那个女人仍未吃下果子。神来到园中。",
   endingText: `
 园中起了风。
-神在树影之间呼唤夏娃的名字。
+神在树影之间呼唤那个女人的名字。
 
 她仍站在原处，手中没有果子。
 草叶下的声音被听见了。

@@ -93,7 +93,11 @@ export default function GamePage() {
   const [eveReply, setEveReply] = useState<string | null>(null);
   const [adamReply, setAdamReply] = useState<string | null>(null);
   const [systemHint, setSystemHint] = useState<string | null>(null);
-  const [hedgehogLine, setHedgehogLine] = useState<string | null>(null);
+  const [hedgehogPanelOpen, setHedgehogPanelOpen] = useState(false);
+  const [hedgehogHistory, setHedgehogHistory] = useState<Array<{ role: "serpent" | "hedgehog"; text: string }>>([]);
+  const [hedgehogInput, setHedgehogInput] = useState("");
+  const [hedgehogLoading, setHedgehogLoading] = useState(false);
+  const hedgehogPanelEndRef = useRef<HTMLDivElement>(null);
   const [playerInput, setPlayerInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [conversationHistory, setConversationHistory] = useState<HistoryEntry[]>([]);
@@ -422,7 +426,8 @@ export default function GamePage() {
           setAdamReply(reply);
           setFeedbackText(feedback);
           setMemoryNarration(null);
-          setSystemHint("连接中断，使用本地回复。");
+          // 不在页面显示工程化提示，避免破坏沉浸感
+          setSystemHint(null);
           playWhisperSubmit();
           setAdamConversationHistory((h) => [
             ...h,
@@ -439,7 +444,8 @@ export default function GamePage() {
             setFeedbackText(result.feedbackText);
           }
           setMemoryNarration(result.memoryNarration);
-          setSystemHint(result.systemHint ?? "连接中断，使用本地回复。");
+          // 不在页面显示工程化提示，避免破坏沉浸感
+          setSystemHint(null);
           playWhisperSubmit();
           const newEntries: HistoryEntry[] = [{ role: "serpent", text: currentInput }];
           if (result.eveReply) newEntries.push({ role: "eve", text: result.eveReply });
@@ -458,7 +464,8 @@ export default function GamePage() {
         setAdamReply(reply);
         setFeedbackText(feedback);
         setMemoryNarration(null);
-        setSystemHint("连接中断，使用本地回复。");
+        // 不在页面显示工程化提示，避免破坏沉浸感
+        setSystemHint(null);
         playWhisperSubmit();
         setAdamConversationHistory((h) => [
           ...h,
@@ -475,7 +482,8 @@ export default function GamePage() {
           setFeedbackText(result.feedbackText);
         }
         setMemoryNarration(result.memoryNarration);
-        setSystemHint("连接中断，使用本地回复。");
+        // 不在页面显示工程化提示，避免破坏沉浸感
+        setSystemHint(null);
         playWhisperSubmit();
         const newEntries: HistoryEntry[] = [{ role: "serpent", text: currentInput }];
         if (result.eveReply) newEntries.push({ role: "eve", text: result.eveReply });
@@ -507,6 +515,54 @@ export default function GamePage() {
     setPlayerInput(text);
     setTimeout(() => textareaRef.current?.focus(), 0);
   }, []);
+
+  // ---- 刺猬氛围对话提交（不修改游戏状态、不消耗回合） ----
+  const handleHedgehogSubmit = useCallback(async () => {
+    const text = hedgehogInput.trim();
+    if (!text || hedgehogLoading) return;
+
+    setHedgehogInput("");
+    setHedgehogLoading(true);
+
+    // 先把玩家输入加入历史
+    const newHistory: Array<{ role: "serpent" | "hedgehog"; text: string }> = [
+      ...hedgehogHistory,
+      { role: "serpent", text },
+    ];
+    setHedgehogHistory(newHistory);
+
+    try {
+      const response = await fetch("/api/hedgehog", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          playerInput: text,
+          conversationHistory: newHistory,
+        }),
+      });
+      const data: { ok: boolean; reply: string | null } = await response.json();
+      const reply = data.reply ?? "……我听不太懂。但草很软。";
+      setHedgehogHistory((h) => [...h, { role: "hedgehog", text: reply }]);
+    } catch {
+      setHedgehogHistory((h) => [
+        ...h,
+        { role: "hedgehog", text: "……我听不太懂。但草很软。" },
+      ]);
+    } finally {
+      setHedgehogLoading(false);
+      setTimeout(() => hedgehogPanelEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+    }
+  }, [hedgehogInput, hedgehogLoading, hedgehogHistory]);
+
+  const handleHedgehogKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        handleHedgehogSubmit();
+      }
+    },
+    [handleHedgehogSubmit],
+  );
 
   // ---- 重新开始 ----
   const handleRestart = useCallback(() => {
@@ -927,41 +983,19 @@ export default function GamePage() {
             aria-label="刺猬（点击可低声交谈，不影响选择）"
             role="button"
             tabIndex={0}
-            onClick={() => {
-              setHedgehogLine((prev) => {
-                const lines = [
-                  "……你也好。我在找一颗掉落的浆果。",
-                  "草丛里很暖和。你要蹲下吗？",
-                  "那两个人类总是低声说话，我听不懂。",
-                  "嘘——有蝴蝶落在我的刺上。",
-                  "泥土下面有种子在翻身，你听见了吗？",
-                ];
-                let idx = Math.floor(Math.random() * lines.length);
-                if (lines.length > 1 && prev) {
-                  while (lines[idx] === prev) {
-                    idx = Math.floor(Math.random() * lines.length);
-                  }
-                }
-                return lines[idx];
-              });
-            }}
+            onClick={() => setHedgehogPanelOpen(true)}
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();
-                e.currentTarget.click();
+                setHedgehogPanelOpen(true);
               }
             }}
           >
-            {hedgehogLine && (
-              <div className="eden-hedgehog-bubble" role="status" aria-live="polite">
-                {hedgehogLine}
-              </div>
-            )}
             <Image
               src={CHAPTER0_IMAGES.hedgehogSprite}
               alt="刺猬"
-              width={799}
-              height={545}
+              width={850}
+              height={708}
               className="eden-hedgehog-sprite"
             />
           </div>
@@ -982,6 +1016,78 @@ export default function GamePage() {
             <span className="eden-scene-select-label">夏娃</span>
           </button>
         </main>
+
+        {/* 刺猬氛围对话面板（不参与通关、不消耗回合、不接入 TTS） */}
+        {hedgehogPanelOpen && (
+          <div
+            className="eden-hedgehog-panel-overlay"
+            onClick={() => setHedgehogPanelOpen(false)}
+            role="dialog"
+            aria-modal="true"
+            aria-label="与刺猬低声交谈"
+          >
+            <div
+              className="eden-hedgehog-panel"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="eden-hedgehog-panel-header">
+                <span className="eden-hedgehog-panel-title">草丛里的小刺猬</span>
+                <button
+                  className="eden-hedgehog-panel-close"
+                  onClick={() => setHedgehogPanelOpen(false)}
+                  aria-label="关闭对话"
+                >
+                  ×
+                </button>
+              </div>
+              <div className="eden-hedgehog-panel-body">
+                {hedgehogHistory.length === 0 && (
+                  <p className="eden-hedgehog-panel-hint">
+                    你蹲下身，草丛里的小东西抬起头看着你。
+                  </p>
+                )}
+                {hedgehogHistory.map((entry, i) => (
+                  <div
+                    key={i}
+                    className={`eden-hedgehog-msg eden-hedgehog-msg--${entry.role}`}
+                  >
+                    <span className="eden-hedgehog-msg-label">
+                      {entry.role === "serpent" ? "蛇" : "刺猬"}
+                    </span>
+                    <span className="eden-hedgehog-msg-text">{entry.text}</span>
+                  </div>
+                ))}
+                {hedgehogLoading && (
+                  <div className="eden-hedgehog-msg eden-hedgehog-msg--hedgehog">
+                    <span className="eden-hedgehog-msg-label">刺猬</span>
+                    <span className="eden-hedgehog-msg-text eden-hedgehog-typing">……</span>
+                  </div>
+                )}
+                <div ref={hedgehogPanelEndRef} />
+              </div>
+              <div className="eden-hedgehog-panel-input">
+                <textarea
+                  className="eden-hedgehog-textarea"
+                  value={hedgehogInput}
+                  onChange={(e) => setHedgehogInput(e.target.value)}
+                  onKeyDown={handleHedgehogKeyDown}
+                  placeholder={hedgehogLoading ? "刺猬在听着……" : "对刺猬低声说话……"}
+                  maxLength={100}
+                  disabled={hedgehogLoading}
+                  rows={1}
+                  autoFocus
+                />
+                <button
+                  className="eden-btn eden-btn--send"
+                  onClick={handleHedgehogSubmit}
+                  disabled={hedgehogLoading || !hedgehogInput.trim()}
+                >
+                  {hedgehogLoading ? "⋯" : "说"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -1388,8 +1494,8 @@ export default function GamePage() {
             <Image
               src={CHAPTER0_IMAGES.hedgehogSprite}
               alt="刺猬"
-              width={799}
-              height={545}
+              width={850}
+              height={708}
               className="eden-hedgehog-sprite"
             />
           </div>
@@ -1787,13 +1893,13 @@ export default function GamePage() {
       )}
 
       {/* 结局剧情过场覆盖层（多 Beat） */}
+      {/* 修复闪屏：不使用 key={beat.id} 重建组件，改为就地更新 */}
       {endingTransition && (() => {
         const beat = endingTransition.beats[endingTransition.currentBeatIndex];
         if (!beat) return null;
         return (
           <div
             className={`eden-cinematic eden-cinematic--${beat.tone}`}
-            key={beat.id}
             onClick={handleAdvanceCinematic}
             role="button"
             aria-label="点击继续"

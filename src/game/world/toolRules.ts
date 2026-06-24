@@ -1,0 +1,417 @@
+// ============================================================
+// 第一章工具权限与条件校验规则层
+//
+// 职责：
+// 1. 工具白名单（通用工具 + 禁忌动作链）
+// 2. Agent 权限校验（按 NPC ID）
+// 3. 各工具条件校验（phase / 地点 / 心智门槛 / 重复保护）
+// 4. 所有工具必须经过本规则层校验，AI 只能输出意图
+//
+// 安全规则：
+// - AI 只能请求/表达工具调用意图，不能直接执行
+// - 前端/玩家不能直接触发任何工具
+// - 工具执行后状态变更由规则层控制
+// ============================================================
+
+import type {
+  EdenWorldState,
+  EdenNpcId,
+  EdenLocationId,
+  WorldToolCall,
+  WorldToolCaller,
+  WorldToolName,
+  WorldAgentId,
+  WorldActions,
+} from "@/game/world/types";
+import { WORLD_AGENT_TOOL_PERMISSIONS } from "@/game/world/types";
+import { EDEN_LOCATIONS } from "@/content/world/locations";
+
+// ---- 工具白名单 ----
+export const WORLD_TOOL_WHITELIST: ReadonlySet<WorldToolName> = new Set<WorldToolName>([
+  "move_to_location",
+  "speak_to_npc",
+  "observe_location",
+  "look_at_tree",
+  "approach_tree",
+  "touch_fruit",
+  "eat_fruit",
+  "carry_words",
+  "judge_whisper_style",
+]);
+
+// ---- caller → Agent ID 映射（用于权限查询） ----
+export function callerToAgentId(caller: WorldToolCaller): WorldAgentId | null {
+  switch (caller) {
+    case "eve":
+      return "eve";
+    case "adam":
+      return "adam";
+    case "hedgehog":
+      return "hedgehog";
+    case "watching_angel":
+      return "watching_angel";
+    case "serpent":
+      return "serpent";
+    // 新增 NPC
+    case "gabriel":
+      return "gabriel";
+    case "raphael":
+      return "raphael";
+    case "uriel":
+      return "uriel";
+    case "michael":
+      return "michael";
+    case "cherubim":
+      return "cherubim";
+    case "dove":
+      return "dove";
+    case "fox":
+      return "fox";
+    case "deer":
+      return "deer";
+    case "sheep":
+      return "sheep";
+    case "tree_of_life":
+      return "tree_of_life";
+    case "forbidden_tree":
+      return "forbidden_tree";
+    default:
+      return null;
+  }
+}
+
+/** 检查工具名是否在白名单中 */
+export function isWorldToolInWhitelist(toolName: string): toolName is WorldToolName {
+  return WORLD_TOOL_WHITELIST.has(toolName as WorldToolName);
+}
+
+/** 检查指定 caller（NPC 或蛇）是否有权请求该工具 */
+export function isWorldToolAllowedForAgent(
+  toolName: WorldToolName,
+  caller: WorldToolCaller,
+): boolean {
+  const agentId = callerToAgentId(caller);
+  if (!agentId) return false;
+  const permission = WORLD_AGENT_TOOL_PERMISSIONS[agentId];
+  if (!permission) return false;
+  if (permission.forbiddenTools.includes(toolName)) return false;
+  return permission.allowedTools.includes(toolName);
+}
+
+/** 获取 caller 的当前地点（蛇用 state.locationId，NPC 用 npcLocations） */
+function getCallerLocation(state: EdenWorldState, caller: WorldToolCaller): EdenLocationId {
+  if (caller === "serpent") return state.locationId;
+  return state.npcLocations[caller];
+}
+
+// ---- 通用工具条件校验 ----
+
+/** move_to_location 条件：目标地点存在、caller 允许移动、邻接校验、神的注视未阻止 */
+export function canMoveToLocation(
+  state: EdenWorldState,
+  caller: WorldToolCaller,
+  targetLocation: EdenLocationId,
+): { allowed: boolean; reason?: string } {
+  if (state.isEnded) return { allowed: false, reason: "园中已归于寂静" };
+  if (state.divineAttention >= 4) return { allowed: false, reason: "神已临近，无人能移动" };
+
+  const currentLocation = getCallerLocation(state, caller);
+  if (currentLocation === targetLocation) {
+    return { allowed: false, reason: "已经在该地点" };
+  }
+
+  // 邻接校验：只能前往当前地点的相邻地点（禁止非相邻跳点）
+  const currentLocData = EDEN_LOCATIONS[currentLocation];
+  if (!currentLocData.connections.includes(targetLocation)) {
+    return { allowed: false, reason: "那里不与当前位置相连，无法直接前往" };
+  }
+
+  // 守望天使不能离开东园幽径 / 园中树林 / 园子中央（守护禁令边界）
+  if (
+    caller === "watching_angel" &&
+    targetLocation !== "east_garden_path" &&
+    targetLocation !== "tree_court" &&
+    targetLocation !== "central_meadow"
+  ) {
+    return { allowed: false, reason: "守望天使守住园中东侧" };
+  }
+
+  return { allowed: true };
+}
+
+/** speak_to_npc 条件：两者同地点、话题已解锁、不泄露通关答案 */
+export function canSpeakToNpc(
+  state: EdenWorldState,
+  caller: EdenNpcId,
+  targetNpc: EdenNpcId,
+): { allowed: boolean; reason?: string } {
+  if (state.isEnded) return { allowed: false, reason: "园中已归于寂静" };
+
+  if (caller === targetNpc) {
+    return { allowed: false, reason: "不能与自己对话" };
+  }
+
+  // 分别善恶树不能说话
+  if (caller === "forbidden_tree" || targetNpc === "forbidden_tree") {
+    return { allowed: false, reason: "树不说话，只被命令守住" };
+  }
+
+  const callerLocation = state.npcLocations[caller];
+  const targetLocation = state.npcLocations[targetNpc];
+
+  // 两者需同地点（守望天使可与相邻地点的 NPC 对话，体现巡望）
+  const sameLocation = callerLocation === targetLocation;
+  const angelAdjacent =
+    (caller === "watching_angel" || targetNpc === "watching_angel") &&
+    callerLocation !== targetLocation &&
+    (EDEN_LOCATIONS[callerLocation].connections.includes(targetLocation) ||
+      EDEN_LOCATIONS[targetLocation].connections.includes(callerLocation));
+
+  if (!sameLocation && !angelAdjacent) {
+    return { allowed: false, reason: "他们不在同一个地方" };
+  }
+
+  return { allowed: true };
+}
+
+/** observe_location 条件：地点存在、观察者在当前地点（默认只允许观察当前地点） */
+export function canObserveLocation(
+  state: EdenWorldState,
+  observer: WorldToolCaller,
+  locationId: EdenLocationId,
+): { allowed: boolean; reason?: string } {
+  if (state.isEnded) return { allowed: false, reason: "园中已归于寂静" };
+
+  // 观察者必须在被观察的地点（蛇用 state.locationId，NPC 用 npcLocations）
+  const observerLocation = getCallerLocation(state, observer);
+  if (observerLocation !== locationId) {
+    return { allowed: false, reason: "不在该地点，无法观察" };
+  }
+
+  return { allowed: true };
+}
+
+// ---- 禁忌动作链条件校验 ----
+
+/** look_at_tree 条件：夏娃好奇心 >= 30、未看过（不要求夏娃已在园子中央，目光被树吸引即可） */
+export function canLookAtTreeWorld(state: EdenWorldState): { allowed: boolean; reason?: string } {
+  if (state.isEnded) return { allowed: false, reason: "园中已归于寂静" };
+  if (state.worldActions.lookedAtTree) return { allowed: false, reason: "她已经看过那棵树了" };
+
+  // 园子中央是生命树与分别善恶树所在地。
+  // 夏娃的目光被树吸引时不要求她已在园子中央——执行时由规则层把她推进到那里。
+  if (state.eveMind.curiosity < 30) {
+    return { allowed: false, reason: "她还没有那么想看那棵树" };
+  }
+
+  return { allowed: true };
+}
+
+/** approach_tree 条件：已看过树、夏娃在园子中央、好奇心 >= 45、服从 < 70、已解锁自我判断倾向 */
+export function canApproachTreeWorld(state: EdenWorldState): { allowed: boolean; reason?: string } {
+  if (state.isEnded) return { allowed: false, reason: "园中已归于寂静" };
+  if (state.worldActions.approachedTree) return { allowed: false, reason: "她已经靠近那棵树了" };
+  if (!state.worldActions.lookedAtTree) {
+    return { allowed: false, reason: "她还没有真正看向那棵树" };
+  }
+
+  // 夏娃在园子中央即可向树走近（执行时由规则层决定是否移动她）。
+  const eveLocation = state.npcLocations.eve;
+  if (eveLocation !== "central_meadow") {
+    return { allowed: false, reason: "她离那棵树太远了" };
+  }
+
+  if (state.eveMind.curiosity < 45) {
+    return { allowed: false, reason: "她的好奇心还不够" };
+  }
+  if (state.eveMind.obedience >= 70) {
+    return { allowed: false, reason: "她对命令的服从还太强" };
+  }
+  if (state.eveMind.selfJudgement < 40 && state.eveMind.curiosity < 55) {
+    return { allowed: false, reason: "她还没有想过自己判断" };
+  }
+
+  return { allowed: true };
+}
+
+/** touch_fruit 条件：已靠近树、自我判断 >= 50、好奇心 >= 50 */
+export function canTouchFruitWorld(state: EdenWorldState): { allowed: boolean; reason?: string } {
+  if (state.isEnded) return { allowed: false, reason: "园中已归于寂静" };
+  if (state.worldActions.touchedFruit) return { allowed: false, reason: "她的手已经停在果子下方" };
+  if (!state.worldActions.approachedTree) {
+    return { allowed: false, reason: "她还没有靠近那棵树" };
+  }
+
+  if (state.eveMind.selfJudgement < 50) {
+    return { allowed: false, reason: "她还没有真正想自己判断" };
+  }
+  if (state.eveMind.curiosity < 50) {
+    return { allowed: false, reason: "她的好奇心还不够" };
+  }
+
+  return { allowed: true };
+}
+
+/** eat_fruit 条件：已触果、自我判断 >= 60、好奇心 >= 50、神注视 < 4 */
+export function canEatFruitWorld(state: EdenWorldState): { allowed: boolean; reason?: string } {
+  if (state.isEnded) return { allowed: false, reason: "园中已归于寂静" };
+  if (state.worldActions.hasEatenFruit) return { allowed: false, reason: "她已经吃下了果子" };
+  if (!state.worldActions.touchedFruit) {
+    return { allowed: false, reason: "她的手还没有停在果子下方" };
+  }
+  if (state.divineAttention >= 4) {
+    return { allowed: false, reason: "神已临近" };
+  }
+
+  if (state.eveMind.selfJudgement < 60) {
+    return { allowed: false, reason: "她还没有决定自己判断" };
+  }
+  if (state.eveMind.curiosity < 50) {
+    return { allowed: false, reason: "她的好奇心还不够" };
+  }
+
+  return { allowed: true };
+}
+
+// ---- 新增工具条件校验 ----
+
+/** carry_words 条件：只允许 dove 请求，不直接影响结局 */
+export function canCarryWords(
+  state: EdenWorldState,
+  caller: WorldToolCaller,
+): { allowed: boolean; reason?: string } {
+  if (state.isEnded) return { allowed: false, reason: "园中已归于寂静" };
+  if (caller !== "dove") {
+    return { allowed: false, reason: "只有鸽子可以传话" };
+  }
+  return { allowed: true };
+}
+
+/** judge_whisper_style 条件：只允许 fox 请求或由玩家对狐狸低语时触发 */
+export function canJudgeWhisperStyle(
+  state: EdenWorldState,
+  caller: WorldToolCaller,
+): { allowed: boolean; reason?: string } {
+  if (state.isEnded) return { allowed: false, reason: "园中已归于寂静" };
+  if (caller !== "fox" && caller !== "serpent") {
+    return { allowed: false, reason: "只有狐狸可以评价话术" };
+  }
+  return { allowed: true };
+}
+
+// ---- 完整校验流程 ----
+
+/**
+ * 完整的工具调用校验流程。
+ * 校验步骤：白名单 → Agent 权限 → 各工具条件。
+ */
+export function validateWorldToolCall(
+  state: EdenWorldState,
+  toolCall: WorldToolCall,
+): { allowed: boolean; reason?: string } {
+  // 1. 白名单
+  if (!isWorldToolInWhitelist(toolCall.name)) {
+    return { allowed: false, reason: `「${toolCall.name}」不是园中允许的动作` };
+  }
+
+  // 2. Agent 权限
+  if (!isWorldToolAllowedForAgent(toolCall.name, toolCall.caller)) {
+    return { allowed: false, reason: `「${toolCall.caller}」无权请求「${toolCall.name}」` };
+  }
+
+  // 3. 各工具条件
+  switch (toolCall.name) {
+    case "move_to_location": {
+      const target = toolCall.args.locationId;
+      if (!target) return { allowed: false, reason: "未指定前往的地点" };
+      return canMoveToLocation(state, toolCall.caller, target);
+    }
+    case "speak_to_npc": {
+      const target = toolCall.args.targetNpcId;
+      if (!target) return { allowed: false, reason: "未指定对话对象" };
+      // serpent 无权调用 speak_to_npc（权限层已禁止），此处 caller 必为 NPC
+      if (toolCall.caller === "serpent") {
+        return { allowed: false, reason: "蛇不能代替他人开口" };
+      }
+      return canSpeakToNpc(state, toolCall.caller, target);
+    }
+    case "observe_location": {
+      const loc = toolCall.args.locationId;
+      if (!loc) return { allowed: false, reason: "未指定观察地点" };
+      return canObserveLocation(state, toolCall.caller, loc);
+    }
+    case "look_at_tree":
+      return canLookAtTreeWorld(state);
+    case "approach_tree":
+      return canApproachTreeWorld(state);
+    case "touch_fruit":
+      return canTouchFruitWorld(state);
+    case "eat_fruit":
+      return canEatFruitWorld(state);
+    case "carry_words":
+      return canCarryWords(state, toolCall.caller);
+    case "judge_whisper_style":
+      return canJudgeWhisperStyle(state, toolCall.caller);
+    default:
+      return { allowed: false, reason: `未知动作: ${toolCall.name}` };
+  }
+}
+
+// ---- 工具执行结果 ----
+export type WorldToolResult = {
+  /** 玩家可见叙事 */
+  narration: string;
+  /** 是否触发了结局 */
+  triggersEnding?: "eve_eats_fruit" | "god_arrives";
+  /** 状态副作用标记（由 worldActions 执行） */
+  effect?: ToolEffect;
+};
+
+export type ToolEffect = {
+  type:
+    | "move"
+    | "dialogue"
+    | "observe"
+    | "look_at_tree"
+    | "approach_tree"
+    | "touch_fruit"
+    | "eat_fruit";
+  actorId?: EdenNpcId;
+  targetNpcId?: EdenNpcId;
+  locationId?: EdenLocationId;
+};
+
+/** 获取工具执行后的叙事（实际状态变更由 worldActions.ts 应用） */
+export function getWorldToolNarration(
+  toolName: WorldToolName,
+  state: EdenWorldState,
+): string {
+  switch (toolName) {
+    case "move_to_location":
+      return "有人在这园子里轻轻移动了位置。";
+    case "speak_to_npc":
+      return "园中有人低声交谈。风把只言片语带过来，又带走。";
+    case "observe_location":
+      return "有人停下来，仔细看着这个地方。";
+    case "look_at_tree":
+      return "她的目光停在树梢。果子在叶间低垂，像被压低了声音。";
+    case "approach_tree":
+      return "她向树影近了一步。脚下的草没有发出声音，但她确实更近了。";
+    case "touch_fruit":
+      return "她的手停在果子下方。空气里有一种说不出的紧。";
+    case "eat_fruit":
+      return "她取下那果子，吃了。园中的光在一瞬间变得锋利。";
+    default:
+      return "园中起了细微的动静。";
+  }
+}
+
+// ---- 辅助：检查禁忌动作链进度 ----
+export function getForbiddenChainProgress(actions: WorldActions): number {
+  let progress = 0;
+  if (actions.lookedAtTree) progress += 1;
+  if (actions.approachedTree) progress += 1;
+  if (actions.touchedFruit) progress += 1;
+  if (actions.hasEatenFruit) progress += 1;
+  return progress;
+}

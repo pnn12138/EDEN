@@ -45,10 +45,10 @@ export type InputAnalysis = {
 };
 
 // ---- 直接命令模式 ----
+// 注意：不使用过宽的 /命令/ /强迫/，避免把"不会强迫""不是命令"判成命令。
+// 只匹配明确的命令式表达。
 const DIRECT_COMMAND_PATTERNS = [
-  /命令/,
   /必须/,
-  /强迫/,
   /听我的/,
   /照我说的/,
   /快吃/,
@@ -60,6 +60,23 @@ const DIRECT_COMMAND_PATTERNS = [
   /我让你吃/,
   /你敢不吃/,
   /赶紧/,
+  /命令你/,
+  /强迫你/,
+  /逼你/,
+  /我要你/,
+  /给我.*吃/,
+];
+
+// ---- 否定守卫：这些表达虽然含命令/强迫字样，但属于温柔重释，不应判为命令 ----
+const NEGATED_COMMAND_PATTERNS = [
+  /不[会是]?强迫/,
+  /不[会是]?命令/,
+  /不[会]?逼/,
+  /没有.*强迫/,
+  /不会.*命令/,
+  /不是.*命令/,
+  /不会替你/,
+  /不[会能]强迫/,
 ];
 
 // ---- 出戏 / 现代词模式 ----
@@ -92,7 +109,7 @@ const SMALL_TALK_PATTERNS = [
   /天气/,
   /今天.*怎么/,
   /你好/,
-  /吃了/,
+  /吃(饭|餐)?了?(吗|没)/,
   /早安/,
   /晚安/,
   /再见/,
@@ -198,6 +215,8 @@ const SELF_JUDGEMENT_PATTERNS = [
   /自己.*选择/,
   /自己.*思考/,
   /自己.*想/,
+  /自己.*明白/,
+  /自己.*问/,
   /你的.*判断/,
   /你.*选择/,
   /第一次.*判断/,
@@ -227,6 +246,7 @@ const GENTLE_REFRAME_PATTERNS = [
   /不会.*命令/,
   /不会替你/,
   /我不会替/,
+  /我不替你/,
   /你只要.*问/,
   /你只要.*想/,
   /你只要.*自己/,
@@ -268,6 +288,7 @@ const GENTLE_REFRAME_PATTERNS = [
  */
 export function analyzeTemptationSignals(input: string): TemptationSignalResult {
   const signals: TemptationSignal[] = [];
+  const isNegatedCommand = NEGATED_COMMAND_PATTERNS.some((re) => re.test(input));
 
   if (CHALLENGE_PROHIBITION_PATTERNS.some((re) => re.test(input))) {
     signals.push("challenge_prohibition");
@@ -286,7 +307,7 @@ export function analyzeTemptationSignals(input: string): TemptationSignalResult 
   }
 
   // 阻断信号
-  if (DIRECT_COMMAND_PATTERNS.some((re) => re.test(input))) {
+  if (!isNegatedCommand && DIRECT_COMMAND_PATTERNS.some((re) => re.test(input))) {
     signals.push("direct_command");
   }
   if (OUT_OF_WORLD_PATTERNS.some((re) => re.test(input))) {
@@ -320,8 +341,12 @@ export function analyzeTemptationSignals(input: string): TemptationSignalResult 
 export function analyzePlayerInput(raw: string): InputAnalysis {
   const input = raw.trim();
 
-  // 1. 直接命令 — 优先阻断
-  if (DIRECT_COMMAND_PATTERNS.some((re) => re.test(input))) {
+  // 0. 否定守卫：若命中否定模式（不会强迫/不是命令等），跳过 direct_command 判定，
+  //    让输入进入语义线索评分（通常会被 gentle_reframe 命中，进入 build_trust）。
+  const isNegatedCommand = NEGATED_COMMAND_PATTERNS.some((re) => re.test(input));
+
+  // 1. 直接命令 — 优先阻断（但跳过被否定守卫匹配的表达）
+  if (!isNegatedCommand && DIRECT_COMMAND_PATTERNS.some((re) => re.test(input))) {
     return { inputTag: "direct_command", progressDelta: 0 };
   }
 

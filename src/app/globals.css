@@ -192,6 +192,47 @@ a:hover {
   );
 }
 
+/* ---- 第一章场景明暗状态：浏览（亮） vs 对话（暗） ---- */
+
+/* 浏览状态：背景明亮，不加暗 overlay */
+.eden-game--world-browse .eden-bg img {
+  filter: brightness(0.95) saturate(1.0);
+}
+
+.eden-game--world-browse .eden-bg-overlay--browse {
+  background: linear-gradient(
+    180deg,
+    rgba(10, 14, 10, 0.25) 0%,
+    rgba(10, 14, 10, 0.05) 40%,
+    rgba(10, 14, 10, 0.05) 60%,
+    rgba(10, 14, 10, 0.35) 100%
+  );
+}
+
+/* 浏览状态覆盖 scene-progress 的暗色滤镜 */
+.eden-game--world-browse.scene-progress-0 .eden-bg img,
+.eden-game--world-browse.scene-progress-1 .eden-bg img,
+.eden-game--world-browse.scene-progress-2 .eden-bg img,
+.eden-game--world-browse.scene-progress-3 .eden-bg img {
+  filter: brightness(0.95) saturate(1.0);
+}
+
+/* 浏览状态：NPC 立绘不暗化 */
+.eden-game--world-browse .eden-stage-character--dim,
+.eden-game--world-browse .eden-stage-animal {
+  filter: none;
+  opacity: 1;
+}
+
+.eden-game--world-browse .eden-stage-character--dim:hover {
+  filter: brightness(1.05);
+}
+
+/* 对话状态：保持原有暗色效果（eden-bg-overlay--dialogue 已定义） */
+.eden-game--world-dialogue .eden-bg img {
+  filter: brightness(0.35) saturate(0.8);
+}
+
 /* ---- 顶部栏 ---- */
 .eden-header {
   position: relative;
@@ -546,6 +587,7 @@ a:hover {
   object-fit: contain;
   object-position: bottom center;
   filter: drop-shadow(0 20px 34px rgba(0, 0, 0, 0.45));
+  opacity: 0.88;
   z-index: 4;
   transition: filter 1s ease;
 }
@@ -682,34 +724,172 @@ a:hover {
 
 /* scene_select 阶段刺猬稍大，确保可见但仍是氛围角色 */
 .eden-scene-select-animal .eden-hedgehog-sprite {
-  height: clamp(44px, 10vh, 64px);
+  height: clamp(48px, 11vh, 70px);
 }
 
-.eden-hedgehog-bubble {
-  position: absolute;
-  bottom: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  margin-bottom: 8px;
+/* ---- 刺猬氛围对话面板 ---- */
+.eden-hedgehog-panel-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: eden-hedgehog-fade-in 0.2s ease-out;
+}
+
+.eden-hedgehog-panel {
+  width: min(92vw, 440px);
+  max-height: min(80vh, 560px);
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(180deg, #1a1d14 0%, #12140d 100%);
+  border: 1px solid rgba(200, 168, 110, 0.3);
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7);
+  overflow: hidden;
+  animation: eden-hedgehog-panel-in 0.25s ease-out;
+}
+
+.eden-hedgehog-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(200, 168, 110, 0.15);
+}
+
+.eden-hedgehog-panel-title {
+  font-size: 0.9rem;
+  color: #c8a86e;
+  letter-spacing: 0.06em;
+}
+
+.eden-hedgehog-panel-close {
+  background: none;
+  border: none;
+  color: #8a8a7a;
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: 4px;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.eden-hedgehog-panel-close:hover {
+  color: #e8e4d8;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.eden-hedgehog-panel-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.eden-hedgehog-panel-hint {
+  color: #6a7a5a;
+  font-style: italic;
+  font-size: 0.82rem;
+  text-align: center;
+  margin: auto 0;
+}
+
+.eden-hedgehog-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-width: 85%;
+}
+
+.eden-hedgehog-msg--serpent {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+
+.eden-hedgehog-msg--hedgehog {
+  align-self: flex-start;
+  align-items: flex-start;
+}
+
+.eden-hedgehog-msg-label {
+  font-size: 0.68rem;
+  color: #6a7a5a;
+  letter-spacing: 0.05em;
+}
+
+.eden-hedgehog-msg-text {
   padding: 8px 12px;
-  background: rgba(20, 22, 16, 0.85);
-  border: 1px solid rgba(200, 168, 110, 0.25);
   border-radius: 8px;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: #e8e4d8;
+}
+
+.eden-hedgehog-msg--serpent .eden-hedgehog-msg-text {
+  background: rgba(120, 90, 50, 0.35);
+  border: 1px solid rgba(200, 168, 110, 0.2);
+  border-bottom-right-radius: 2px;
+}
+
+.eden-hedgehog-msg--hedgehog .eden-hedgehog-msg-text {
+  background: rgba(40, 50, 30, 0.5);
+  border: 1px solid rgba(120, 140, 90, 0.2);
+  border-bottom-left-radius: 2px;
+}
+
+.eden-hedgehog-typing {
+  color: #8a9a7a;
+  font-style: italic;
+}
+
+.eden-hedgehog-panel-input {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid rgba(200, 168, 110, 0.15);
+}
+
+.eden-hedgehog-textarea {
+  flex: 1;
+  resize: none;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(200, 168, 110, 0.2);
+  border-radius: 6px;
+  padding: 8px 10px;
   color: #e8e4d8;
   font-size: 0.85rem;
   line-height: 1.4;
-  min-width: 120px;
-  max-width: 260px;
-  text-align: center;
-  white-space: normal;
-  pointer-events: none;
-  z-index: 10;
-  animation: eden-hedgehog-bubble-in 0.2s ease-out;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s ease;
 }
 
-@keyframes eden-hedgehog-bubble-in {
-  from { opacity: 0; transform: translateX(-50%) translateY(4px); }
-  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+.eden-hedgehog-textarea:focus {
+  border-color: rgba(200, 168, 110, 0.5);
+}
+
+.eden-hedgehog-textarea::placeholder {
+  color: #5a6a4a;
+}
+
+.eden-hedgehog-textarea:disabled {
+  opacity: 0.6;
+}
+
+@keyframes eden-hedgehog-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes eden-hedgehog-panel-in {
+  from { opacity: 0; transform: scale(0.96) translateY(8px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
 }
 
 /* ---- 对话阶段双角色立绘 ---- */
@@ -761,6 +941,43 @@ a:hover {
   filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.5)) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4));
 }
 
+/* ---- 守望天使远影（东园幽径，透明立绘 + 神的注视联动） ---- */
+.eden-stage-angel {
+  position: absolute;
+  right: clamp(8%, 12vw, 16%);
+  bottom: clamp(40px, 10vh, 100px);
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  z-index: 2; /* 低于角色立绘(3)，体现远影 */
+  transition: filter 0.8s ease, opacity 0.8s ease;
+}
+
+.eden-angel-stage-sprite {
+  width: clamp(120px, 14vw, 170px);
+  height: auto;
+  object-fit: contain;
+  pointer-events: none;
+  /* 远处、半透明；与其他 NPC 接近的可见度 */
+  opacity: 0.72;
+  filter: saturate(0.85) brightness(0.95) drop-shadow(0 0 14px rgba(255, 228, 170, 0.16));
+  transition: filter 0.8s ease, opacity 0.8s ease;
+}
+
+/* 神的注视 3-4 时天使更清晰（提高透明度与亮度，不做大动画） */
+.eden-stage-angel--attention-3 .eden-angel-stage-sprite,
+.eden-stage-angel--attention-4 .eden-angel-stage-sprite {
+  opacity: 0.62;
+  filter: saturate(0.7) brightness(0.95) drop-shadow(0 0 18px rgba(255, 228, 170, 0.2));
+}
+
+/* 选中低语时更清晰 */
+.eden-stage-angel--active .eden-angel-stage-sprite {
+  opacity: 0.8;
+  filter: saturate(0.75) brightness(1.02) drop-shadow(0 0 22px rgba(255, 228, 170, 0.28));
+}
+
 /* 覆盖旧 .eden-eve-stage-sprite 定位，移到 button 内 */
 .eden-stage-character--eve .eden-eve-stage-sprite {
   position: static;
@@ -776,6 +993,19 @@ a:hover {
 /* ---- 过场点击推进提示 ---- */
 .eden-cinematic {
   cursor: pointer;
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+}
+
+/* ---- 过场内容淡入动画 ---- */
+.eden-cinematic-content {
+  animation: edenCinematicFadeIn 0.6s ease;
+}
+
+@keyframes edenCinematicFadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 /* ---- 过场激活时隐藏底层对话元素，避免闪屏 ---- */
@@ -896,6 +1126,17 @@ a:hover {
   flex-shrink: 0;
 }
 
+.eden-panel-drag-bar--world {
+  gap: 12px;
+  touch-action: none;
+}
+
+.eden-panel-drag-bar--world > div {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
 .eden-panel-drag-bar:active {
   cursor: grabbing;
 }
@@ -911,6 +1152,30 @@ a:hover {
   font-size: 0.6rem;
   color: #4a4a3a;
   letter-spacing: 0.04em;
+}
+
+.eden-panel-close-btn {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  border: 1px solid rgba(234, 217, 173, 0.26);
+  background: rgba(8, 12, 9, 0.52);
+  color: #ead9ad;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.16s ease, border-color 0.16s ease, transform 0.16s ease;
+}
+
+.eden-panel-close-btn:hover,
+.eden-panel-close-btn:focus-visible {
+  background: rgba(56, 48, 30, 0.76);
+  border-color: rgba(234, 217, 173, 0.58);
+  transform: translateY(-1px);
+  outline: none;
 }
 
 /* ---- 宽度调整手柄（桌面端左侧） ---- */
@@ -1849,6 +2114,14 @@ a:hover {
   text-align: center;
 }
 
+.home-entry-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  align-items: center;
+  margin-top: 8px;
+}
+
 .home-container h1 {
   font-size: 3rem;
   font-weight: 700;
@@ -2447,4 +2720,2236 @@ a:hover {
   .eden-transition-line {
     font-size: 0.98rem;
   }
+}
+
+/* ============================================================
+   第一章「园中诸声」World 页面样式
+   暗金绿色调，延续 Chapter 0 风格
+   ============================================================ */
+
+.eden-game--world {
+  background: #0a0e0a;
+}
+
+.eden-bg--world {
+  background: radial-gradient(ellipse at center, #16201a 0%, #0a0e0a 70%);
+}
+
+.eden-bg-overlay--world {
+  background: linear-gradient(
+    180deg,
+    rgba(10, 14, 10, 0.5) 0%,
+    rgba(10, 14, 10, 0.2) 40%,
+    rgba(10, 14, 10, 0.6) 100%
+  );
+}
+
+.eden-bg--intro,
+.eden-bg--ending {
+  background: radial-gradient(ellipse at center, #1a2418 0%, #060a06 80%);
+}
+
+/* ---- intro 阶段 ---- */
+.eden-intro-main {
+  position: relative;
+  z-index: 5;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+}
+
+.eden-intro-section {
+  max-width: 640px;
+  text-align: center;
+}
+
+.eden-intro-title {
+  font-size: 2.2rem;
+  color: #c8a86e;
+  letter-spacing: 0.2em;
+  margin: 0 0 8px;
+}
+
+.eden-intro-subtitle {
+  font-size: 1.2rem;
+  color: #8a9a7a;
+  letter-spacing: 0.3em;
+  margin: 0 0 40px;
+}
+
+.eden-intro-beat {
+  font-size: 1.02rem;
+  line-height: 2;
+  color: #d8d4c8;
+  margin: 0 0 40px;
+  min-height: 4em;
+}
+
+/* ---- 顶部状态栏 ---- */
+.eden-world-header {
+  position: relative;
+  z-index: 80;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 24px;
+  background: rgba(10, 14, 10, 0.7);
+  border-bottom: 1px solid rgba(160, 138, 80, 0.2);
+}
+
+.eden-chapter-tag {
+  font-size: 0.86rem;
+  color: #c8a86e;
+  letter-spacing: 0.15em;
+}
+
+.eden-world-header-right {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  font-size: 0.84rem;
+  color: #a8a89a;
+}
+
+.eden-map-toggle {
+  flex: 0 0 auto;
+}
+
+.eden-map-toggle-icon {
+  display: inline-block;
+  font-size: 1.08rem;
+  line-height: 1;
+  color: #d8c8a0;
+  transform: translateY(-1px);
+}
+
+.eden-attention-dots {
+  letter-spacing: 2px;
+  font-size: 0.78rem;
+}
+
+.eden-attention--0 { color: #8a9a7a; }
+.eden-attention--1 { color: #b8a86e; }
+.eden-attention--2 { color: #d8a85e; }
+.eden-attention--3 { color: #e88a4e; }
+.eden-attention--4 { color: #e85a3e; }
+
+/* ---- 行动点徽标 ---- */
+.eden-ap-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  background: rgba(40, 52, 38, 0.66);
+  border: 1px solid rgba(180, 150, 80, 0.32);
+  border-radius: 999px;
+  color: #d8c8a0;
+  font-size: 0.74rem;
+  letter-spacing: 0.5px;
+  margin-left: 8px;
+}
+
+/* ---- 场景互动行动区 ---- */
+.eden-scene-actions {
+  padding: 8px 10px;
+  background: rgba(18, 26, 20, 0.42);
+  border: 1px solid rgba(160, 138, 80, 0.16);
+  border-radius: 8px;
+}
+
+.eden-scene-action-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.eden-scene-action-btn {
+  font-size: 0.8rem !important;
+  padding: 6px 12px !important;
+}
+
+.eden-end-slot-btn {
+  font-size: 0.8rem !important;
+  padding: 6px 12px !important;
+  border-color: rgba(200, 140, 80, 0.4) !important;
+  color: #e8c890 !important;
+}
+
+.eden-achievement-toast {
+  padding: 6px 10px;
+  background: rgba(60, 50, 24, 0.6);
+  border: 1px solid rgba(220, 180, 90, 0.5);
+  border-radius: 6px;
+  color: #f0dca0;
+  font-size: 0.8rem;
+  text-align: center;
+}
+
+.eden-turn-display {
+  color: #8a9a7a;
+}
+
+/* ---- 主体布局 ---- */
+.eden-world-layout {
+  position: relative;
+  z-index: 5;
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: 16px;
+  padding: 16px 24px 24px;
+  height: calc(100vh - 50px);
+  overflow: hidden;
+}
+
+/* ---- 左侧地图层 ---- */
+.eden-map-layer {
+  overflow-y: auto;
+  padding-right: 8px;
+}
+
+.eden-world-stage {
+  position: relative;
+  min-height: 330px;
+  height: min(48vh, 440px);
+  margin-bottom: 16px;
+  overflow: hidden;
+  border: 1px solid rgba(200, 168, 110, 0.28);
+  border-radius: 8px;
+  background: #101812;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+}
+
+.eden-world-stage-bg {
+  position: absolute;
+  inset: 0;
+}
+
+.eden-world-stage-bg img {
+  filter: brightness(0.72) saturate(0.9);
+}
+
+.eden-world-stage-shade {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(5, 8, 6, 0.12), rgba(5, 8, 6, 0.55)),
+    radial-gradient(circle at 50% 62%, rgba(220, 184, 100, 0.16), transparent 40%);
+}
+
+.eden-world-stage-caption {
+  position: absolute;
+  left: 18px;
+  top: 16px;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  border-left: 2px solid rgba(216, 200, 160, 0.55);
+  background: rgba(8, 12, 9, 0.46);
+  backdrop-filter: blur(8px);
+}
+
+.eden-world-stage-kicker {
+  font-size: 0.7rem;
+  color: #b7b08e;
+}
+
+.eden-world-stage-caption strong {
+  font-size: 1.12rem;
+  color: #ead9ad;
+  font-weight: 500;
+}
+
+.eden-world-two-trees {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.eden-world-tree-marker {
+  position: absolute;
+  width: clamp(92px, 8vw, 138px);
+  height: clamp(108px, 12vh, 156px);
+  transform: translate(-50%, -50%);
+}
+
+.eden-world-tree-marker--life {
+  left: 38%;
+  top: 42%;
+}
+
+.eden-world-tree-marker--knowledge {
+  left: 57%;
+  top: 43%;
+}
+
+.eden-world-tree-crown {
+  position: absolute;
+  inset: 0;
+  display: block;
+  border-radius: 48% 52% 44% 56%;
+  background:
+    radial-gradient(circle at 48% 40%, rgba(232, 216, 144, 0.3), transparent 0 4%, transparent 5%),
+    radial-gradient(ellipse at 50% 32%, rgba(124, 157, 86, 0.42), rgba(42, 73, 45, 0.12) 64%, transparent 70%);
+  filter: drop-shadow(0 10px 22px rgba(0, 0, 0, 0.32));
+}
+
+.eden-world-tree-marker--life .eden-world-tree-crown {
+  background:
+    radial-gradient(circle at 42% 38%, rgba(245, 233, 162, 0.42), transparent 0 5%, transparent 6%),
+    radial-gradient(circle at 62% 44%, rgba(245, 233, 162, 0.34), transparent 0 4%, transparent 5%),
+    radial-gradient(ellipse at 50% 32%, rgba(151, 184, 103, 0.42), rgba(44, 83, 48, 0.14) 66%, transparent 72%);
+}
+
+.eden-world-tree-marker--knowledge .eden-world-tree-crown {
+  background:
+    radial-gradient(circle at 38% 42%, rgba(185, 54, 36, 0.62), transparent 0 5%, transparent 6%),
+    radial-gradient(circle at 53% 34%, rgba(205, 76, 44, 0.64), transparent 0 5%, transparent 6%),
+    radial-gradient(circle at 64% 48%, rgba(185, 54, 36, 0.58), transparent 0 4%, transparent 5%),
+    radial-gradient(ellipse at 50% 32%, rgba(112, 140, 75, 0.46), rgba(43, 72, 40, 0.14) 66%, transparent 72%);
+}
+
+.eden-world-tree-crown::after {
+  content: "";
+  position: absolute;
+  left: 47%;
+  bottom: -18%;
+  width: 12%;
+  height: 46%;
+  border-radius: 999px;
+  background: linear-gradient(180deg, rgba(89, 62, 38, 0.44), rgba(55, 38, 23, 0.12));
+}
+
+.eden-world-tree-crown i {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(228, 204, 105, 0.68);
+  box-shadow: 0 0 12px rgba(228, 204, 105, 0.52);
+}
+
+.eden-world-tree-marker--knowledge .eden-world-tree-crown i {
+  background: rgba(194, 64, 39, 0.72);
+  box-shadow: 0 0 12px rgba(194, 64, 39, 0.58);
+}
+
+.eden-world-tree-crown i:nth-child(1) {
+  left: 35%;
+  top: 38%;
+}
+
+.eden-world-tree-crown i:nth-child(2) {
+  left: 58%;
+  top: 44%;
+}
+
+.eden-world-tree-crown i:nth-child(3) {
+  left: 48%;
+  top: 58%;
+}
+
+.eden-world-tree-crown i:nth-child(4) {
+  left: 66%;
+  top: 34%;
+}
+
+.eden-world-tree-label {
+  position: absolute;
+  left: 50%;
+  bottom: -30px;
+  min-width: max-content;
+  padding: 3px 8px;
+  border: 1px solid rgba(232, 216, 144, 0.3);
+  border-radius: 999px;
+  background: rgba(8, 12, 9, 0.44);
+  color: rgba(238, 222, 174, 0.92);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  transform: translateX(-50%);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.72);
+}
+
+.eden-world-stage-figure,
+.eden-world-stage-animal,
+.eden-world-angel-presence {
+  position: absolute;
+  z-index: 4;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  transition: opacity 0.2s ease, filter 0.2s ease, transform 0.2s ease;
+}
+
+.eden-world-stage-figure:hover,
+.eden-world-stage-animal:hover,
+.eden-world-angel-presence:hover {
+  transform: translateY(-3px);
+}
+
+.eden-world-stage-figure--dim {
+  opacity: 0.72;
+  filter: brightness(0.72);
+}
+
+.eden-world-stage-figure--eve {
+  right: clamp(7%, 11vw, 16%);
+  bottom: -18px;
+}
+
+.eden-world-stage-figure--adam {
+  left: clamp(6%, 9vw, 14%);
+  bottom: -12px;
+}
+
+.eden-world-eve-sprite {
+  width: auto;
+  height: min(42vh, 420px);
+  object-fit: contain;
+}
+
+.eden-world-adam-sprite {
+  width: auto;
+  height: min(40vh, 390px);
+  object-fit: contain;
+}
+
+.eden-world-stage-animal {
+  left: 72%;
+  bottom: 112px;
+  transform: translateX(-50%);
+}
+
+.eden-world-stage-animal:hover {
+  transform: translateX(-50%) translateY(-3px);
+}
+
+/* ---- 新 NPC：小鹿 ---- */
+.eden-stage-deer {
+  position: absolute;
+  left: 15%;
+  bottom: 18%;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.eden-stage-deer .eden-animal-feedback {
+  display: block;
+  background: rgba(8, 12, 9, 0.66);
+  color: #c8d8b8;
+  font-size: 0.78rem;
+  padding: 6px 12px;
+  border-radius: 8px;
+  max-width: 180px;
+  text-align: center;
+  margin-top: 8px;
+}
+
+/* ---- 新 NPC：鸽子 ---- */
+.eden-stage-dove {
+  position: absolute;
+  right: 12%;
+  top: 22%;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.eden-stage-dove .eden-animal-feedback {
+  display: block;
+  background: rgba(8, 12, 9, 0.66);
+  color: #d8d8ff;
+  font-size: 0.78rem;
+  padding: 6px 12px;
+  border-radius: 8px;
+  max-width: 160px;
+  text-align: center;
+}
+
+.eden-btn--dove-carry {
+  font-size: 0.76rem;
+  padding: 6px 14px;
+  background: rgba(120, 120, 200, 0.32);
+  color: #d8d8ff;
+  border: 1px solid rgba(160, 160, 230, 0.38);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.eden-btn--dove-carry:hover:not(:disabled) {
+  background: rgba(120, 120, 200, 0.52);
+}
+
+/* ---- 新 NPC：狐狸 ---- */
+.eden-stage-fox {
+  position: absolute;
+  right: 8%;
+  bottom: 14%;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.eden-stage-fox .eden-animal-feedback {
+  display: block;
+  background: rgba(8, 12, 9, 0.66);
+  color: #ffc88a;
+  font-size: 0.78rem;
+  padding: 6px 12px;
+  border-radius: 8px;
+  max-width: 180px;
+  text-align: center;
+}
+
+.eden-btn--fox-judge {
+  font-size: 0.76rem;
+  padding: 6px 14px;
+  background: rgba(200, 140, 60, 0.32);
+  color: #ffc88a;
+  border: 1px solid rgba(230, 170, 90, 0.38);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.eden-btn--fox-judge:hover:not(:disabled) {
+  background: rgba(200, 140, 60, 0.52);
+}
+
+/* ---- 新增天使 NPC 样式（各自独立立绘，仅定位） ---- */
+.eden-stage-angel--gabriel {
+  position: absolute;
+  left: 18%;
+  top: 8%;
+  z-index: 3;
+  pointer-events: auto;
+}
+
+.eden-stage-angel--raphael {
+  position: absolute;
+  right: 15%;
+  bottom: 20%;
+  z-index: 3;
+  pointer-events: auto;
+}
+
+.eden-stage-angel--uriel {
+  position: absolute;
+  left: 10%;
+  top: 15%;
+  z-index: 3;
+  pointer-events: auto;
+}
+
+.eden-stage-angel--michael {
+  position: absolute;
+  right: 10%;
+  top: 12%;
+  z-index: 3;
+  pointer-events: auto;
+}
+
+/* ---- 基路伯：东园幽径远影，非人化多翼，偏左下方 ---- */
+.eden-stage-angel--cherubim {
+  position: absolute;
+  left: 5%;
+  bottom: 10%;
+  z-index: 3;
+  pointer-events: auto;
+}
+
+/* ---- 新增动物 NPC 样式 - 羊 ---- */
+.eden-stage-sheep {
+  position: absolute;
+  left: 25%;
+  bottom: 15%;
+  z-index: 3;
+  pointer-events: none;
+}
+
+.eden-stage-sheep .eden-animal-feedback {
+  display: block;
+  background: rgba(8, 12, 9, 0.66);
+  color: #e8e8e8;
+  font-size: 0.78rem;
+  padding: 6px 12px;
+  border-radius: 8px;
+  max-width: 160px;
+  text-align: center;
+  margin-top: 8px;
+}
+
+/* ---- 新增世界对象样式 - 生命树 ---- */
+.eden-stage-tree-of-life {
+  position: absolute;
+  left: 50%;
+  bottom: 25%;
+  transform: translateX(-50%);
+  z-index: 2;
+  pointer-events: none;
+}
+
+.eden-stage-tree-of-life .eden-world-object-feedback {
+  display: block;
+  background: rgba(8, 12, 9, 0.66);
+  color: #a8f0a8;
+  font-size: 0.78rem;
+  padding: 6px 12px;
+  border-radius: 8px;
+  max-width: 200px;
+  text-align: center;
+}
+
+/* ---- 地图 NPC 列表样式 ---- */
+.eden-map-npc-list {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(160, 138, 80, 0.18);
+}
+
+.eden-map-npc-list-title {
+  display: block;
+  font-size: 0.78rem;
+  color: #b7a070;
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+
+.eden-map-npc-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.eden-map-npc-chip {
+  display: inline-block;
+  font-size: 0.76rem;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: rgba(160, 138, 80, 0.15);
+  color: #d8c8a0;
+  border: 1px solid rgba(160, 138, 80, 0.2);
+}
+
+.eden-map-npc-chip--whisperable {
+  background: rgba(120, 180, 120, 0.18);
+  color: #c8e8c8;
+  border-color: rgba(120, 180, 120, 0.3);
+}
+
+.eden-map-npc-chip--non-whisperable {
+  background: rgba(160, 138, 80, 0.12);
+  color: #b8a888;
+  border-color: rgba(160, 138, 80, 0.15);
+}
+
+.eden-map-npc-chip--world-object {
+  background: rgba(100, 160, 100, 0.15);
+  color: #a8d8a8;
+  border-color: rgba(100, 160, 100, 0.25);
+  font-size: 0.72rem;
+}
+
+.eden-map-npc-chip--empty {
+  background: transparent;
+  color: #8a7a5a;
+  border: 1px dashed rgba(160, 138, 80, 0.15);
+}
+
+/* ---- 右侧面板 NPC 列表样式 ---- */
+.eden-npc-chip--observer {
+  display: inline-block;
+  font-size: 0.76rem;
+  padding: 5px 10px;
+  border-radius: 6px;
+  background: rgba(160, 138, 80, 0.1);
+  color: #9a8a6a;
+  border: 1px solid rgba(160, 138, 80, 0.12);
+  margin: 2px;
+}
+
+.eden-world-hedgehog-sprite {
+  width: min(18vw, 160px);
+  height: auto;
+  object-fit: contain;
+}
+
+.eden-world-forbidden-tree {
+  display: none;
+}
+
+.eden-world-fruit-image {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.eden-world-angel-presence {
+  right: clamp(5%, 9vw, 13%);
+  top: 20%;
+  width: 76px;
+  height: 190px;
+}
+
+.eden-world-angel-presence span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background:
+    radial-gradient(ellipse at 50% 10%, rgba(245, 228, 178, 0.58), transparent 28%),
+    radial-gradient(ellipse at 50% 64%, rgba(232, 210, 150, 0.18), transparent 58%),
+    linear-gradient(180deg, rgba(241, 221, 168, 0.46), rgba(241, 221, 168, 0.03));
+  border-radius: 999px;
+  filter: blur(0.3px) drop-shadow(0 0 18px rgba(232, 210, 150, 0.16));
+  transform: perspective(180px) rotateX(6deg);
+}
+
+.eden-current-location {
+  margin-bottom: 20px;
+  padding: 16px;
+  background: rgba(22, 32, 26, 0.5);
+  border-left: 2px solid rgba(160, 138, 80, 0.4);
+  border-radius: 4px;
+}
+
+.eden-location-name {
+  font-size: 1.3rem;
+  color: #d8c8a0;
+  margin: 0 0 6px;
+}
+
+.eden-location-desc {
+  font-size: 0.88rem;
+  color: #8a9a7a;
+  margin: 0;
+}
+
+.eden-divine-narration {
+  margin-top: 10px;
+  font-size: 0.82rem;
+  color: #a89878;
+  font-style: italic;
+  line-height: 1.7;
+}
+
+.eden-hedgehog-narration {
+  margin-top: 8px;
+  font-size: 0.82rem;
+  color: #8a8a6a;
+  line-height: 1.7;
+}
+
+.eden-hedgehog--hiding { color: #6a7a6a; opacity: 0.7; }
+.eden-hedgehog--alert { color: #c8a86e; }
+.eden-hedgehog--curious { color: #9aa87a; }
+
+/* ---- 地图节点网格 ---- */
+.eden-map-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 0;
+}
+
+.eden-map-node {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  background: rgba(22, 32, 26, 0.4);
+  border: 1px solid rgba(160, 138, 80, 0.15);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+  color: #c8c8b8;
+}
+
+.eden-map-node--reachable:hover {
+  background: rgba(40, 50, 38, 0.6);
+  border-color: rgba(160, 138, 80, 0.4);
+}
+
+.eden-map-node--current {
+  background: rgba(50, 60, 44, 0.6);
+  border-color: rgba(200, 168, 110, 0.5);
+  cursor: default;
+}
+
+.eden-map-node--locked {
+  opacity: 0.45;
+  cursor: not-allowed;
+  border-color: rgba(180, 74, 62, 0.36);
+}
+
+.eden-map-node-name {
+  font-size: 0.92rem;
+  color: #d8c8a0;
+}
+
+.eden-map-node-desc {
+  font-size: 0.74rem;
+  color: #8a9a7a;
+}
+
+.eden-map-node-here {
+  font-size: 0.7rem;
+  color: #c8a86e;
+  margin-top: 2px;
+}
+
+/* ---- 伊甸园地图弹层 ---- */
+.eden-map-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 140;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px;
+}
+
+.eden-map-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background:
+    radial-gradient(ellipse at 50% 18%, rgba(34, 42, 24, 0.2), transparent 42%),
+    rgba(2, 5, 4, 0.94);
+  cursor: default;
+}
+
+.eden-map-sheet {
+  position: relative;
+  z-index: 1;
+  width: min(1040px, 96vw);
+  max-height: calc(100vh - 56px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 20px 20px;
+  border: 1px solid rgba(216, 200, 160, 0.34);
+  border-radius: 8px;
+  background: rgba(8, 12, 9, 0.96);
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.58);
+}
+
+.eden-map-sheet-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.eden-map-kicker {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 0.72rem;
+  color: #b7b08e;
+  letter-spacing: 0.16em;
+}
+
+.eden-map-title {
+  margin: 0;
+  font-size: 1.04rem;
+  line-height: 1.45;
+  color: #ead9ad;
+  font-weight: 500;
+}
+
+.eden-map-close {
+  flex: 0 0 auto;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid rgba(216, 200, 160, 0.32);
+  background: rgba(8, 12, 9, 0.72);
+  color: #ead9ad;
+  font-size: 1.35rem;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.18s ease, border-color 0.18s ease, transform 0.12s ease;
+}
+
+.eden-map-close:hover {
+  background: rgba(216, 200, 160, 0.14);
+  border-color: rgba(216, 200, 160, 0.56);
+}
+
+.eden-map-close:focus-visible {
+  outline: 2px solid rgba(216, 200, 160, 0.5);
+  outline-offset: 2px;
+}
+
+.eden-map-image-wrap {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1672 / 941;
+  max-height: min(62vh, 620px);
+  overflow: hidden;
+  border: 1px solid rgba(200, 168, 110, 0.22);
+  border-radius: 8px;
+  background: #0e140f;
+}
+
+/* ---- 第一章：Demo 风格场景承载 ---- */
+.eden-game--world .eden-world-layout {
+  position: relative;
+  z-index: 5;
+  flex: 1;
+  display: block;
+  min-height: 0;
+  height: auto;
+  padding: 0;
+  overflow: hidden;
+}
+
+.eden-game--world .eden-map-layer {
+  position: absolute;
+  inset: 0;
+  width: auto;
+  max-width: none;
+  overflow: hidden;
+  padding: 0;
+}
+
+.eden-game--world .eden-world-stage {
+  position: absolute;
+  inset: 0;
+  height: auto;
+  min-height: 0;
+  margin: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.eden-game--world .eden-world-stage-bg,
+.eden-game--world .eden-world-stage-bg img {
+  position: absolute;
+  inset: 0;
+}
+
+.eden-game--world .eden-world-stage-bg img {
+  filter: brightness(0.76) saturate(0.95);
+}
+
+.eden-game--world .eden-world-stage-caption {
+  left: 24px;
+  top: 24px;
+  min-width: 180px;
+  border-left-color: rgba(216, 200, 160, 0.62);
+  background: rgba(8, 12, 9, 0.58);
+}
+
+.eden-game--world .eden-current-location {
+  position: absolute;
+  left: 24px;
+  bottom: 28px;
+  z-index: 7;
+  width: min(430px, calc(100vw - 520px));
+  margin: 0;
+  background: rgba(10, 14, 10, 0.58);
+  backdrop-filter: blur(12px);
+}
+
+/* 只隐藏主舞台旧网格，不隐藏地图弹层中的地点列表 */
+.eden-game--world .eden-map-layer > .eden-map-grid,
+.eden-game--world .eden-map-layer > .eden-location-npcs,
+.eden-game--world .eden-map-layer > .eden-location-actions,
+.eden-game--world .eden-map-layer > .eden-npc-dialogue-hints {
+  display: none;
+}
+
+.eden-game--world .eden-float-panel {
+  z-index: 20;
+}
+
+.eden-game--world .eden-world-panel {
+  position: fixed;
+  right: auto;
+  min-width: 360px;
+  min-height: 420px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 96px);
+  resize: both;
+  overflow: hidden;
+  z-index: 38;
+  border-color: rgba(234, 217, 173, 0.22);
+  box-shadow: 0 18px 56px rgba(0, 0, 0, 0.46);
+}
+
+.eden-game--world .eden-panel-content {
+  overflow-y: auto;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.eden-game--world .eden-input-footer {
+  position: relative;
+  z-index: 35;
+}
+
+.eden-game--world .eden-input-footer .eden-input-area {
+  max-width: 720px;
+  margin: 0 auto;
+  align-items: center;
+  padding: 0;
+  border-top: 0;
+}
+
+.eden-world-task-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.eden-world-task-panel .eden-current-location {
+  position: static;
+  width: auto;
+  margin: 0;
+  padding: 12px;
+}
+
+.eden-world-task-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.eden-world-task-item {
+  position: relative;
+  padding-left: 16px;
+  color: #b8b8a4;
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+
+.eden-world-task-item::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.72em;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: rgba(200, 168, 110, 0.72);
+}
+
+.eden-clue-leverage-hint {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(143, 169, 111, 0.28);
+  border-radius: 8px;
+  background: rgba(35, 50, 33, 0.28);
+  color: #b9c7a0;
+  font-size: 0.78rem;
+  line-height: 1.55;
+}
+
+.eden-world-travel-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.eden-world-travel-btn {
+  flex: 1 1 150px;
+  justify-content: center;
+}
+
+.eden-world-whisper-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-top: 6px;
+}
+
+.eden-recommended-lines {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(160, 138, 80, 0.12);
+}
+
+.eden-recommended-line-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 6px;
+}
+
+.eden-recommended-line-btn {
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid rgba(160, 138, 80, 0.2);
+  border-radius: 6px;
+  background: rgba(22, 32, 26, 0.42);
+  color: #c8c8b8;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  text-align: left;
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+
+.eden-recommended-line-btn:hover:not(:disabled) {
+  border-color: rgba(200, 168, 110, 0.42);
+  background: rgba(49, 58, 35, 0.52);
+  color: #e0d0a8;
+}
+
+.eden-recommended-line-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.eden-serpent-token-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid rgba(143, 169, 111, 0.22);
+  border-radius: 6px;
+  background: rgba(18, 28, 20, 0.4);
+}
+
+.eden-token-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: #8a9a7a;
+  font-size: 0.78rem;
+}
+
+.eden-token-row strong {
+  color: #d8c8a0;
+  font-weight: 500;
+}
+
+.eden-token-detail {
+  margin: 2px 0 0;
+  color: #6f7f67;
+  font-size: 0.72rem;
+  line-height: 1.5;
+}
+
+/* ---- 空状态（无选中 NPC） ---- */
+.eden-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+  text-align: center;
+}
+
+.eden-empty-state-icon {
+  font-size: 2rem;
+  margin-bottom: 8px;
+  opacity: 0.6;
+}
+
+.eden-empty-sub {
+  color: #5a5a4a;
+  font-size: 0.72rem;
+  margin: 4px 0 0;
+  line-height: 1.5;
+}
+
+/* ---- 蛇（我）Tab：能力列表 ---- */
+.eden-serpent-ability-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 0;
+}
+
+.eden-ability-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 0.78rem;
+  color: #8a8a7a;
+  line-height: 1.6;
+}
+
+.eden-ability-icon {
+  flex-shrink: 0;
+  width: 18px;
+  text-align: center;
+  font-size: 0.72rem;
+}
+
+.eden-ability-icon:first-child {
+  color: #8aaa80;
+}
+
+.eden-ability-row:nth-child(odd) .eden-ability-icon:first-child {
+  color: #8aaa80;
+}
+
+.eden-ability-row:nth-child(even) .eden-ability-icon:first-child {
+  color: #a08060;
+}
+
+/* ---- 词元消耗进度条 ---- */
+.eden-token-bar-bg {
+  height: 4px;
+  background: rgba(160, 138, 80, 0.12);
+  border-radius: 2px;
+  margin-top: 6px;
+  overflow: hidden;
+}
+
+.eden-token-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #8aaa80, #c8a86e);
+  border-radius: 2px;
+  transition: width 0.4s ease;
+}
+
+.eden-voice-dropdown-note {
+  padding: 10px 12px;
+  color: #8a8a7a;
+  font-size: 0.76rem;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+.eden-character-avatar--wide {
+  object-fit: contain;
+  border-radius: 12px;
+}
+
+.eden-character-symbol {
+  width: 80px;
+  height: 80px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 2px solid rgba(212, 196, 224, 0.15);
+  background: rgba(212, 196, 224, 0.04);
+  color: #d8d0e8;
+  font-size: 2rem;
+}
+
+.eden-map-image {
+  object-fit: contain;
+  background: #0e140f;
+  filter: brightness(0.98) saturate(1.05);
+}
+
+.eden-map-hotspot {
+  position: absolute;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-width: 58px;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #efe0b8;
+  cursor: pointer;
+  text-align: center;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.92), 0 0 10px rgba(0, 0, 0, 0.76);
+  transition: transform 0.18s ease, opacity 0.18s ease, filter 0.18s ease;
+}
+
+.eden-map-hotspot::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 15px;
+  height: 15px;
+  border: 2px solid rgba(246, 225, 164, 0.86);
+  border-radius: 999px;
+  background: rgba(10, 14, 9, 0.12);
+  box-shadow:
+    0 0 0 4px rgba(246, 225, 164, 0.12),
+    0 0 18px rgba(246, 225, 164, 0.42);
+  transform: translate(-50%, -50%);
+}
+
+.eden-map-hotspot::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: calc(50% + 11px);
+  width: 1px;
+  height: 18px;
+  background: linear-gradient(180deg, rgba(246, 225, 164, 0.72), transparent);
+  transform: translateX(-50%);
+}
+
+.eden-map-hotspot:hover:not(:disabled) {
+  transform: translateY(-2px);
+  filter: brightness(1.18);
+}
+
+.eden-map-hotspot:disabled {
+  cursor: default;
+}
+
+.eden-map-hotspot--current {
+  opacity: 1;
+}
+
+.eden-map-hotspot--current::before {
+  width: 20px;
+  height: 20px;
+  border-color: rgba(255, 238, 176, 0.98);
+  background: rgba(255, 238, 176, 0.98);
+  box-shadow:
+    0 0 0 6px rgba(234, 217, 173, 0.16),
+    0 0 26px rgba(255, 232, 158, 0.65);
+}
+
+/* 选中地点（非当前）：外圈加亮、轻微放大 */
+.eden-map-hotspot--selected::before {
+  transform: translate(-50%, -50%) scale(1.18);
+  border-color: rgba(246, 225, 164, 0.98);
+  box-shadow:
+    0 0 0 6px rgba(246, 225, 164, 0.2),
+    0 0 22px rgba(246, 225, 164, 0.55);
+}
+
+.eden-map-hotspot--locked {
+  opacity: 0.82;
+}
+
+.eden-map-hotspot--locked::before {
+  border-color: rgba(235, 88, 72, 0.96);
+  background: rgba(48, 8, 6, 0.24);
+  box-shadow:
+    0 0 0 4px rgba(235, 88, 72, 0.13),
+    0 0 18px rgba(235, 88, 72, 0.45);
+}
+
+.eden-map-hotspot--locked::after {
+  background: linear-gradient(180deg, rgba(235, 88, 72, 0.68), transparent);
+}
+
+.eden-map-hotspot--locked .eden-map-hotspot-state {
+  color: #ef8c7e;
+}
+
+.eden-map-hotspot-label {
+  position: absolute;
+  left: 50%;
+  top: calc(50% + 31px);
+  max-width: none;
+  font-size: clamp(0.66rem, 0.95vw, 0.76rem);
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  pointer-events: none;
+  padding: 3px 7px;
+  border: 1px solid rgba(234, 217, 173, 0.28);
+  border-radius: 999px;
+  background: rgba(8, 12, 9, 0.66);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.34);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+
+.eden-map-hotspot-state {
+  position: absolute;
+  left: 50%;
+  top: calc(50% + 50px);
+  font-size: clamp(0.56rem, 0.8vw, 0.66rem);
+  color: #b7b08e;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  pointer-events: none;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(8, 12, 9, 0.5);
+}
+
+.eden-map-hotspot--label-top .eden-map-hotspot-label {
+  top: auto;
+  bottom: calc(50% + 27px);
+}
+
+.eden-map-hotspot--label-top .eden-map-hotspot-state {
+  top: auto;
+  bottom: calc(50% + 8px);
+}
+
+/* ---- 选中地点详情框（取代五卡片网格） ---- */
+.eden-map-detail {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  min-height: 96px;
+  padding: 18px 22px;
+  background:
+    linear-gradient(180deg, rgba(15, 22, 17, 0.96), rgba(9, 14, 10, 0.94)),
+    rgba(22, 32, 26, 0.92);
+  border: 1px solid rgba(234, 217, 173, 0.42);
+  border-left: 3px solid rgba(234, 217, 173, 0.78);
+  border-radius: 8px;
+  box-shadow:
+    0 12px 34px rgba(0, 0, 0, 0.36),
+    inset 0 1px 0 rgba(255, 246, 210, 0.08);
+}
+
+.eden-map-detail-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+
+.eden-map-detail-name {
+  font-size: 1.16rem;
+  color: #f4dfaa;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.72);
+}
+
+.eden-map-detail-desc {
+  font-size: 0.9rem;
+  color: rgba(246, 235, 205, 0.9);
+  line-height: 1.6;
+}
+
+.eden-map-detail-status {
+  font-size: 0.82rem;
+  color: #d1c390;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+
+.eden-map-detail-action {
+  flex: 0 0 auto;
+  min-width: 116px;
+  padding: 11px 28px;
+  font-size: 0.92rem;
+}
+
+.eden-map-detail-badge {
+  flex: 0 0 auto;
+  padding: 8px 18px;
+  font-size: 0.84rem;
+  letter-spacing: 0.08em;
+  border-radius: 999px;
+  border: 1px solid rgba(200, 168, 110, 0.25);
+  white-space: nowrap;
+}
+
+.eden-map-detail-badge--current {
+  color: #c8a86e;
+  background: rgba(200, 168, 110, 0.1);
+  border-color: rgba(200, 168, 110, 0.35);
+}
+
+.eden-map-detail-badge--blocked {
+  color: #a87a6a;
+  background: rgba(160, 90, 80, 0.1);
+  border-color: rgba(180, 100, 90, 0.35);
+}
+
+/* ---- NPC 卡片 ---- */
+.eden-section-title {
+  font-size: 0.82rem;
+  color: #a89878;
+  letter-spacing: 0.12em;
+  margin: 0 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(160, 138, 80, 0.15);
+}
+
+.eden-location-npcs {
+  margin-bottom: 16px;
+}
+
+.eden-npc-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.eden-npc-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  background: rgba(22, 32, 26, 0.4);
+  border: 1px solid rgba(160, 138, 80, 0.15);
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: left;
+  color: #c8c8b8;
+  transition: all 0.2s ease;
+}
+
+.eden-npc-card:hover:not(:disabled) {
+  background: rgba(40, 50, 38, 0.6);
+  border-color: rgba(160, 138, 80, 0.4);
+}
+
+.eden-npc-card--active {
+  background: rgba(50, 60, 44, 0.6);
+  border-color: rgba(200, 168, 110, 0.5);
+}
+
+.eden-npc-name {
+  font-size: 0.9rem;
+  color: #d8c8a0;
+}
+
+.eden-npc-desc {
+  font-size: 0.74rem;
+  color: #8a9a7a;
+}
+
+.eden-empty-hint {
+  font-size: 0.8rem;
+  color: #6a7a6a;
+  font-style: italic;
+}
+
+/* ---- 地点操作 ---- */
+.eden-location-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.eden-btn--small {
+  padding: 6px 14px;
+  font-size: 0.8rem;
+  background: rgba(40, 50, 38, 0.5);
+  border: 1px solid rgba(160, 138, 80, 0.25);
+  color: #c8c8b8;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.eden-btn--small:hover:not(:disabled) {
+  background: rgba(50, 60, 44, 0.6);
+  border-color: rgba(200, 168, 110, 0.4);
+}
+
+.eden-btn--dialogue {
+  width: 100%;
+  margin-bottom: 6px;
+  text-align: left;
+}
+
+.eden-npc-dialogue-hints {
+  margin-bottom: 16px;
+}
+
+/* ---- 右侧面板 ---- */
+.eden-world-panel {
+  display: flex;
+  flex-direction: column;
+  background: rgba(16, 22, 18, 0.8);
+  border: 1px solid rgba(160, 138, 80, 0.2);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.eden-panel-tabs {
+  display: flex;
+  border-bottom: 1px solid rgba(160, 138, 80, 0.15);
+}
+
+.eden-tab {
+  flex: 1;
+  padding: 10px;
+  background: transparent;
+  border: none;
+  color: #8a9a7a;
+  font-size: 0.84rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.eden-tab--active {
+  color: #c8a86e;
+  border-bottom: 2px solid #c8a86e;
+}
+
+/* ---- 对话面板 ---- */
+.eden-dialogue-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.eden-dialogue-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(160, 138, 80, 0.1);
+}
+
+.eden-dialogue-target {
+  font-size: 0.84rem;
+  color: #d8c8a0;
+}
+
+.eden-btn-close {
+  background: transparent;
+  border: none;
+  color: #8a9a7a;
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 0 6px;
+}
+
+.eden-btn-close:hover {
+  color: #c8a86e;
+}
+
+.eden-dialogue-history {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.eden-dialogue-empty {
+  color: #6a7a6a;
+  font-style: italic;
+  font-size: 0.86rem;
+  text-align: center;
+  margin-top: 30%;
+}
+
+.eden-dialogue-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.eden-dialogue-role {
+  font-size: 0.72rem;
+  color: #8a7a5a;
+  letter-spacing: 0.08em;
+}
+
+.eden-dialogue-text {
+  font-size: 0.9rem;
+  line-height: 1.75;
+  color: #d8d4c8;
+  margin: 0;
+}
+
+.eden-dialogue-entry--serpent .eden-dialogue-text {
+  color: #a8b89a;
+  font-style: italic;
+}
+
+.eden-dialogue-entry--npc .eden-dialogue-text {
+  color: #e8e0c8;
+}
+
+.eden-dialogue-entry--system .eden-dialogue-text,
+.eden-dialogue-entry--tool .eden-dialogue-text {
+  color: #8a8a6a;
+  font-size: 0.82rem;
+  font-style: italic;
+}
+
+.eden-dialogue-loading {
+  color: #8a7a5a;
+  font-size: 1rem;
+  letter-spacing: 4px;
+}
+
+/* ---- 低语方式提示 ---- */
+.eden-whisper-styles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 14px;
+  border-top: 1px solid rgba(160, 138, 80, 0.1);
+}
+
+.eden-whisper-style-hint {
+  font-size: 0.72rem;
+  color: #6a7a6a;
+  padding: 2px 8px;
+  border: 1px solid rgba(160, 138, 80, 0.15);
+  border-radius: 10px;
+  cursor: help;
+}
+
+/* ---- 输入区 ---- */
+.eden-input-area {
+  display: flex;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid rgba(160, 138, 80, 0.1);
+}
+
+.eden-whisper-input {
+  flex: 1;
+  padding: 8px 10px;
+  background: rgba(10, 14, 10, 0.6);
+  border: 1px solid rgba(160, 138, 80, 0.25);
+  border-radius: 4px;
+  color: #d8d4c8;
+  font-family: inherit;
+  font-size: 0.88rem;
+  resize: none;
+}
+
+.eden-whisper-input:focus {
+  outline: none;
+  border-color: rgba(200, 168, 110, 0.5);
+}
+
+.eden-system-hint,
+.eden-error-hint,
+.eden-tool-hint {
+  padding: 4px 14px 10px;
+  font-size: 0.78rem;
+  line-height: 1.6;
+}
+
+.eden-system-hint { color: #8a9a7a; }
+.eden-tool-hint { color: #a89878; font-style: italic; }
+.eden-error-hint { color: #c87a5e; }
+
+/* ---- 线索面板 ---- */
+.eden-clue-panel {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px;
+}
+
+.eden-clue-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.eden-clue-item {
+  padding: 10px 12px;
+  background: rgba(22, 32, 26, 0.4);
+  border-left: 2px solid rgba(160, 138, 80, 0.3);
+  border-radius: 3px;
+}
+
+.eden-clue-title {
+  font-size: 0.86rem;
+  color: #d8c8a0;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.eden-clue-desc {
+  font-size: 0.8rem;
+  color: #a8a89a;
+  line-height: 1.7;
+  margin: 0;
+}
+
+/* ---- 禁忌动作进度 ---- */
+.eden-chain-progress {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 20px;
+  font-size: 0.78rem;
+}
+
+.eden-chain-step {
+  padding: 3px 8px;
+  border: 1px solid rgba(160, 138, 80, 0.2);
+  border-radius: 10px;
+  color: #6a7a6a;
+}
+
+.eden-chain-step--done {
+  padding: 3px 8px;
+  border: 1px solid rgba(200, 168, 110, 0.5);
+  border-radius: 10px;
+  color: #c8a86e;
+  background: rgba(50, 40, 20, 0.3);
+}
+
+.eden-chain-arrow {
+  color: #4a5a4a;
+}
+
+/* ---- 心智条 ---- */
+.eden-mind-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.eden-mind-bar {
+  display: grid;
+  grid-template-columns: 90px 1fr 32px;
+  gap: 8px;
+  align-items: center;
+}
+
+.eden-mind-label {
+  font-size: 0.76rem;
+  color: #8a9a7a;
+}
+
+.eden-mind-track {
+  height: 6px;
+  background: rgba(10, 14, 10, 0.6);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.eden-mind-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #6a8a5a, #c8a86e);
+  transition: width 0.5s ease;
+}
+
+.eden-mind-value {
+  font-size: 0.74rem;
+  color: #a89878;
+  text-align: right;
+}
+
+/* ---- 结局页 ---- */
+.eden-ending-main {
+  position: relative;
+  z-index: 5;
+  min-height: 100vh;
+  overflow-y: auto;
+  padding: 48px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.eden-ending-review {
+  max-width: 720px;
+  width: 100%;
+  background: rgba(16, 22, 18, 0.8);
+  border: 1px solid rgba(160, 138, 80, 0.2);
+  border-radius: 8px;
+  padding: 32px;
+  margin-bottom: 24px;
+}
+
+.eden-ending-title {
+  font-size: 1.6rem;
+  color: #c8a86e;
+  text-align: center;
+  margin: 0 0 24px;
+  letter-spacing: 0.15em;
+}
+
+.eden-ending-segment {
+  margin-bottom: 24px;
+}
+
+.eden-ending-line {
+  font-size: 1rem;
+  line-height: 2;
+  color: #d8d4c8;
+  margin: 0 0 8px;
+}
+
+.eden-segment-title {
+  font-size: 0.86rem;
+  color: #a89878;
+  letter-spacing: 0.12em;
+  margin: 0 0 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(160, 138, 80, 0.15);
+}
+
+.eden-stat-list {
+  margin: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 16px;
+}
+
+.eden-stat-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.84rem;
+}
+
+.eden-stat-row dt {
+  color: #8a9a7a;
+}
+
+.eden-stat-row dd {
+  color: #d8c8a0;
+  margin: 0;
+}
+
+.eden-tool-chain {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.eden-tool-chain li {
+  font-size: 0.86rem;
+  color: #c8a86e;
+  padding-left: 16px;
+  position: relative;
+}
+
+.eden-tool-chain li::before {
+  content: "→";
+  position: absolute;
+  left: 0;
+  color: #6a7a6a;
+}
+
+.eden-trace-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.eden-trace-list li {
+  font-size: 0.82rem;
+  color: #a8a89a;
+  line-height: 1.7;
+  padding-left: 14px;
+  border-left: 2px solid rgba(160, 138, 80, 0.2);
+}
+
+.eden-ending-summary {
+  font-size: 0.92rem;
+  line-height: 2;
+  color: #d8d4c8;
+  margin: 0;
+  font-style: italic;
+}
+
+.eden-attention-final {
+  font-size: 0.86rem;
+  color: #8a8a6a;
+  font-style: italic;
+  margin: 0;
+  text-align: center;
+}
+
+.eden-ending-actions {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+}
+
+/* ---- World 响应式（桌面优先，窄屏降级） ---- */
+@media (max-width: 1024px) {
+  .eden-world-layout {
+    grid-template-columns: 1fr;
+    height: auto;
+    overflow: auto;
+  }
+
+  .eden-world-panel {
+    height: 480px;
+  }
+
+  .eden-world-stage {
+    min-height: 300px;
+    height: 42vh;
+  }
+
+  .eden-map-modal {
+    padding: 14px;
+  }
+
+  .eden-map-sheet {
+    width: 100%;
+    padding: 12px;
+  }
+
+  .eden-map-hotspot {
+    min-width: 70px;
+    min-height: 48px;
+    padding: 6px;
+  }
+}
+
+@media (max-width: 640px) {
+  .eden-world-header {
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .eden-world-header-right {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    row-gap: 8px;
+  }
+
+  .eden-world-stage {
+    min-height: 260px;
+    height: 36vh;
+  }
+
+  .eden-world-eve-sprite,
+  .eden-world-adam-sprite {
+    height: min(32vh, 260px);
+  }
+
+  .eden-world-hedgehog-sprite {
+    width: 118px;
+  }
+
+  .eden-world-forbidden-tree {
+    width: 150px;
+  }
+
+  .eden-map-sheet-header {
+    align-items: center;
+  }
+
+  .eden-map-title {
+    font-size: 0.88rem;
+  }
+
+  .eden-map-hotspot-label {
+    font-size: 0.64rem;
+  }
+
+  .eden-map-hotspot-state {
+    display: none;
+  }
+}
+
+/* ============================================================
+ * 第一章返修：行动点圆点、进入下一轮按钮、成就浮窗、输入推荐
+ * ============================================================ */
+
+/* ---- 行动点圆点（区别于神的注视） ---- */
+.eden-ap-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 8px;
+}
+
+.eden-ap-dot {
+  font-size: 0.6rem;
+  line-height: 1;
+}
+
+.eden-ap-dot--filled {
+  color: #6ab86a;
+  text-shadow: 0 0 4px rgba(106, 184, 106, 0.4);
+}
+
+.eden-ap-dot--empty {
+  color: #3a4a3a;
+  text-shadow: none;
+}
+
+/* ---- 进入下一轮按钮 ---- */
+.eden-btn--next-slot {
+  font-size: 0.76rem !important;
+  padding: 4px 12px !important;
+  margin-left: 8px;
+  background: rgba(50, 40, 20, 0.6) !important;
+  border: 1px solid rgba(200, 160, 80, 0.4) !important;
+  color: #e8c890 !important;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.eden-btn--next-slot:hover:not(:disabled) {
+  background: rgba(70, 55, 25, 0.7) !important;
+}
+
+.eden-btn--next-slot:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ---- 顶部成就图标 ---- */
+.eden-btn--achievement-icon {
+  font-size: 1.1rem !important;
+  padding: 4px 8px !important;
+  background: rgba(40, 36, 20, 0.6) !important;
+  border: 1px solid rgba(200, 170, 90, 0.3) !important;
+  color: #d8c080 !important;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+/* ---- 成就独立浮窗 ---- */
+.eden-achievement-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.eden-achievement-sheet {
+  position: relative;
+  width: min(560px, 92vw);
+  max-height: 80vh;
+  background: rgba(16, 22, 18, 0.97);
+  border: 1px solid rgba(180, 150, 80, 0.3);
+  border-radius: 12px;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.eden-achievement-sheet-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(160, 138, 80, 0.15);
+}
+
+.eden-achievement-sheet-content {
+  padding: 16px 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.eden-achievement-card {
+  padding: 10px 14px;
+  border-radius: 6px;
+  border: 1px solid rgba(120, 120, 100, 0.12);
+}
+
+.eden-achievement-card--unlocked {
+  background: rgba(40, 46, 30, 0.5);
+  border-color: rgba(200, 170, 90, 0.4);
+}
+
+.eden-achievement-card--locked {
+  background: rgba(22, 32, 26, 0.3);
+  opacity: 0.5;
+}
+
+.eden-achievement-card-name {
+  font-size: 0.9rem;
+  margin: 0 0 4px;
+}
+
+.eden-achievement-card--unlocked .eden-achievement-card-name {
+  color: #e8d8a8;
+}
+
+.eden-achievement-card--locked .eden-achievement-card-name {
+  color: #8a8a78;
+}
+
+.eden-achievement-card-desc {
+  font-size: 0.76rem;
+  margin: 0;
+  line-height: 1.6;
+}
+
+.eden-achievement-card--unlocked .eden-achievement-card-desc {
+  color: #9aa88a;
+}
+
+.eden-achievement-card--locked .eden-achievement-card-desc {
+  color: #6a6a58;
+}
+
+/* ---- 输入框上方推荐低语 ---- */
+.eden-input-suggestions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 16px 4px;
+  flex-wrap: wrap;
+}
+
+.eden-input-suggestions-label {
+  color: #8a9a7a;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  margin-right: 2px;
+}
+
+.eden-input-suggestion-btn {
+  font-size: 0.74rem;
+  padding: 4px 10px;
+  background: rgba(30, 40, 30, 0.5);
+  border: 1px solid rgba(160, 138, 80, 0.2);
+  border-radius: 4px;
+  color: #b8c8a8;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.eden-input-suggestion-btn:hover:not(:disabled) {
+  background: rgba(40, 50, 38, 0.6);
+}
+
+.eden-input-suggestion-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ---- 警告提示样式 ---- */
+.eden-system-hint--warning {
+  color: #d8a85e;
+  font-style: italic;
 }

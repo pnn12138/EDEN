@@ -32,9 +32,9 @@ export type VoiceOption = {
 };
 
 const EVE_VOICE_OPTIONS: VoiceOption[] = [
-  { mode: "off", label: "关闭夏娃语音", preview: "" },
-  { mode: "browser_soft", label: "夏娃·柔和女声", preview: "我在听。" },
-  { mode: "browser_clear", label: "夏娃·清冷女声", preview: "我在听。" },
+  { mode: "off", label: "关闭女人语音", preview: "" },
+  { mode: "browser_soft", label: "女人·柔和女声", preview: "我在听。" },
+  { mode: "browser_clear", label: "女人·清冷女声", preview: "我在听。" },
   { mode: "browser_default", label: "浏览器默认", preview: "我在听。" },
   { mode: "generated", label: "高质量生成语音", preview: "我在听。" },
 ];

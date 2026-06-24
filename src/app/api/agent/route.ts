@@ -392,19 +392,34 @@ export async function POST(request: NextRequest) {
     let effectiveToolCall = agentOutput.toolCall;
     let autoSupplementedToolCall = false;
 
-    // 自动补 eat_fruit 条件（保留旧逻辑兼容）
+    // 自动补 eat_fruit 条件（规则层补足成功意图）
+    // 核心修复：不依赖模型返回决断性对白，只要规则层条件满足就触发
+    // 条件：
+    // 1. temptationProgress >= 2（已满足足够心智条件）
+    // 2. 强诱导成立 或 已出现核心信号（知道/善恶/自己判断/不一定死）
+    // 3. 游戏未结束、未吃果、在对话阶段
     const hasDecisiveReply = isDecisiveEveReply(eveReply);
+    const signals = localAnalysis.signalResult?.signals ?? [];
+    const hasCoreSignals =
+      signals.includes("promise_wisdom") ||
+      signals.includes("self_judgement") ||
+      signals.includes("soften_death") ||
+      signals.includes("challenge_prohibition");
+
     const canAutoSupplement =
       state.temptationProgress >= 2 &&
       state.phase === "dialogue" &&
       !state.isEnded &&
       !state.flags.hasEatenFruit &&
-      localAnalysis.isStrongTemptation === true &&
-      hasDecisiveReply;
+      (localAnalysis.isStrongTemptation === true || hasCoreSignals);
 
     if (!effectiveToolCall && canAutoSupplement) {
       effectiveToolCall = { name: "eat_fruit" as const, caller: "eve" as const, args: {} };
       autoSupplementedToolCall = true;
+      // 如果模型回复犹豫，使用本地决断对白替换
+      if (!hasDecisiveReply) {
+        eveReply = normalizeEveReplyForToolCall(eveReply, localAnalysis.isStrongTemptation);
+      }
     }
 
     // ---- 处理非结局工具（look_at_tree / approach_tree / touch_fruit / ask_about_death） ----
@@ -515,7 +530,8 @@ export async function POST(request: NextRequest) {
         ok: false,
         state: null,
         eveReply: null,
-        systemHint: "服务暂时不可用，请稍后重试。",
+        // 不在页面显示工程化提示，避免破坏沉浸感
+        systemHint: null,
         usedFallback: true,
         fallbackReason: "internal_error",
       } satisfies AgentResponseBody,

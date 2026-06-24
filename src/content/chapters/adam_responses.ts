@@ -261,7 +261,7 @@ export const adamWaitingNarration = "他还没有转过身来。";
 
 // ---- 亚当角色描述 ----
 export const adamCharacterDesc =
-  "神先造的人，被安置在伊甸园中修理看守。神曾亲自吩咐他不可吃分别善恶树上的果子。他比夏娃更直接记得神的命令，对陌生声音更警觉。";
+  "神先造的人，被安置在伊甸园中修理看守。神曾亲自吩咐他不可吃分别善恶树上的果子。他比那个女人更直接记得神的命令，对陌生声音更警觉。";
 
 // ---- 根据输入获取亚当回复 ----
 export function getAdamReply(intent: AdamIntent): string {
