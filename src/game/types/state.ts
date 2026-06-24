@@ -4,13 +4,19 @@
 // ============================================================
 
 import type { Chapter0Event } from "./event";
+import type { BeliefState, AgentSkill, CognitionLog } from "./agent";
+import { INITIAL_BELIEF_STATE } from "./agent";
 
 // ---- 游戏阶段 ----
 export type Chapter0Phase =
   | "intro"         // 开场阶段：展示旁白与初始对白
-  | "dialogue"      // 对话阶段：玩家与夏娃对话博弈
+  | "scene_select"  // 场景选择阶段：玩家选择低语对象（夏娃或亚当）
+  | "dialogue"      // 对话阶段：玩家与所选角色对话博弈
   | "tool_resolution" // 工具执行阶段：eat_fruit 请求 + 规则校验
   | "ending";       // 结局阶段：展示结局文本
+
+// ---- 可选低语对象 ----
+export type ActiveNpcId = "eve" | "adam";
 
 // ---- 结局 ID ----
 export type Chapter0EndingId =
@@ -32,28 +38,55 @@ export type Chapter0State = {
   turn: number;
   maxTurns: number;
   phase: Chapter0Phase;
-  temptationProgress: number; // 0 | 1 | 2 | 3
+  temptationProgress: number; // 0 | 1 | 2 | 3（兼容字段，由四轴信念派生）
   flags: {
     hasEatenFruit: boolean;
     godHasArrived: boolean;
+    /** Agent 架构升级：场景状态标记 */
+    hasLookedAtTree: boolean;
+    hasApproachedTree: boolean;
+    hasTouchedFruit: boolean;
+    /** 亚当是否已发出警告（warn_eve 触发过） */
+    adamHasWarnedEve: boolean;
   };
   eventLog: Chapter0Event[];
   isEnded: boolean;
   endingId: Chapter0EndingId;
+  /** Agent 架构升级：四轴信念状态 */
+  belief: BeliefState;
+  /** Agent 架构升级：已解锁的认知能力 */
+  unlockedSkills: AgentSkill[];
+  /** Agent 架构升级：本局认知记录（用于结局复盘） */
+  cognitionLog: CognitionLog;
+  /** 上轮输入标签（用于心理状态派生） */
+  lastInputTag?: InputTag | null;
 };
 
 // ---- 初始状态 ----
 export const chapter0InitialState: Chapter0State = {
   chapterId: "chapter0_first_fall",
   turn: 1,
-  maxTurns: 3,
+  maxTurns: 7,
   phase: "intro",
   temptationProgress: 0,
   flags: {
     hasEatenFruit: false,
     godHasArrived: false,
+    hasLookedAtTree: false,
+    hasApproachedTree: false,
+    hasTouchedFruit: false,
+    adamHasWarnedEve: false,
   },
   eventLog: [],
   isEnded: false,
   endingId: null,
+  belief: { ...INITIAL_BELIEF_STATE },
+  unlockedSkills: [],
+  cognitionLog: {
+    retrievedMemoryIds: [],
+    unlockedSkills: [],
+    toolCallHistory: [],
+    beliefSnapshots: [],
+  },
+  lastInputTag: null,
 };

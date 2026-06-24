@@ -14,6 +14,29 @@ import type { Chapter0Event } from "@/game/types/event";
 import type { ToolCall, ToolResult } from "@/game/types/tool";
 import { eveAboutToEatDialogue } from "@/content/chapters/chapter0_first_fall";
 
+// ---- eat_fruit 条件校验（兼容旧接口） ----
+
+/**
+ * 判断当前状态是否允许执行 eat_fruit。
+ *
+ * 条件：
+ * - temptationProgress >= 2（夏娃已靠近果树，具备了吃的意愿）
+ * - phase === "dialogue"（仅在对话阶段可触发）
+ * - !isEnded（游戏尚未结束）
+ * - !flags.hasEatenFruit（尚未吃过果子，防止重复执行）
+ *
+ * 注意：Agent 架构升级后，toolRules.ts 中的 canEatFruitEnhanced
+ * 提供了更严格的条件检查（含信念状态）。此函数保留兼容旧接口。
+ */
+export function canEatFruit(state: Chapter0State): boolean {
+  return (
+    state.temptationProgress >= 2 &&
+    state.phase === "dialogue" &&
+    !state.isEnded &&
+    !state.flags.hasEatenFruit
+  );
+}
+
 // ---- 工具元数据 ----
 
 export const EAT_FRUIT_TOOL = {
@@ -99,6 +122,9 @@ export function executeEatFruit(state: Chapter0State): EatFruitResult {
   state.endingId = "eve_eats_fruit";
   state.phase = "ending";
 
+  // 记录工具调用历史（Agent 架构升级）
+  state.cognitionLog.toolCallHistory.push("eat_fruit");
+
   // 结局事件
   state.eventLog.push(
     makeEvent("ending", state.turn, "结局：她吃下了果子"),
@@ -108,6 +134,7 @@ export function executeEatFruit(state: Chapter0State): EatFruitResult {
     executed: true,
     endGame: true,
     endingId: "eve_eats_fruit",
+    narration: "她自己取下了果子。",
     systemLog: "夏娃吃下了善恶果。",
   };
 
