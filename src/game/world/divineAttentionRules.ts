@@ -1,8 +1,8 @@
 // ============================================================
 // 第一章神的注视规则层
 //
-// 神的注视（0-4）取代单一回合上限作为主要失败压力。
-// 满级 4 触发失败结局（神降临）。
+// 神的注视（0-4，满 4 触发神明献礼并归零）。
+// 第 12 时段结束仍未吃果是唯一失败条件。
 //
 // 风险来源：
 // - 直接命令 / 威胁强迫 → 大幅提升
@@ -81,8 +81,9 @@ export function getDivineAttentionNarration(level: DivineAttentionLevel): string
   return DIVINE_ATTENTION_NARRATIONS[level];
 }
 
-/** 判断是否触发失败结局 */
+/** 判断是否触发失败结局（第12时段结束仍未吃果） */
 export function shouldTriggerGodArrives(state: EdenWorldState): boolean {
   if (state.isEnded) return false;
-  return state.divineAttention >= 4;
+  // 第12时段结束仍未吃果，才触发失败
+  return state.timeSlot >= 12 && !state.worldActions.hasEatenFruit;
 }

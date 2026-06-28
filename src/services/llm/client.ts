@@ -38,13 +38,21 @@ export type { ChatMessage, LLMChatRequest, LLMChatResponse, LLMProvider, Fallbac
  */
 export async function callLLM(
   messages: ChatMessage[],
-  options?: { temperature?: number; maxTokens?: number },
+  options?: { temperature?: number; maxTokens?: number; fallbackToMock?: boolean },
 ): Promise<LLMCallResult> {
   const provider = resolveProvider();
   const config = resolveProviderConfig(provider);
 
   // ---- Provider 配置缺失 → fallback 到 mock ----
   if (!config && provider !== "mock") {
+    if (options?.fallbackToMock === false) {
+      return {
+        ok: false,
+        error: "provider_config_missing",
+        usedFallback: true,
+        fallbackReason: "provider_config_missing" as FallbackReasonCode,
+      };
+    }
     const mockResult = await callMockProvider(messages);
     return {
       ...mockResult,
@@ -73,6 +81,15 @@ export async function callLLM(
         result.error === "provider_timeout"
           ? "provider_timeout"
           : "provider_request_failed";
+
+      if (options?.fallbackToMock === false) {
+        return {
+          ok: false,
+          error: fallbackReason,
+          usedFallback: true,
+          fallbackReason,
+        };
+      }
 
       const mockResult = await callMockProvider(messages);
       return {

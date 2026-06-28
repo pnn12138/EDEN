@@ -74,9 +74,9 @@ export const EDEN_LOCATIONS: Record<EdenLocationId, EdenLocation> = {
       "月光落在水面上，碎成无数银色的光点。水流的声音在夜里更清晰，像是河在独自说话。水边的草沾着夜露，凉意更浓。",
     connections: ["central_meadow", "naming_stone_bank"],
     defaultNpcs: [],
-    // 天使只在夜晚出现在伊甸之河附近
-    dayNpcs: [],
-    nightNpcs: ["gabriel", "raphael", "uriel", "dove"],
+    // 伊甸之河不再三天使同屏：白天加百列，夜晚拉斐尔
+    dayNpcs: ["gabriel"],
+    nightNpcs: ["raphael"],
     riskLevel: "low",
   },
   adam_garden_work: {
@@ -130,9 +130,9 @@ export const EDEN_LOCATIONS: Record<EdenLocationId, EdenLocation> = {
       "夜里的东园幽径，小道在月光下泛着苍白的光。基路伯的影子在远处移动，比白天更近。狐狸在树影里停下，望着你。这里的空气比白天更冷，像是边界本身在呼吸。",
     connections: ["tree_court", "naming_stone_bank"],
     defaultNpcs: ["watching_angel"],
-    // 目标分布：cherubim + fox（白天/夜晚相同）
+    // 东园幽径：基路伯白天守路，乌列尔夜晚照见幽径，狐狸常驻
     dayNpcs: ["cherubim", "fox"],
-    nightNpcs: ["cherubim", "fox"],
+    nightNpcs: ["uriel", "fox"],
     riskLevel: "medium",
   },
   naming_stone_bank: {
@@ -142,15 +142,15 @@ export const EDEN_LOCATIONS: Record<EdenLocationId, EdenLocation> = {
     enterNarration:
       "你来到园子下方中央的河岸。主河离开园子后在这里分成多道水流，向四方流去。水声比上游更大，空气中弥漫着湿润的泥土气息。水流外泄，河道延展，这里是园子的下游尽头，再往下就是园外的世界。",
     enterNarrationNight:
-      "夜晚的四河分流，水声在月光下显得更空旷。米迦勒站在河岸，望着分流的水流。鸽子停在低枝上，安静得像一块石头。每一道水流都像是一个选择，一旦流出就不回头。",
+      "夜晚的四河分流，水声在月光下显得更空旷。米迦勒站在河岸，望着分流的水流。每一道水流都像是一个选择，一旦流出就不回头。",
     observeText:
       "河道在这里展开，水流分成数支，各自流向远方。水声隆隆，带着泥土和远方的气息。从分叉的水道望出去，能隐约感到园外世界的辽阔，但那是被守住的地方，不是蛇该去的方向。这里离园子中央已经有些距离，是园中较安静的一角。",
     observeTextNight:
-      "月光落在分流的河面上，每道水流都闪着银光。米迦勒站在岸边，影子被拉得很长。鸽子在枝头一动不动。这里的安静，像是在等待什么不可逆的选择。",
+      "月光落在分流的河面上，每道水流都闪着银光。米迦勒站在岸边，影子被拉得很长。这里的安静，像是在等待什么不可逆的选择。",
     connections: ["central_meadow", "four_river_source", "east_garden_path"],
     defaultNpcs: [],
-    dayNpcs: ["michael", "dove"],
-    nightNpcs: ["michael", "dove"],
+    dayNpcs: ["michael"],
+    nightNpcs: ["michael"],
     riskLevel: "low",
   },
 };

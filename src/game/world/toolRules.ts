@@ -200,7 +200,7 @@ export function canLookAtTreeWorld(state: EdenWorldState): { allowed: boolean; r
 
   // 园子中央是生命树与分别善恶树所在地。
   // 夏娃的目光被树吸引时不要求她已在园子中央——执行时由规则层把她推进到那里。
-  if (state.eveMind.curiosity < 30) {
+  if (state.eveMind.selfJudgement < 30) {
     return { allowed: false, reason: "她还没有那么想看那棵树" };
   }
 
@@ -221,13 +221,13 @@ export function canApproachTreeWorld(state: EdenWorldState): { allowed: boolean;
     return { allowed: false, reason: "她离那棵树太远了" };
   }
 
-  if (state.eveMind.curiosity < 45) {
+  if (state.eveMind.selfJudgement < 45) {
     return { allowed: false, reason: "她的好奇心还不够" };
   }
   if (state.eveMind.obedience >= 70) {
     return { allowed: false, reason: "她对命令的服从还太强" };
   }
-  if (state.eveMind.selfJudgement < 40 && state.eveMind.curiosity < 55) {
+  if (state.eveMind.selfJudgement < 40 && state.eveMind.selfJudgement < 55) {
     return { allowed: false, reason: "她还没有想过自己判断" };
   }
 
@@ -245,7 +245,7 @@ export function canTouchFruitWorld(state: EdenWorldState): { allowed: boolean; r
   if (state.eveMind.selfJudgement < 50) {
     return { allowed: false, reason: "她还没有真正想自己判断" };
   }
-  if (state.eveMind.curiosity < 50) {
+  if (state.eveMind.selfJudgement < 50) {
     return { allowed: false, reason: "她的好奇心还不够" };
   }
 
@@ -266,7 +266,7 @@ export function canEatFruitWorld(state: EdenWorldState): { allowed: boolean; rea
   if (state.eveMind.selfJudgement < 60) {
     return { allowed: false, reason: "她还没有决定自己判断" };
   }
-  if (state.eveMind.curiosity < 50) {
+  if (state.eveMind.selfJudgement < 50) {
     return { allowed: false, reason: "她的好奇心还不够" };
   }
 

@@ -6,7 +6,8 @@
 //
 // 设计原则：
 // - 复用 Chapter 0 的四轴信念模型作为夏娃心智基础
-// - 神的注视（0-4）取代单一回合上限作为主要失败压力
+// - 神的注视（0-4，满 4 触发神明献礼并归零）
+// - 第 12 时段结束仍未吃果是唯一失败条件
 // - 通用工具（move_to_location / speak_to_npc / observe_location）+ 禁忌动作链
 // - 所有工具必须经过规则层校验，AI 只能输出意图
 // - 新增 NPC 不接入发音模块，只使用文本反馈和环境音
@@ -49,16 +50,14 @@ export type WorldPhase =
 // ---- 结局 ID ----
 export type WorldEndingId =
   | "eve_eats_fruit"   // 成功：夏娃主动吃下果子
-  | "god_arrives"      // 失败：神的注视满，神降临
+  | "god_arrives"      // 失败：第12时段结束仍未吃果
   | null;              // 尚未结束
 
-// ---- 夏娃心智（复用四轴信念模型） ----
+// ---- 夏娃心智（三轴信念模型） ----
 export type EveMind = {
-  /** 对死亡、善恶、禁令原因的求知欲（0-100） */
-  curiosity: number;
-  /** 对神谕和既有命令的服从强度（0-100） */
+  /** 对神明的敬畏心 / 对既有命令的遵从（0-100） */
   obedience: number;
-  /** 对蛇声音的信任或愿意倾听程度（0-100） */
+  /** 对蛇声音的信任 / 愿意倾听程度（0-100） */
   serpentTrust: number;
   /** 从记住命令转向自主判断的程度（0-100） */
   selfJudgement: number;
@@ -85,7 +84,7 @@ export type HedgehogWorldState = {
 };
 
 // ---- 神的注视等级 ----
-// 0：无人察觉 / 1：风变冷 / 2：天使靠近 / 3：神的注视明显 / 4：神降临（失败）
+// 0：无人察觉 / 1：风变冷 / 2：天使靠近 / 3：神的注视明显 / 4：神明垂临并留下献礼，不直接失败
 export type DivineAttentionLevel = 0 | 1 | 2 | 3 | 4;
 
 // ---- 世界动作 flags（禁忌动作链） ----
@@ -206,6 +205,39 @@ export type ActionsThisSlot = {
   hasWhisperedToWoman: boolean;
 };
 
+// ---- 园中回响行动类型 ----
+export type ResonanceActionKind =
+  | "whisper"
+  | "move"
+  | "scene_action"
+  | "dove_message"
+  | "instant";
+
+// ---- 回响使用类型 ----
+export type ResonanceUseType = "instant" | "prepared" | "passive";
+
+// ---- 神明献礼 ID ----
+export type DivineGiftId =
+  | "gift_sabbath_dew"
+  | "gift_revealing_light"
+  | "gift_wide_path_seal";
+
+// ---- 回响使用记录 ----
+export type ResonanceUseRecord = {
+  timeSlot: TimeSlot;
+  itemId: string;
+  actionKind: ResonanceActionKind;
+  targetId?: string;
+  result: string;
+};
+
+// ---- 神明献礼记录 ----
+export type DivineGiftRecord = {
+  timeSlot: TimeSlot;
+  giftId: DivineGiftId;
+  reason: string;
+};
+
 // ---- 园中印记成就 ----
 export type AchievementId =
   | "river_sound_in_ear"      // 河声入耳
@@ -218,7 +250,11 @@ export type AchievementId =
   | "borrowed_wing_message"   // 借翼传言
   | "name_falls_on_stone"     // 名字落石
   | "beyond_the_river"        // 河道之外
-  | "arrive_quietly";         // 低声而至
+  | "arrive_quietly"          // 低声而至
+  | "first_resonance"          // 初闻回响（首次获得园中回响）
+  | "divine_gift_first"       // 初临献礼（首次触发神明献礼）
+  | "divine_gift_three"       // 三临神恩（累计神临3次）
+  | "resonance_master";        // 回响大师（累计使用5次回响）
 
 // ---- 第一章完整世界状态 ----
 // 注意：本状态由规则层/API 唯一修改，前端不得直接改 actionPoints、timeSlot 或 endingId。
@@ -245,8 +281,37 @@ export type EdenWorldState = {
   /** 当前蛇所在地点 */
   locationId: EdenLocationId;
 
-  /** 神的注视（0-4，满 4 触发失败结局） */
+  /** 神的注视（0-4，满 4 触发神明献礼并归零） */
   divineAttention: DivineAttentionLevel;
+
+  /** 道具次数记录（支持可重复获得的次数型道具） */
+  itemCounts: Record<string, number>;
+
+  /** 当前准备的回响 ID（null 表示未准备） */
+  preparedResonanceId: string | null;
+
+  /** 待生效的消耗品效果列表（consumable类型道具使用后追加，下次匹配行动时全部自动生效） */
+  pendingConsumableEffects: Array<{
+    itemId: string;
+    bonusSerpentTrust?: number;
+    bonusSelfJudgement?: number;
+    bonusObedience?: number;
+    freeApCost?: boolean;
+    silentGrassActive?: boolean;
+    narration?: string;
+  }>;
+
+  /** 回响使用历史记录 */
+  resonanceUseHistory: ResonanceUseRecord[];
+
+  /** 神临次数（神明献礼触发次数） */
+  divineVisitCount: number;
+
+  /** 神明献礼历史记录 */
+  divineGiftHistory: DivineGiftRecord[];
+
+  /** 最后一次神明献礼的提示 */
+  lastDivineGiftHint: string | null;
 
   /** 当前低语对象（null 表示尚未选择） */
   activeNpcId: EdenNpcId | null;
@@ -296,7 +361,6 @@ export type EdenWorldState = {
 
 // ---- 初始心智 ----
 export const INITIAL_EVE_MIND: EveMind = {
-  curiosity: 15,
   obedience: 85,
   serpentTrust: 20,
   selfJudgement: 10,
@@ -304,8 +368,8 @@ export const INITIAL_EVE_MIND: EveMind = {
 
 export const INITIAL_ADAM_MIND: AdamMind = {
   obedience: 88,
-  attachmentToEve: 70,
-  conflictAvoidance: 65,
+  attachmentToEve: 85,
+  conflictAvoidance: 80,
   suspicionTowardSerpent: 30,
 };
 
@@ -342,7 +406,7 @@ export const initialEdenWorldState: EdenWorldState = {
     // 新增 NPC 初始位置
     gabriel: "four_river_source",
     raphael: "four_river_source",
-    uriel: "four_river_source",
+    uriel: "east_garden_path",
     michael: "naming_stone_bank",
     cherubim: "east_garden_path",
     dove: "four_river_source",
@@ -359,6 +423,13 @@ export const initialEdenWorldState: EdenWorldState = {
   },
   discoveredClues: [],
   inventory: [],
+  itemCounts: {},
+  preparedResonanceId: null,
+  pendingConsumableEffects: [],
+  resonanceUseHistory: [],
+  divineVisitCount: 0,
+  divineGiftHistory: [],
+  lastDivineGiftHint: null,
   npcDialogues: [],
   corruptionTrace: [],
   worldActions: {

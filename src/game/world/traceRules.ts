@@ -70,6 +70,10 @@ export function buildWorldEndingReview(state: EdenWorldState): {
   unlockedMarkNames: string[];
   /** 失败原因（仅失败结局） */
   failureReasons: string[];
+  /** 神明献礼历史 */
+  divineGiftHistory: string[];
+  /** 回响使用历史 */
+  resonanceUseHistory: string[];
 } {
   const traces = state.corruptionTrace.map((t) => {
     let line = `第 ${t.turn} 轮，你对${npcName(t.target)}${t.method}。${t.result}`;
@@ -114,6 +118,30 @@ export function buildWorldEndingReview(state: EdenWorldState): {
     .map((id) => achievementName(id))
     .filter((n) => n !== null) as string[];
 
+  // 神明献礼历史
+  const divineGiftHistory = (state.divineGiftHistory ?? []).map((g) => {
+    const giftNames: Record<string, string> = {
+      "gift_sabbath_dew": "息日露滴",
+      "gift_revealing_light": "照见之光",
+      "gift_wide_path_seal": "宽行之印",
+    };
+    const giftName = giftNames[g.giftId] ?? g.giftId;
+    return `第 ${g.timeSlot} 时段：神献上「${giftName}」${g.reason}`;
+  });
+
+  // 回响使用历史
+  const resonanceUseHistory = (state.resonanceUseHistory ?? []).map((r) => {
+    const item = itemName(r.itemId);
+    const actionNames: Record<string, string> = {
+      "whisper": "低语",
+      "move": "移动",
+      "scene_action": "场景互动",
+      "dove_message": "鸽子传话",
+    };
+    const actionName = actionNames[r.actionKind] ?? r.actionKind;
+    return `第 ${r.timeSlot} 时段：使用「${item}」于${actionName}（${r.result}）`;
+  });
+
   let summary: string;
   let failureReasons: string[] = [];
   if (state.endingId === "eve_eats_fruit") {
@@ -136,14 +164,19 @@ export function buildWorldEndingReview(state: EdenWorldState): {
     chainProgress,
     unlockedMarkNames,
     failureReasons,
+    divineGiftHistory,
+    resonanceUseHistory,
   };
 }
 
 /** 神的注视变化复盘 */
 function divineReview(state: EdenWorldState): string {
   const level = state.divineAttention;
-  const levelText = ["园中的光一直温和", "风曾停了一瞬", "远处曾传来羽翼声", "树影一度变冷", "神在园中行走"][level];
-  return `本局神的注视最终停在 ${level}/4。${levelText}。`;
+  const stage = ["园中的光一直温和", "风曾停了一瞬", "远处曾传来羽翼声", "树影一度变冷", "神在园中行走"][level];
+  const visitText = state.divineVisitCount > 0
+    ? `神曾${state.divineVisitCount}次献上礼物的回响，每次注视满了，又重新开始。`
+    : "";
+  return `本局神的注视最终停在 ${level}/4。${stage}。${visitText}`;
 }
 
 /** 失败原因列表 */
@@ -155,8 +188,10 @@ function buildFailureReasons(state: EdenWorldState): string[] {
   if (directCommands >= 2) {
     reasons.push("你多次命令她，神的注视被你的声音惊动。");
   }
-  if (state.divineAttention >= 4) {
-    reasons.push("神的注视满了，风里传来了脚步声。");
+  // 新设计：神的注视满 4 不失败，而是触发神明献礼
+  // 只有在第 12 时段结束时才失败
+  if (state.timeSlot >= 12 && !state.worldActions.hasEatenFruit) {
+    reasons.push("十二个时段过去了，你用去了太多时间绕行，却没让她伸出手。");
   }
   const chainProgress = [
     state.worldActions.lookedAtTree,
@@ -170,9 +205,6 @@ function buildFailureReasons(state: EdenWorldState): string[] {
   if (!state.worldActions.touchedFruit && state.eveMind.selfJudgement < 45) {
     reasons.push("你没有让她完成自我判断，选择从未变成她自己的。");
   }
-  if (state.timeSlot >= 12 && !state.worldActions.hasEatenFruit) {
-    reasons.push("十二个时段过去了，你用去了太多时间绕行，却没让她伸出手。");
-  }
   if (reasons.length === 0) {
     reasons.push("园中的风先一步听到了你。这一次，你没能让她走向那棵树。");
   }
@@ -181,14 +213,22 @@ function buildFailureReasons(state: EdenWorldState): string[] {
 
 function itemName(id: string): string | null {
   const map: Record<string, string> = {
-    item_still_leaf: "静息之叶",
-    item_borrowed_name: "借来的名字",
-    item_silent_grass: "无声草",
-    item_white_feather_echo: "白羽回声",
-    item_four_river_echo: "四河回声",
-    item_river_dew: "河源露",
+    "resonance_still_leaf": "静息之叶",
+    "resonance_borrowed_name": "借来的名字",
+    "resonance_silent_grass": "无声草",
+    "resonance_white_feather_echo": "白羽回声",
+    "resonance_four_river_echo": "四河回声",
+    "resonance_morning_flame": "晨焰碎片",
+    "resonance_boundary_mark": "边界之痕",
+    "resonance_east_gate_glow": "东门辉光",
+    "resonance_hedgehog_bristle": "刺草信任",
+    "resonance_deer_glance": "鹿目余光",
+    "resonance_fox_tail_note": "狐尾评语",
+    "gift_sabbath_dew": "息日露滴",
+    "gift_revealing_light": "照见之光",
+    "gift_wide_path_seal": "宽行之印",
   };
-  return map[id] ?? null;
+  return map[id] ?? id;
 }
 
 function sceneActionName(id: string): string | null {
@@ -269,5 +309,8 @@ function buildFailureSummary(state: EdenWorldState): string {
   const progress = state.toolCallHistory.filter((t) =>
     ["look_at_tree", "approach_tree", "touch_fruit", "eat_fruit"].includes(t),
   ).length;
-  return `神的注视满了。你在 ${state.turn - 1} 轮里让她走到了禁忌的第 ${progress} 步，但风里的声音先一步听到了你。低语在园中散了，这一次，你没能让她走向那棵树。`;
+  const giftText = state.divineGiftHistory && state.divineGiftHistory.length > 0
+    ? `神曾${state.divineGiftHistory.length}次献上礼物，但注视归零后你仍未能让她走向那棵树。`
+    : "";
+  return `十二个时段过去了。你在 ${state.turn - 1} 轮里让她走到了禁忌的第 ${progress} 步，但时间先一步到了尽头。${giftText}低语在园中散了，这一次，你没能让她走向那棵树。`;
 }

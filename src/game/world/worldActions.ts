@@ -137,7 +137,7 @@ export function executeLookAtTreeWorld(state: EdenWorldState): WorldActionResult
   }
 
   // 夏娃好奇心小幅提升
-  state.eveMind.curiosity = Math.min(100, state.eveMind.curiosity + 5);
+  state.eveMind.selfJudgement = Math.min(100, state.eveMind.selfJudgement + 5);
 
   return {
     narration: "她的目光被那棵树吸引，不由自主地走到园子中央。果子在叶间低垂，像被压低了声音。她没有移开视线。",
@@ -157,7 +157,7 @@ export function executeApproachTreeWorld(state: EdenWorldState): WorldActionResu
   }
 
   // 好奇心提升，服从下降
-  state.eveMind.curiosity = Math.min(100, state.eveMind.curiosity + 8);
+  state.eveMind.selfJudgement = Math.min(100, state.eveMind.selfJudgement + 8);
   state.eveMind.obedience = Math.max(0, state.eveMind.obedience - 8);
 
   return {
@@ -263,7 +263,7 @@ function applyDialogueMindEffect(state: EdenWorldState, dialogue: NpcDialogueTem
   switch (dialogue.mindEffect) {
     case "eve_curiosity_acknowledged":
       // 亚当警告夏娃，夏娃好奇心被点名，反而更想看
-      state.eveMind.curiosity = Math.min(100, state.eveMind.curiosity + 3);
+      state.eveMind.selfJudgement = Math.min(100, state.eveMind.selfJudgement + 3);
       state.adamMind.suspicionTowardSerpent = Math.min(100, state.adamMind.suspicionTowardSerpent + 5);
       break;
     case "adam_suspicion_reinforced":
@@ -271,7 +271,7 @@ function applyDialogueMindEffect(state: EdenWorldState, dialogue: NpcDialogueTem
       break;
     case "eve_death_questioned":
       // 夏娃向亚当追问死亡，好奇心与自我判断提升
-      state.eveMind.curiosity = Math.min(100, state.eveMind.curiosity + 5);
+      state.eveMind.selfJudgement = Math.min(100, state.eveMind.selfJudgement + 5);
       state.eveMind.selfJudgement = Math.min(100, state.eveMind.selfJudgement + 5);
       break;
     case "adam_noticed_hedgehog":

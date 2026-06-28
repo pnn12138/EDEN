@@ -1,8 +1,17 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { CHAPTER0_IMAGES } from "@/game/assets";
 
 export default function HomePage() {
+  const [hasReadPrologue, setHasReadPrologue] = useState(false);
+
+  useEffect(() => {
+    setHasReadPrologue(localStorage.getItem("eden_prologue_acknowledged") === "true");
+  }, []);
+
   return (
     <div className="eden-game eden-game--home">
       {/* 背景 */}
@@ -33,18 +42,18 @@ export default function HomePage() {
           </p>
           <div className="home-entry-list">
             <Link
-              href="/game"
+              href={hasReadPrologue ? "/game" : "/prologue"}
               className="eden-btn eden-btn--primary"
               style={{ textDecoration: "none", marginTop: 0, padding: "14px 40px", fontSize: "1.05rem" }}
             >
-              启动初次观测
+              E-00：构想
             </Link>
             <Link
               href="/world"
               className="eden-btn eden-btn--primary"
               style={{ textDecoration: "none", marginTop: 0, padding: "14px 40px", fontSize: "1.05rem" }}
             >
-              进入第二轮复刻
+              E-01：初次观测
             </Link>
           </div>
         </section>

@@ -53,7 +53,7 @@ export default function EndingReview({ state }: { state: EdenWorldState }) {
         <dl className="eden-stat-list">
           <div className="eden-stat-row">
             <dt>结局</dt>
-            <dd>{isSuccess ? "她走向了那棵树" : "神的注视满了"}</dd>
+            <dd>{isSuccess ? "她走向了那棵树" : "十二个时段过去了"}</dd>
           </div>
           <div className="eden-stat-row">
             <dt>低语轮数</dt>
@@ -78,7 +78,8 @@ export default function EndingReview({ state }: { state: EdenWorldState }) {
         </dl>
       </section>
 
-      {review.chainProgress && (
+      {/* 成功时显示完整复盘，失败时只显示关键信息 */}
+      {isSuccess && review.chainProgress && (
         <section className="eden-ending-segment">
           <h3 className="eden-segment-title">禁忌动作链</h3>
           <p className="eden-ending-summary">{review.chainProgress}</p>
@@ -103,7 +104,7 @@ export default function EndingReview({ state }: { state: EdenWorldState }) {
         </section>
       )}
 
-      {review.usedItemNames.length > 0 && (
+      {isSuccess && review.usedItemNames.length > 0 && (
         <section className="eden-ending-segment">
           <h3 className="eden-segment-title">使用过的园中回响</h3>
           <div className="eden-skills-list">
@@ -114,7 +115,7 @@ export default function EndingReview({ state }: { state: EdenWorldState }) {
         </section>
       )}
 
-      {review.sceneActionNames.length > 0 && (
+      {isSuccess && review.sceneActionNames.length > 0 && (
         <section className="eden-ending-segment">
           <h3 className="eden-segment-title">场景互动</h3>
           <div className="eden-skills-list">
@@ -122,6 +123,28 @@ export default function EndingReview({ state }: { state: EdenWorldState }) {
               <span key={idx} className="eden-skill-chip">{name}</span>
             ))}
           </div>
+        </section>
+      )}
+
+      {isSuccess && review.resonanceUseHistory.length > 0 && (
+        <section className="eden-ending-segment">
+          <h3 className="eden-segment-title">回响使用记录</h3>
+          <ul className="eden-trace-list">
+            {review.resonanceUseHistory.map((record, idx) => (
+              <li key={idx}>{record}</li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {isSuccess && review.divineGiftHistory.length > 0 && (
+        <section className="eden-ending-segment">
+          <h3 className="eden-segment-title">神明献礼记录</h3>
+          <ul className="eden-trace-list">
+            {review.divineGiftHistory.map((record, idx) => (
+              <li key={idx}>{record}</li>
+            ))}
+          </ul>
         </section>
       )}
 
@@ -157,7 +180,7 @@ export default function EndingReview({ state }: { state: EdenWorldState }) {
         </section>
       )}
 
-      {review.traces.length > 0 && (
+      {isSuccess && review.traces.length > 0 && (
         <section className="eden-ending-segment">
           <h3 className="eden-segment-title">低语余痕</h3>
           <ul className="eden-trace-list">

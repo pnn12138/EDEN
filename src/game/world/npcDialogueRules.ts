@@ -61,7 +61,7 @@ function isDialogueConditionMet(state: EdenWorldState, template: NpcDialogueTemp
       // 亚当与夏娃同地点，且夏娃好奇心 >= 35
       return (
         state.npcLocations.adam === state.npcLocations.eve &&
-        state.eveMind.curiosity >= 35
+        state.eveMind.selfJudgement >= 35
       );
     case "adam_asks_angel_about_command":
       // 亚当与守望天使同地点或相邻（天使在东园幽径，邻接园中树林/四河分流），且亚当怀疑蛇 >= 45
@@ -79,7 +79,7 @@ function isDialogueConditionMet(state: EdenWorldState, template: NpcDialogueTemp
       // 夏娃与亚当同地点，且夏娃好奇心 >= 50
       return (
         state.npcLocations.eve === state.npcLocations.adam &&
-        state.eveMind.curiosity >= 50
+        state.eveMind.selfJudgement >= 50
       );
     default:
       return false;

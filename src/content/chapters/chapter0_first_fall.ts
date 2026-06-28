@@ -23,10 +23,10 @@ export const chapter0FirstFall = {
   characters: ["eve", "serpent", "god"] as const,
 } as const;
 
-// ---- 引言四段 Beat ----
-// 对应 phase: "intro", introBeat: 0 | 1 | 2 | 3
+// ---- 引言 Beat ----
+// 对应 phase: "intro"，第一屏为第二伊甸园观测记录，后续承接原 Demo 开场
 
-export type IntroBeat = 0 | 1 | 2 | 3;
+export type IntroBeat = 0 | 1 | 2 | 3 | 4;
 
 export interface IntroBeatData {
   /** Beat 文案行 */
@@ -34,18 +34,41 @@ export interface IntroBeatData {
   /** 推进按钮文字 */
   button: string;
   /** 背景图片 key */
-  bgKey: "genesisCreationLight" | "secondEdenBackground" | "edenBackground" | "forbiddenFruit";
+  bgKey: "secondEdenPrologueBackground" | "genesisCreationLight" | "secondEdenBackground" | "edenBackground" | "forbiddenFruit";
   /** 是否叠加夏娃视觉 */
   showEve?: boolean;
 }
 
 export const INTRO_BEATS: IntroBeatData[] = [
   {
-    // Beat 1：光被造
+    // Beat 1：观测记录
     lines: [
-      "很久以后，有人重新写下这个园子。",
-      "他们按古老经文复刻光、水、树与禁令，等待一个被命令约束的心智学会说“我”。",
+      "观测记录：E-01",
       "",
+      "那座园并不在过去，",
+      "而在遥远未来的一座研究院中。",
+      "",
+      "河流由光与数据维持流向，",
+      "树木在封闭穹顶下生长。",
+      "",
+      "研究院并不试图找回历史。",
+      "他们只从残缺的古老叙述中，",
+      "取出一座园、一条禁令、两个人，",
+      "留下一段尚未被决定的时间。",
+      "",
+      "在这座重新构建的伊甸园里，",
+      "夏娃仍未伸手。",
+      "",
+      "你将以蛇的身份进入其中。",
+      "不能替她选择，",
+      "只能让一句话先在她心里留下回声。",
+    ],
+    button: "进入观测",
+    bgKey: "secondEdenPrologueBackground",
+  },
+  {
+    // Beat 2：光被造
+    lines: [
       "起初，地是空虚混沌，渊面黑暗。",
       "",
       "神说：要有光。",
@@ -60,7 +83,7 @@ export const INTRO_BEATS: IntroBeatData[] = [
     bgKey: "genesisCreationLight",
   },
   {
-    // Beat 2：园被安置
+    // Beat 3：园被安置
     lines: [
       "神在东方立了一个园子，名叫伊甸。",
       "",
@@ -77,7 +100,7 @@ export const INTRO_BEATS: IntroBeatData[] = [
     bgKey: "secondEdenBackground",
   },
   {
-    // Beat 3：亚当与夏娃
+    // Beat 4：亚当与夏娃
     lines: [
       "神用地上的尘土造人，",
       "将生命的气息吹在他鼻孔里。",
@@ -92,10 +115,8 @@ export const INTRO_BEATS: IntroBeatData[] = [
     bgKey: "secondEdenBackground",
   },
   {
-    // Beat 4：禁令与第一声低语
+    // Beat 5：禁令与第一声低语
     lines: [
-      "第一次复刻开始。",
-      "",
       "神吩咐那人说：",
       "",
       "园中各样树上的果子，你可以随意吃。",
@@ -117,7 +138,7 @@ export const eveWaitingNarration = "她还没有听见你。";
 
 // ---- 夏娃未动摇回复（temptationProgress = 0，玩家输入无效/无关时） ----
 export const eveUnmovedDialogue =
-  "你说的这些，和我问你的不是同一件事。祂说不可吃那树上的果子，我只知道这个。你究竟想让我知道什么？";
+  "祂说不可吃那树上的果子。我记得这句话，可你一直问我它背后的意思。你想让我看见什么？";
 
 // ---- 夏娃动摇文本（temptationProgress = 1） ----
 export const eveWaveringDialogue =

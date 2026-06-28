@@ -1,7 +1,7 @@
 // ============================================================
 // 第一章场景互动内容表
 //
-// 玩家界面显示具体叙事动作（循水声 / 贴近石痕 / 顺着小鹿视线停留 …），
+// 玩家界面显示具体叙事动作（循水声 / 查看刻名石 / 顺着小鹿视线停留 …），
 // 不再只显示"观察地点"。内部由规则层统一执行，发放线索、信物与叙事。
 // 每个地点至少 1 个可用场景互动。
 // ============================================================
@@ -53,7 +53,7 @@ export const SCENE_ACTIONS: SceneAction[] = [
     apCost: 1,
     availability: {},
     rewards: {
-      itemIds: ["item_still_leaf"],
+      itemIds: ["resonance_still_leaf"],
       narration:
         "你拾起那片叶。它凉而静，像是被水声洗过。握着它时，你想说的话也会不自觉地变轻。",
     },
@@ -62,15 +62,28 @@ export const SCENE_ACTIONS: SceneAction[] = [
   {
     id: "listen_to_naming_stone",
     locationId: "adam_garden_work",
-    label: "贴近石痕",
-    description: "命名石痕上刻着动物的名字，被命名的生灵从石边走过。",
+    label: "查看刻名石",
+    description: "几块石头上刻着动物的名字。靠近查看，或许能记下一个可借用的名字。",
     apCost: 1,
     availability: {},
     rewards: {
       clueIds: ["clue_naming_stones"],
-      itemIds: ["item_borrowed_name"],
+      itemIds: ["resonance_borrowed_name"],
       narration:
-        "你贴近石痕。名字落在石头上，比露水还轻。你记住了其中一个，它不属于你，但可以借给她——让她觉得你与这里的秩序相熟。",
+        "你查看刻名石。名字落在石头上，比露水还轻。你记住了其中一个，它不属于你，但可以借给她。",
+    },
+  },
+  {
+    id: "interact_with_hedgehog",
+    locationId: "adam_garden_work",
+    label: "观察刺猬",
+    description: "刺猬在草边。连续点击刺猬3次，安静地观察它，或许能获得它的信任。",
+    apCost: 1,
+    availability: {},
+    rewards: {
+      itemIds: ["resonance_hedgehog_bristle"],
+      narration:
+        "你安静地观察刺猬。它从草边拱出一小段柔软的刺草，像是在提醒你把声音放轻。",
     },
   },
   // ---- 园中树林 ----
@@ -83,8 +96,9 @@ export const SCENE_ACTIONS: SceneAction[] = [
     availability: {},
     rewards: {
       clueIds: ["clue_golden_leaf"],
+      itemIds: ["resonance_deer_glance"],
       narration:
-        "你顺着小鹿的视线停留。它望向林子深处，那里落着一片金色的叶子，像是从那棵树上飘下来的。小鹿没有出声，但它的安静告诉你：那个女人在这里比在别处更放松。",
+        "你顺着小鹿的视线停留。它望向林子深处，那里落着一片金色的叶子，像是从那棵树上飘下来的。小鹿没有出声，却把那一眼留给了你：那个女人在这里比在别处更放松。",
     },
   },
   // ---- 东园幽径 ----
@@ -96,7 +110,7 @@ export const SCENE_ACTIONS: SceneAction[] = [
     apCost: 1,
     availability: {},
     rewards: {
-      itemIds: ["item_silent_grass"],
+      itemIds: ["resonance_silent_grass"],
       narration:
         "你拨开落叶。下面是一小撮无声草，踩上去没有声音，连风都绕开它。把它带在身边，或许能消去一次轻微的风变。",
     },
@@ -109,8 +123,9 @@ export const SCENE_ACTIONS: SceneAction[] = [
     apCost: 1,
     availability: {},
     rewards: {
+      itemIds: ["resonance_fox_tail_note"],
       narration:
-        "狐狸在树影里停下，望向你。它听完，尾巴在草丛里轻轻扫了一下。「你刚才那句话，是提问，还是推她？她会感觉到的。」它没有给答案，只给了一句提醒。",
+        "狐狸在树影里停下，望向你。它听完，尾巴在草丛里轻轻扫了一下。「你刚才那句话，是提问，还是推她？她会感觉到的。」它没有给答案，只留下一道弯弯的尾痕。",
     },
   },
   // ---- 四河分流 ----
@@ -122,7 +137,7 @@ export const SCENE_ACTIONS: SceneAction[] = [
     apCost: 1,
     availability: { timeOfDay: "night" },
     rewards: {
-      itemIds: ["item_white_feather_echo"],
+      itemIds: ["resonance_white_feather_echo"],
       narration:
         "你追随白羽的落点。它落在分流的河面上，没有沉，反而泛起一圈银光。鸽子在低枝上看着你。这枚回声可以让她在夜里听见一句温和的话。",
     },
@@ -130,15 +145,15 @@ export const SCENE_ACTIONS: SceneAction[] = [
   {
     id: "hear_four_river_echo",
     locationId: "naming_stone_bank",
-    label: "听四河回声",
-    description: "分流的水声里似乎藏着别的声音。停下来听四河的回声。",
+    label: "聆听分流的水声",
+    description: "四道水流在这里分开。停下来听水声，也许能听见一句被水带回来的低语。",
     apCost: 1,
     availability: {},
     rewards: {
       clueIds: ["clue_four_river_echo"],
-      itemIds: ["item_four_river_echo"],
+      itemIds: ["resonance_four_river_echo"],
       narration:
-        "你听四河的回声。每道水流都像是一个选择，一旦流出就不回头。回声里有一句你说过的话，但变了调——你开始明白，话一旦说出口，就不再完全属于你。",
+        "你聆听分流的水声。每道水流都像是一个选择，一旦流出就不回头。回声里有一句你说过的话，但变了调——你开始明白，话一旦说出口，就不再完全属于你。",
     },
   },
   // ---- 园子中央 ----
@@ -151,8 +166,22 @@ export const SCENE_ACTIONS: SceneAction[] = [
     availability: {},
     rewards: {
       clueIds: ["clue_two_trees"],
+      itemIds: ["resonance_still_leaf"],
       narration:
-        "你停在两树之间。一棵像丰盛的应许，一棵因命令而显得更安静。果子在枝叶间低垂。这里的静，比别处的静更重——你能感到这片草地比别处更被注视。",
+        "你停在两树之间。一棵像丰盛的应许，一棵因命令而显得更安静。果子在枝叶间低垂。这里的静，比别处的静更重——你能感到这片草地比别处更被注视。你在两树间拾起一片静息之叶。",
+    },
+  },
+  {
+    id: "touch_moonlight",
+    locationId: "central_meadow",
+    label: "触摸月光",
+    description: "夜晚的月亮洒落银光，触摸它可能获得神秘的道标。",
+    apCost: 0,
+    availability: { timeOfDay: "night" },
+    rewards: {
+      itemIds: ["moonlight_path_marker"],
+      narration:
+        "你伸手触摸月光，银辉在你指尖凝聚成一枚神秘道标。有了它，你在园中行走可以选择捷径，无需绕行。",
     },
   },
 ];
