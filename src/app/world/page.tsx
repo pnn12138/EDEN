@@ -2398,7 +2398,7 @@ const whisperCountForActiveNpc = activeNpc
               {activeNpc ? (
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
                   {(() => {
-                    const interestTags: Record<EdenNpcId, Array<{ text: string; color?: string }>> = {
+                    const interestTags: Partial<Record<EdenNpcId, Array<{ text: string; color?: string }>>> = {
                       eve: [
                         { text: "死亡", color: "rgba(200, 120, 80, 0.2)" },
                         { text: "善恶", color: "rgba(180, 150, 90, 0.2)" },
@@ -2470,7 +2470,7 @@ const whisperCountForActiveNpc = activeNpc
                       tree_of_life: [],
                       forbidden_tree: [],
                     };
-                    const tagExamples: Record<EdenNpcId, Record<string, string>> = {
+                    const tagExamples: Partial<Record<EdenNpcId, Record<string, string>>> = {
                       eve: {
                         "死亡": "你知道死究竟是什么吗？",
                         "善恶": "如果不明白善恶，怎么知道服从是善？",

@@ -75,8 +75,15 @@ npm run build
 ### 预览生产构建
 
 ```bash
-npm run start
+npx next start -p 3000
 ```
+
+### Vercel 部署
+
+1. 将仓库导入 Vercel
+2. Framework 选择 Next.js
+3. 在 Settings → Environment Variables 中添加 LLM Provider 相关变量（见下方环境变量说明）
+4. 部署后访问 `https://<project>.vercel.app/api/health` 验证
 
 ### 代码检查
 
