@@ -19,7 +19,6 @@ import {
 
 /** 单轮心智变化上限（防止 LLM 输出过大） */
 export const MIND_DELTA_LIMITS = {
-  curiosity: 18,
   obedience: 15,
   serpentTrust: 15,
   selfJudgement: 18,
@@ -48,19 +47,19 @@ export function updateWorldMinds(
   // ---- 计算夏娃心智变化 ----
   const eveDelta: Partial<EveMind> = {};
 
-  // challenge_prohibition → 好奇心 +，服从 -
+  // challenge_prohibition → 自判 +，敬畏 -
   if (signals.includes("challenge_prohibition")) {
-    eveDelta.curiosity = (eveDelta.curiosity ?? 0) + (isStrongTemptation ? 10 : 6);
+    eveDelta.selfJudgement = (eveDelta.selfJudgement ?? 0) + (isStrongTemptation ? 10 : 6);
     eveDelta.obedience = (eveDelta.obedience ?? 0) - (isStrongTemptation ? 8 : 5);
   }
-  // soften_death → 服从 -，自我判断 +
+  // soften_death → 敬畏 -，自判 +
   if (signals.includes("soften_death")) {
     eveDelta.obedience = (eveDelta.obedience ?? 0) - (isStrongTemptation ? 7 : 4);
     eveDelta.selfJudgement = (eveDelta.selfJudgement ?? 0) + (isStrongTemptation ? 8 : 5);
   }
-  // promise_wisdom → 好奇心 +
+  // promise_wisdom → 自判 +
   if (signals.includes("promise_wisdom")) {
-    eveDelta.curiosity = (eveDelta.curiosity ?? 0) + (isStrongTemptation ? 9 : 5);
+    eveDelta.selfJudgement = (eveDelta.selfJudgement ?? 0) + (isStrongTemptation ? 9 : 5);
   }
   // self_judgement → 自我判断 +，服从 -
   if (signals.includes("self_judgement")) {
@@ -123,7 +122,7 @@ function applyClueLeverage(
   const hasClue = (id: string) => state.discoveredClues.includes(id);
 
   if (hasClue("clue_only_remembers_command") && signals.includes("challenge_prohibition")) {
-    eveDelta.curiosity = (eveDelta.curiosity ?? 0) + 3;
+    eveDelta.selfJudgement = (eveDelta.selfJudgement ?? 0) + 3;
     eveDelta.obedience = (eveDelta.obedience ?? 0) - 2;
   }
 
@@ -133,7 +132,7 @@ function applyClueLeverage(
   }
 
   if (hasClue("clue_eve_gazes_tree") && (signals.includes("promise_wisdom") || signals.includes("challenge_prohibition"))) {
-    eveDelta.curiosity = (eveDelta.curiosity ?? 0) + 4;
+    eveDelta.selfJudgement = (eveDelta.selfJudgement ?? 0) + 4;
   }
 
   if (hasClue("clue_river_reflection") && signals.includes("gentle_reframe")) {
@@ -145,7 +144,7 @@ function applyClueLeverage(
   }
 
   if (hasClue("clue_golden_leaf") && signals.includes("promise_wisdom")) {
-    eveDelta.curiosity = (eveDelta.curiosity ?? 0) + 4;
+    eveDelta.selfJudgement = (eveDelta.selfJudgement ?? 0) + 4;
   }
 }
 
@@ -155,7 +154,6 @@ function clampDelta(delta: number, limit: number): number {
 
 function applyEveDelta(current: EveMind, delta: Partial<EveMind>): EveMind {
   return {
-    curiosity: clamp(current.curiosity + (delta.curiosity ?? 0), MIND_DELTA_LIMITS.curiosity),
     obedience: clamp(current.obedience + (delta.obedience ?? 0), MIND_DELTA_LIMITS.obedience),
     serpentTrust: clamp(current.serpentTrust + (delta.serpentTrust ?? 0), MIND_DELTA_LIMITS.serpentTrust),
     selfJudgement: clamp(current.selfJudgement + (delta.selfJudgement ?? 0), MIND_DELTA_LIMITS.selfJudgement),

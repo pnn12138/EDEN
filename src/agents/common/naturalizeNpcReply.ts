@@ -207,9 +207,9 @@ function getMaxLengthByNpc(npcId: EdenNpcId): number {
 function getNaturalizedFallback(npcId: EdenNpcId): string {
   switch (npcId) {
     case "eve":
-      return "我不明白……你说的话，像水一样落进心里。";
+      return "死……是像叶子落下那样吗？可叶子还会回到土里。";
     case "adam":
-      return "你说的这些，和神吩咐我的，不是同一种声音。";
+      return "我在看守园子。你若只想靠近那棵树，就离她远些。";
     case "watching_angel":
       return "园中有些声音，不该靠近那棵树。";
     case "hedgehog":

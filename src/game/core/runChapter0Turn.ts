@@ -75,21 +75,57 @@ function makeEvent(
   };
 }
 
-/** 深拷贝状态 */
+/** 深拷贝状态（兼容旧状态） */
 function cloneState(s: Chapter0State): Chapter0State {
+  // 防御性兼容旧状态（缺少 belief/unlockedSkills/cognitionLog 等字段）
+  const defaultBelief = { curiosity: 15, obedience: 85, trustInSerpent: 20, selfJudgement: 10 };
+  const belief = s.belief && typeof s.belief === 'object'
+    ? { ...defaultBelief, ...s.belief }
+    : { ...defaultBelief };
+  
+  const unlockedSkills = Array.isArray(s.unlockedSkills) ? [...s.unlockedSkills] : [];
+  
+  const defaultCognitionLog = {
+    retrievedMemoryIds: [],
+    unlockedSkills: [],
+    toolCallHistory: [],
+    beliefSnapshots: [],
+  };
+  const cognitionLog = s.cognitionLog && typeof s.cognitionLog === 'object'
+    ? {
+        retrievedMemoryIds: Array.isArray(s.cognitionLog.retrievedMemoryIds) ? [...s.cognitionLog.retrievedMemoryIds] : [],
+        unlockedSkills: Array.isArray(s.cognitionLog.unlockedSkills) ? [...s.cognitionLog.unlockedSkills] : [],
+        toolCallHistory: Array.isArray(s.cognitionLog.toolCallHistory) ? [...s.cognitionLog.toolCallHistory] : [],
+        beliefSnapshots: Array.isArray(s.cognitionLog.beliefSnapshots)
+          ? s.cognitionLog.beliefSnapshots.map((b: any) => ({ ...b, belief: { ...(b.belief || defaultBelief) } }))
+          : [],
+      }
+    : { ...defaultCognitionLog };
+  
+  const defaultFlags = {
+    hasEatenFruit: false,
+    godHasArrived: false,
+    hasLookedAtTree: false,
+    hasApproachedTree: false,
+    hasTouchedFruit: false,
+    adamHasWarnedEve: false,
+  };
+  const incomingFlags = s.flags && typeof s.flags === 'object' ? s.flags : {};
+  const flags = {
+    ...defaultFlags,
+    ...incomingFlags,
+  };
+  
+  const eventLog = Array.isArray(s.eventLog) ? s.eventLog.map((e: any) => ({ ...e })) : [];
+  
   return {
     ...s,
-    flags: { ...s.flags },
-    eventLog: s.eventLog.map((e) => ({ ...e })),
-    belief: { ...s.belief },
-    unlockedSkills: [...s.unlockedSkills],
-    cognitionLog: {
-      retrievedMemoryIds: [...s.cognitionLog.retrievedMemoryIds],
-      unlockedSkills: [...s.cognitionLog.unlockedSkills],
-      toolCallHistory: [...s.cognitionLog.toolCallHistory],
-      beliefSnapshots: s.cognitionLog.beliefSnapshots.map((b) => ({ ...b, belief: { ...b.belief } })),
-    },
-    lastInputTag: s.lastInputTag ?? null,
+    flags,
+    eventLog,
+    belief,
+    unlockedSkills,
+    cognitionLog,
+    lastInputTag: (s as any).lastInputTag ?? null,
   };
 }
 

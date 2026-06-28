@@ -3,7 +3,7 @@
 //
 // 职责：
 // 1. 构建 prompt → 调用 LLM → 清理输出
-// 2. LLM 失败时 fallback 到本地文案池
+// 2. LLM 失败时返回失败原因，由调用方显示超时/不可用提示
 // 3. 不直接修改游戏状态（神的注视由规则层在调用方应用）
 // 4. 不接入 TTS
 //
@@ -41,10 +41,10 @@ export type AngelAgentResult = {
 /**
  * 运行守望天使 Agent。
  *
- * 完整 fallback 链：
- * 1. 环境变量缺失 → 本地文案 (provider_config_missing)
- * 2. LLM 超时/报错 → 本地文案 (provider_timeout / provider_request_failed)
- * 3. 空输出 → 本地文案 (llm_data_missing)
+ * 失败链：
+ * 1. 环境变量缺失 → provider_config_missing
+ * 2. LLM 超时/报错 → provider_timeout / provider_request_failed
+ * 3. 空输出 → llm_data_missing
  */
 export async function runAngelAgent(req: AngelAgentRequest): Promise<AngelAgentResult> {
   const { playerInput, state, conversationHistory } = req;
@@ -68,7 +68,7 @@ export async function runAngelAgent(req: AngelAgentRequest): Promise<AngelAgentR
   }
 
   // ---- 2. 调用 LLM ----
-  const result = await callLLM(messages, { temperature: 0.6, maxTokens: 100 });
+  const result = await callLLM(messages, { temperature: 0.6, maxTokens: 100, fallbackToMock: false });
 
   // ---- 3. fallback 处理 ----
   if (!result.ok || !result.data) {

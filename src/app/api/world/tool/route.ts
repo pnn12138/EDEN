@@ -40,9 +40,20 @@ import {
   advanceToNextSlot,
 } from "@/game/world/actionPointRules";
 import { checkAndUnlockAchievements } from "@/game/world/achievementRules";
+import { triggerDivineGiftIfFull } from "@/game/world/divineGiftRules";
+import {
+  prepareResonance,
+  cancelPreparedResonance,
+  executeInstantResonance,
+  executeConsumableResonance,
+  applyPreparedResonanceToAction,
+  consumePreparedResonanceAfterAction,
+  applyPendingConsumableToMove,
+} from "@/game/world/resonanceRules";
+import { getItemById } from "@/content/world/items";
 
 type ToolRequestBody = {
-  tool: WorldToolName | "scene_action" | "end_slot";
+  tool: WorldToolName | "scene_action" | "end_slot" | "prepare_resonance" | "cancel_prepared_resonance" | "use_resonance";
   state: EdenWorldState;
   args: {
     locationId?: EdenLocationId;
@@ -52,6 +63,12 @@ type ToolRequestBody = {
     focus?: string;
     /** 场景互动 ID */
     sceneActionId?: string;
+    /** 回响 ID（用于准备/使用） */
+    itemId?: string;
+    /** 渐进点击序号（1-based），用于多击场景互动 */
+    clickIndex?: number;
+    /** 渐进点击所需总次数 */
+    requiredClicks?: number;
   };
 };
 
@@ -65,6 +82,15 @@ type ToolResponseBody = {
   /** 新解锁印记 */
   unlockedAchievements?: string[];
   reason?: string;
+  /** 回响生效叙事 */
+  resonanceNarration?: string;
+  /** 神明献礼（神的注视满 4 时触发） */
+  divineGift?: {
+    giftId: string;
+    giftName: string;
+    narration: string;
+    hint?: string;
+  };
 };
 
 function cloneWorldState(s: EdenWorldState): EdenWorldState {
@@ -85,16 +111,24 @@ function cloneWorldState(s: EdenWorldState): EdenWorldState {
     worldActions: { ...s.worldActions },
     toolCallHistory: [...s.toolCallHistory],
     actionsThisSlot: {
-      whisperedNpcIds: [...s.actionsThisSlot.whisperedNpcIds],
-      sceneActionIds: [...s.actionsThisSlot.sceneActionIds],
-      usedItemIds: [...s.actionsThisSlot.usedItemIds],
-      hasWhisperedToWoman: s.actionsThisSlot.hasWhisperedToWoman,
+      whisperedNpcIds: [...(s.actionsThisSlot?.whisperedNpcIds ?? [])],
+      sceneActionIds: [...(s.actionsThisSlot?.sceneActionIds ?? [])],
+      usedItemIds: [...(s.actionsThisSlot?.usedItemIds ?? [])],
+      hasWhisperedToWoman: s.actionsThisSlot?.hasWhisperedToWoman ?? false,
     },
-    unlockedAchievementIds: [...s.unlockedAchievementIds],
-    usedItemIds: [...s.usedItemIds],
-    sceneActionIds: [...s.sceneActionIds],
+    unlockedAchievementIds: [...(s.unlockedAchievementIds ?? [])],
+    usedItemIds: [...(s.usedItemIds ?? [])],
+    sceneActionIds: [...(s.sceneActionIds ?? [])],
     lastInputTag: s.lastInputTag ?? null,
-    calmWhisperStreak: s.calmWhisperStreak,
+    calmWhisperStreak: s.calmWhisperStreak ?? 0,
+    // Chapter 1 新增字段（兼容旧状态）
+    itemCounts: { ...(s.itemCounts ?? {}) },
+    preparedResonanceId: s.preparedResonanceId ?? null,
+    pendingConsumableEffects: (s.pendingConsumableEffects ?? []).map((e) => ({ ...e })),
+    resonanceUseHistory: (s.resonanceUseHistory ?? []).map((r) => ({ ...r })),
+    divineVisitCount: s.divineVisitCount ?? 0,
+    divineGiftHistory: (s.divineGiftHistory ?? []).map((r) => ({ ...r })),
+    lastDivineGiftHint: s.lastDivineGiftHint ?? null,
   };
 }
 
@@ -106,6 +140,10 @@ function buildResponse(
 ): ToolResponseBody {
   // 场景互动/移动可能解锁印记
   checkAndUnlockAchievements(state);
+
+  // 检查神的注视是否满 4，若满则触发神明献礼（不触发失败）
+  const divineGift = triggerDivineGiftIfFull(state);
+
   const slotResult = maybeAdvanceSlotAfterAction(state);
   return {
     ok: true,
@@ -116,6 +154,7 @@ function buildResponse(
     unlockedAchievements: state.unlockedAchievementIds.length > 0
       ? state.unlockedAchievementIds.map((id) => id)
       : undefined,
+    divineGift: divineGift ?? undefined,
   };
 }
 
@@ -139,6 +178,9 @@ export async function POST(request: NextRequest) {
     // end_slot：主动结束时段（玩家点击"进入下一轮"）
     // ============================================================
     if (tool === "end_slot") {
+      // 取消准备的回响（不消耗道具）
+      state.preparedResonanceId = null;
+
       // 直接推进时段（消耗剩余 AP 并推进到下一时段）
       consumeActionPoints(state, state.actionPoints);
       const slotResult = advanceToNextSlot(state);
@@ -167,7 +209,53 @@ export async function POST(request: NextRequest) {
     }
 
     // ============================================================
+    // 回响准备 / 取消准备 / 即时使用（不消耗 AP）
+    // ============================================================
+    if (tool === "prepare_resonance") {
+      const result = prepareResonance(state, args.itemId!);
+      return NextResponse.json({
+        ok: result.allowed,
+        state,
+        narration: result.allowed ? "这段回响已被你握住，等待下一次合适的行动。" : null,
+        reason: result.reason,
+      } satisfies ToolResponseBody);
+    }
+
+    if (tool === "cancel_prepared_resonance") {
+      cancelPreparedResonance(state);
+      return NextResponse.json({
+        ok: true,
+        state,
+        narration: "你松开了这段回响。它仍留在园中回响里。",
+      } satisfies ToolResponseBody);
+    }
+
+    if (tool === "use_resonance") {
+      const item = getItemById(args.itemId!);
+      if (!item) {
+        return NextResponse.json({ ok: false, state, narration: null, reason: "未知回响" } satisfies ToolResponseBody);
+      }
+      if (item.kind === "consumable") {
+        const result = executeConsumableResonance(state, args.itemId!);
+        return NextResponse.json({
+          ok: result.allowed,
+          state,
+          narration: result.narration ?? null,
+          reason: result.reason,
+        } satisfies ToolResponseBody);
+      }
+      const result = executeInstantResonance(state, args.itemId!);
+      return NextResponse.json({
+        ok: result.allowed,
+        state,
+        narration: result.narration ?? null,
+        reason: result.reason,
+      } satisfies ToolResponseBody);
+    }
+
+    // ============================================================
     // scene_action：场景互动（循水声 / 贴近石痕 …）
+    // 支持渐进式点击：每次点击消耗 1 AP，达到 requiredClicks 后才发放奖励
     // ============================================================
     if (tool === "scene_action") {
       const actionId = args.sceneActionId;
@@ -192,7 +280,7 @@ export async function POST(request: NextRequest) {
       if (!available) {
         return NextResponse.json({ ok: false, state, narration: null, reason: "此刻无法进行这个动作" } satisfies ToolResponseBody);
       }
-      // 同一时段同一场景动作不重复
+      // 同一时段同一场景动作不重复（已完成的不再接受点击）
       if (state.actionsThisSlot.sceneActionIds.includes(actionId)) {
         return NextResponse.json({ ok: false, state, narration: null, reason: "这一时段你已经做过这件事了" } satisfies ToolResponseBody);
       }
@@ -206,8 +294,31 @@ export async function POST(request: NextRequest) {
         } satisfies ToolResponseBody);
       }
 
-      // 执行：发放线索与信物
-      consumeActionPoints(state, AP_COST_SCENE_ACTION);
+      // 渐进式点击：每次点击消耗 1 AP
+      const requiredClicks: number = typeof args.clickIndex === "number" ? (args.requiredClicks as number ?? 1) : 1;
+      const clickIndex: number = typeof args.clickIndex === "number" ? (args.clickIndex as number) : 1;
+      const isFinalClick = clickIndex >= requiredClicks;
+
+      // 检查准备的回响是否匹配场景互动
+      const resonanceEffect = applyPreparedResonanceToAction(state, {
+        actionKind: "scene_action",
+        locationId: state.locationId,
+      });
+      const sceneCost = resonanceEffect.freeApCost ? 0 : AP_COST_SCENE_ACTION;
+
+      // 消耗 AP（每次点击都消耗）
+      consumeActionPoints(state, sceneCost);
+
+      // 中间点击：只消耗 AP，返回进度提示
+      if (!isFinalClick) {
+        const resp = buildResponse(
+          state,
+          `${action.label}亮起了一些（${clickIndex}/${requiredClicks}）。`,
+        );
+        return NextResponse.json({ ...resp, resonanceNarration: undefined } satisfies ToolResponseBody);
+      }
+
+      // 最终点击：记录完成，发放奖励
       recordSceneActionThisSlot(state, actionId);
 
       const newlyDiscoveredTitles: string[] = [];
@@ -224,6 +335,12 @@ export async function POST(request: NextRequest) {
           grantWorldItem(state, itemId);
         }
       }
+
+      // 消耗准备的回响（如果匹配场景互动）
+      consumePreparedResonanceAfterAction(state, {
+        actionKind: "scene_action",
+        locationId: state.locationId,
+      }, resonanceEffect.narration ?? action.rewards.narration);
 
       // 河声入耳：获得第一条地点线索后解锁
       checkAndUnlockAchievements(state);
@@ -264,7 +381,23 @@ export async function POST(request: NextRequest) {
       };
 
       const validation = validateWorldToolCall(state, toolCall);
-      if (!validation.allowed) {
+
+      // 月光道标：持有者可绕过邻接限制直接到达任意地点
+      const hasMoonlightPath = (state.itemCounts["moonlight_path_marker"] ?? 0) > 0;
+      const isNotConnected = !EDEN_LOCATIONS[state.locationId].connections.includes(target);
+      const connectionRejected = !validation.allowed &&
+        validation.reason === "那里不与当前位置相连，无法直接前往";
+      const usingMoonlightPath = hasMoonlightPath && isNotConnected && connectionRejected;
+
+      if (usingMoonlightPath) {
+        // 消耗一枚月光道标并允许移动
+        state.itemCounts["moonlight_path_marker"] -= 1;
+        if (!state.usedItemIds.includes("moonlight_path_marker")) {
+          state.usedItemIds.push("moonlight_path_marker");
+        }
+        // 替换为月光叙事
+        toolCall.reason = "蛇借月光道标走捷径";
+      } else if (!validation.allowed) {
         return NextResponse.json({
           ok: false,
           state,
@@ -273,9 +406,28 @@ export async function POST(request: NextRequest) {
         } satisfies ToolResponseBody);
       }
 
-      consumeActionPoints(state, apCost);
+      // 检查准备的回响是否匹配移动
+      const resonanceEffect = applyPreparedResonanceToAction(state, {
+        actionKind: "move",
+        locationId: target,
+      });
+      // 检查待生效的消耗品效果（移动类）
+      const consumableMoveEffect = applyPendingConsumableToMove(state);
+      const moveCost = (resonanceEffect.freeApCost || consumableMoveEffect.freeApCost) ? 0 : apCost;
+
+      consumeActionPoints(state, moveCost);
       const result = executeWorldTool(state, toolCall);
-      const resp = buildResponse(state, result.narration, result.discoveredClueTitles);
+
+      // 消耗准备的回响（如果匹配）
+      consumePreparedResonanceAfterAction(state, {
+        actionKind: "move",
+        locationId: target,
+      }, result.narration ?? "");
+
+      const moveNarration = consumableMoveEffect.narrations.length > 0
+        ? `${consumableMoveEffect.narrations.join(" ")} ${result.narration ?? ""}`
+        : result.narration;
+      const resp = buildResponse(state, moveNarration, result.discoveredClueTitles);
       return NextResponse.json(resp satisfies ToolResponseBody);
     }
 

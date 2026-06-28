@@ -35,7 +35,7 @@ export function checkAndUnlockAchievements(state: EdenWorldState): string[] {
   }
 
   // 不以手推：用非命令式低语推进过女人（好奇心曾上升，且从未用直接命令对女人）
-  if (state.eveMind.curiosity >= 25 && !state.corruptionTrace.some(
+  if (state.eveMind.selfJudgement >= 25 && !state.corruptionTrace.some(
     (t) => t.target === "eve" && t.method === "试图命令她",
   )) {
     tryUnlock("not_pushed_by_hand");
@@ -47,7 +47,7 @@ export function checkAndUnlockAchievements(state: EdenWorldState): string[] {
   }
 
   // 问句生根：女人好奇心足够高（开始自己思考）
-  if (state.eveMind.curiosity >= 55) {
+  if (state.eveMind.selfJudgement >= 55) {
     tryUnlock("question_takes_root");
   }
 
@@ -62,12 +62,12 @@ export function checkAndUnlockAchievements(state: EdenWorldState): string[] {
   }
 
   // 名字落石：获得借来的名字
-  if (state.usedItemIds.includes("item_borrowed_name") || state.inventory.includes("item_borrowed_name")) {
+  if (state.usedItemIds.includes("resonance_borrowed_name") || state.inventory.includes("resonance_borrowed_name")) {
     tryUnlock("name_falls_on_stone");
   }
 
   // 借翼传言：成功让鸽子传话（usedItemIds 含白羽回声，或 carry_words 历史）
-  if (state.usedItemIds.includes("item_white_feather_echo") || state.toolCallHistory.includes("carry_words")) {
+  if (state.usedItemIds.includes("resonance_white_feather_echo") || state.toolCallHistory.includes("carry_words")) {
     tryUnlock("borrowed_wing_message");
   }
 

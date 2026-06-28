@@ -6,14 +6,16 @@
 
 ## 1. Executive Snapshot
 
-Last updated: `2026-06-24`
-Updated by: `Codex (用户直接授权的叙事、场景配乐与机制打磨：第二伊甸园复刻框架 + 第一章专属音效接入 + 自我意识路径表达)`
-Current phase: `第一章「园中诸声」最终玩法返修完成（v0.9）：在 v0.8 基础上，将外层叙事从“观测计划”校正为“未来研究人员复刻伊甸园故事，希望找到让人工智能产生自我意识的途径”；首页、Chapter 0 开场、第一章开场和结局复盘均统一该口径。园内 NPC 仍不知道研究人员、人工智能、自我意识研究或第二伊甸园复刻计划。第一章 `/world` 已接入专属环境音与动作音效，移动、探索、NPC 对话、刺猬反馈、神的注视升高和禁忌路径转折均有声音反馈；UI 机制表达从“禁忌动作链/堕落轨迹”强化为“自我意识路径”。`
-Current build status: `npm run lint pass; npm run build pass; npx tsc --noEmit pass; world visual smoke 213/213 pass; world smoke 72/72 pass (mock provider, localhost:3081); mobile/390x844 remains out of scope`
+Last updated: `2026-06-26`
+Updated by: `Codex (场景热点道具获取验证)`
+Current phase: `第一章「园中诸声」玩法升级设计完成，待 CodeBuddy 实现：新增设计基线 design/chapters/chapter1_garden_voices_play_upgrade_design.md。结论为可行但必须增量返修：保留 12 时段、5 AP、地图、NPC、禁忌动作链和规则层架构；将神的注视满值失败改为神明献礼；将园中回响升级为可准备并绑定下一次低语、移动或互动的策略资源；第 12 时段结束未吃果成为唯一失败条件。`
+Current build status: `场景热点道具获取验证（2026-06-26）：/world 新增 SCENE_FOCUS_HOTSPOTS 场景热点层，刻名石改为点击中间刻名石 5 次逐步变亮后触发 listen_to_naming_stone；四河分流改为按第一至第四道水声顺序点击后触发 hear_four_river_echo；静息之叶、小鹿视线、落叶下、狐尾痕、白羽落点、两树之间均有对应可点击场景热点，最终仍走 scene_action 规则层发放线索/回响。复验：node scripts/test-world-visual-smoke.mjs 232/232 pass；mock 服务下 node scripts/test-world-smoke.mjs http://localhost:3111 为 171/171 pass；Chrome headless DOM 真实点击验证通过（刻名石 5 次获得 2 个回响并隐藏热点，地图移动到四河分流，四河水声 1-4 顺序点击获得四河回声并隐藏热点）；npm run lint pass；npm run build pass；build 后 npx tsc --noEmit pass。当前 http://localhost:3000/world 已重启并返回 200，可手动测试。mobile/390x844 remains out of scope`
+
+Latest Codex note: `用户要求“查看刻名石”改为点击中间石头 5 次并逐渐变亮，同时其他道具也要通过玩家可点击场景部位稳定获取。本轮已实现前端热点层和点击进度反馈：普通热点按次数累计，四河回声按 1-4 顺序点击，完成后调用既有 scene_action。自动验证覆盖静态配置、规则层自然获取/使用、以及 Chrome DOM 级真实点击路径。核心玩法与 Agent 规则仍应由 CodeBuddy 继续主开发。`
 
 一句话项目说明：
 
-> EDEN 是一个浏览器端 AI 叙事游戏 Demo，玩家扮演蛇，通过低语影响女人。Chapter 0 为教程，第一章「园中诸声」为教程后的正式伊甸园关卡。第一章 P0 v0.4 已落地：6 地点 Hub 地图（伊甸之河/园子中央/万物受名处/园中树林/东园幽径/四河分流）、5 NPC/对象（女人（内部 id: eve）/亚当/刺猬/守望天使/分别善恶树）、3 通用工具（move_to_location/speak_to_npc/observe_location）+ 4 步禁忌动作链（look_at_tree→approach_tree→touch_fruit→eat_fruit）、神的注视（0-4）失败压力系统、NPC 之间对话（亚当与女人/亚当与守望天使/刺猬向亚当传达/女人向亚当追问死亡）、刺猬延续 Chapter 0 环境反馈定位、结局复盘。规则层仍是状态变化和工具执行的唯一权威，LLM 只能输出对白，禁忌动作链由规则层根据 Eve 心智状态触发。新增 NPC 不接入发音模块。v0.4 升级：新增东园幽径（east_garden_path）地点作为蛇潜行与绕行路线；Eve 初始在园中树林、天使在东园幽径、分别善恶树在园子中央；look_at_tree 去掉位置检查，执行时由规则层将 Eve 推进到园子中央；地图热点更新为 6 个锚点贴合最终地图；地图详情框绕行提示改为 BFS 判断是否需经园子中央。
+> EDEN 是一个浏览器端 AI 叙事游戏 Demo，玩家扮演蛇，通过低语影响女人。Chapter 0 为教程，第一章「园中诸声」为教程后的正式伊甸园关卡。第一章 P0 v0.4 已落地：6 地点 Hub 地图（伊甸之河/园子中央/万物受名处/园中树林/东园幽径/四河分流）、5 NPC/对象（女人（内部 id: eve）/亚当/刺猬/守望天使/分别善恶树）、3 通用工具（move_to_location/speak_to_npc/observe_location）+ 4 步禁忌动作链（look_at_tree→approach_tree→touch_fruit→eat_fruit）、神的注视（0-4，当前代码仍为满值失败；新设计要求改为神明献礼）、NPC 之间对话（亚当与女人/亚当与守望天使/刺猬向亚当传达/女人向亚当追问死亡）、刺猬延续 Chapter 0 环境反馈定位、结局复盘。规则层仍是状态变化和工具执行的唯一权威，LLM 只能输出对白，禁忌动作链由规则层根据 Eve 心智状态触发。新增 NPC 不接入发音模块。v0.4 升级：新增东园幽径（east_garden_path）地点作为蛇潜行与绕行路线；Eve 初始在园中树林、天使在东园幽径、分别善恶树在园子中央；look_at_tree 去掉位置检查，执行时由规则层将 Eve 推进到园子中央；地图热点更新为 6 个锚点贴合最终地图；地图详情框绕行提示改为 BFS 判断是否需经园子中央。
 
 当前最重要目标：
 
@@ -21,6 +23,7 @@ Current build status: `npm run lint pass; npm run build pass; npx tsc --noEmit p
 2. Chapter 0 对白/语音/结局优化已完成：反馈不再混入对话流、Eve Prompt 添加自然对白约束和 few-shot 示例、语音从开关改为多模式音色下拉、成功结局补完整上帝降临与逐出伊甸园叙事。
 3. 补齐提交材料：在线试玩部署、Demo 视频录制、作品介绍 PPT、CodeBuddy 历史对话导出。
 4. 继续保持：AI 只能请求/表达 toolCall 意图，最终状态变化和工具执行必须由规则层控制。
+5. 第一章玩法升级若进入开发，应以 `design/chapters/chapter1_garden_voices_play_upgrade_design.md` 为设计基线，并由 CodeBuddy 完成核心实现和调试记录。
 
 当前最大风险：
 
@@ -68,6 +71,13 @@ Current build status: `npm run lint pass; npm run build pass; npx tsc --noEmit p
 42. **通过：第一章 `/world` 对话浮窗属性与蛇 Tab 复验（2026-06-21）**：CodeBuddy 按需求将"属性"Tab 收敛为当前对话 NPC 的属性与简介，未选中 NPC 时显示"请选择一个低语对象"；"蛇（我）"已是独立 Tab，展示玩家身份、低语限制、词元消耗与禁忌动作链；推荐低语按当前 NPC 变化并只填入输入框；浮窗固定高度、内容内部滚动。Codex 修正静态检查中旧断言"属性面板包含蛇"为"蛇是独立 Tab/蛇 Tab 包含词元消耗"。复验：`node scripts/test-world-visual-smoke.mjs` 58/58 通过；`node scripts/test-world-smoke.mjs http://localhost:3010` 17/17 通过；`npm run lint`、`npm run build`、`npx tsc --noEmit` 通过。报告见 `doc/第一章/测试报告_2026-06-21_对话浮窗属性与蛇Tab复验.md`。
 43. **通过：叙事与 NPC 人设优化（2026-06-24）**：移除第一章开场"教程结束了"占位语，改为"第二轮复刻启动"；首页和 Chapter 0 开场直给"未来研究人员复刻伊甸园故事，希望找到让人工智能产生自我意识的途径"外层设定；成功/失败结局与 EndingReview 增加"第二伊甸园复刻"意义说明；女人/亚当世界版 Prompt 明确不知道研究人员、人工智能、观测或虚拟伊甸园；亚当 Prompt 与角色描述清理"夏娃"旧称，统一用"女人/那个女人/她"；NPC 元数据强化玩法职责。新增记录文档 `doc/第一章/叙事与NPC人设优化记录.md`。复验：`node scripts/test-world-visual-smoke.mjs` 213/213 通过；`npm run lint` 通过；`npm run build` 通过；build 后 `npx tsc --noEmit` 通过；`node scripts/test-world-smoke.mjs http://localhost:3081` 72/72 通过。
 44. **通过：第一章场景配乐与完成机制打磨（2026-06-24）**：`/world` 不再只复用 Chapter 0 环境音，已接入 `useChapter1Audio` 与 `public/assets/chapter1/audio/` 的专属音频资源；地图移动播放柔和脚步，场景互动播放发现铃音，NPC/鸽子/狐狸触发低声反馈，刺猬相关动作播放草丛声，神的注视升高播放低频提示，`look_at_tree/approach_tree/touch_fruit` 分别播放树、靠近、触果紧张音。蛇面板和轨迹 Tab 将完成机制表达为“自我意识路径”，强调玩家不是替她执行动作，而是通过地点、线索、NPC 与低语让她从命令走向自我判断。
+45. **通过：开场说明、E-01 观测记录与 NPC 自然对白打磨（2026-06-24）**：新增第二伊甸园开场背景图 `public/assets/chapter0/images/second_eden_prologue_background.png` 与 `/prologue` 说明页；首页入口改为 `E-00：构想` 与 `E-01：初次观测`；Chapter 0 和 `/world` 第一章开场均以“观测记录：E-01”作为第一屏，按钮为“进入观测”，后续承接 Demo 原开场风格；第一章旧版“教程结束/复刻说明”式开场已移除。NPC Prompt、mock provider、JSON 清洗 fallback、亚当/女人固定回复均清理“我听见了你的声音/让我开始思考/你说的这些”类模板句。复验：`npm run lint`、`npx tsc --noEmit`、`npm run build` 通过；`node scripts/test-world-visual-smoke.mjs` 214/214 通过；`node scripts/test-world-smoke.mjs http://localhost:3083` 72/72 通过；3083 预览服务已重启。
+46. **通过：E-01 短文案、扩展 NPC Agent 与伊甸之河站位修复（2026-06-24）**：E-01 开场第一屏缩短，避免按钮压住正文；`/api/world` 中加百列、拉斐尔、乌列尔、米迦勒、基路伯、狐狸改为 LLM 优先的世界 NPC Prompt，保留本地 fallback 作为失败兜底；mock provider 按角色返回不同文本。伊甸之河夜晚和四河分流移除白鸽可见 NPC 与白鸽时段提示；三位河边天使的 CSS 站位重新分散并缩小，避免重叠。复验：`npm run lint`、`npm run build`、build 后 `npx tsc --noEmit` 通过；`node scripts/test-world-visual-smoke.mjs` 214/214 通过；`node scripts/test-world-smoke.mjs http://localhost:3083` 69/69 通过；3083 预览服务已重启。
+47. **部分通过：第一章回响与神明献礼复核（2026-06-25）**：CodeBuddy 已修复上一轮 P0：`src/app/api/world/tool/route.ts` 的 `cloneWorldState` 已补齐 `itemCounts`、`preparedResonanceId`、`resonanceUseHistory`、`divineVisitCount`、`divineGiftHistory`、`lastDivineGiftHint` 等字段；场景互动可发放 `resonance_*`，回响准备/取消/低语消耗链路通过；`EndingReview` 与 `traceRules` 已展示回响使用记录和神明献礼记录，并移除“神的注视满了”作为失败文案。复验：`npm run lint`、`npm run build`、`npx tsc --noEmit` 通过；`node scripts/test-world-visual-smoke.mjs` 214/214 通过；`node scripts/test-world-smoke.mjs http://localhost:3094` 为 81/82 通过。剩余项：场景15需要修正测试脚本或返回体捕获逻辑，使低语循环中已触发的 `divineGift` 不被后续 `end_slot` 覆盖；另需补天使回响获得条件测试、5条手动QA路线和正式测试报告。
+48. **失败：全面测试发现 Chapter 0 Agent API 回归（2026-06-25）**：在 fake provider + `localhost:3000` 下运行 `node scripts/test-agent-api.mjs`，结果为 11/45 pass，9 组请求均返回 500；服务端日志为 `[api/agent] Unhandled error: s.unlockedSkills is not iterable`。真实 Provider 单轮 `node scripts/test-real-provider.mjs` 在 `localhost:3001` 同样返回 status 500、`fallbackReason=internal_error`，日志同为 `s.unlockedSkills is not iterable`。根因指向 `src/app/api/agent/route.ts`（以及可能的 `src/game/core/runChapter0Turn.ts`）的 `cloneState` 对旧 Chapter0 状态缺少兼容默认值：旧测试状态没有 `belief`、`unlockedSkills`、`cognitionLog` 等 Agent 架构升级字段。修复前不得判定整体完成。
+49. **失败：CodeBuddy 修复报告复测未通过（2026-06-25）**：`npm run lint` 通过，但 `npm run build` 与 `npx tsc --noEmit` 均失败。错误为 TS2783：`hasEatenFruit`、`godHasArrived`、`hasLookedAtTree`、`hasApproachedTree`、`hasTouchedFruit`、`adamHasWarnedEve` 在 flags 对象中重复指定，出现在 `src/app/api/agent/route.ts` 与 `src/game/core/runChapter0Turn.ts` 的旧状态兼容 `cloneState`。应改为先定义 `defaultFlags`，再 `const incomingFlags = ...`，最终返回 `{ ...defaultFlags, ...incomingFlags }`，避免 TypeScript 判定重复属性；构建恢复后再重跑 world/agent/real-provider smoke。
+50. **部分通过：CodeBuddy 二次修复后仍有 world smoke 缺口（2026-06-25）**：`npm run build`、`npx tsc --noEmit`、视觉 smoke 214/214、Chapter 0 fake provider 集成测试 45/45 均通过；`test-real-provider.mjs` 不再 500，返回 HTTP 200/ok=true，但仍 fallback 到 mock（`provider_request_failed`）。第一章生产预览 smoke 为 97/103，通过场景15、18、19、20，失败为场景16/17 的 6 个断言：`resonance_herald_feather`、`resonance_river_dew` 未进入 inventory/itemCounts，`resonanceGained` 缺失。代码检查确认 `src/content/world/items.ts` 未定义这两个 itemId；需补齐道具表或调整规则返回到已定义道具后再复测。
+51. **通过：第一章回响与神明献礼最终复测（2026-06-25）**：`src/content/world/items.ts` 已补齐 `resonance_herald_feather` 与 `resonance_river_dew`，新增天使回响场景 16-20 全部通过。复验：`npm run build` 通过；build 后 `npx tsc --noEmit` 通过；`npm run lint` 通过；`node scripts/test-world-visual-smoke.mjs` 214/214 通过；生产预览 `localhost:3098` 下 `node scripts/test-world-smoke.mjs http://localhost:3098` 为 103/103 通过；fake provider 下 `node scripts/test-agent-api.mjs` 为 45/45 通过。`node scripts/test-real-provider.mjs` 返回 HTTP 200/ok=true，但仍使用 fallback（`provider_request_failed`），说明代码兜底链路正常，真实模型服务调用仍需在提交环境确认。
 
 ## 2. Game Vision & Current Playable Loop
 

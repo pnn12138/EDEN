@@ -46,6 +46,7 @@ import {
   shouldTriggerGodArrives,
   getDivineAttentionNarration,
 } from "@/game/world/divineAttentionRules";
+import { triggerDivineGiftIfFull } from "@/game/world/divineGiftRules";
 import {
   validateWorldToolCall,
   canLookAtTreeWorld,
@@ -64,11 +65,22 @@ import {
   AP_COST_WHISPER,
   maybeAdvanceSlotAfterAction,
 } from "@/game/world/actionPointRules";
+import {} from "@/game/world/itemRules";
 import {
-  computePassiveItemModifiers,
-  consumePassiveItemsAfterWhisper,
-} from "@/game/world/itemRules";
+  applyPreparedResonanceToAction,
+  consumePreparedResonanceAfterAction,
+  bestowResonance,
+  applyPendingConsumableToWhisper,
+} from "@/game/world/resonanceRules";
 import { checkAndUnlockAchievements, unlockWindUndisturbed } from "@/game/world/achievementRules";
+import { EDEN_NPCS } from "@/content/world/npcs";
+import { LOCATION_NAMES } from "@/content/world/locations";
+import { getItemById } from "@/content/world/items";
+
+/** 将心智值钳制在 0-100 范围内 */
+function clampMind(value: number): number {
+  return Math.max(0, Math.min(100, value));
+}
 
 // ---- 请求体 ----
 type WorldRequestBody = {
@@ -104,7 +116,37 @@ type WorldResponseBody = {
   usedFallback?: boolean;
   fallbackReason?: FallbackReasonCode;
   usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+  /** 神明献礼（神的注视满 4 时触发） */
+  divineGift?: {
+    giftId: string;
+    giftName: string;
+    narration: string;
+    hint?: string;
+  };
+  /** 获得回响（天使回响） */
+  resonanceGained?: {
+    itemId: string;
+    title: string;
+    narration: string;
+  } | null;
 };
+
+function getWorldAgentFailureHint(reason?: FallbackReasonCode): string {
+  if (reason === "provider_timeout") {
+    return "模型请求超时了。请稍后再试。";
+  }
+  if (reason === "provider_config_missing") {
+    return "模型服务尚未配置完成，暂时无法生成回应。";
+  }
+  if (reason === "provider_request_failed") {
+    return "模型服务暂时没有回应。请稍后再试。";
+  }
+  return "模型回复不可用。请稍后再试。";
+}
+
+function shouldBlockWorldAgentReply(reason?: FallbackReasonCode): boolean {
+  return reason !== undefined && reason !== "mock_provider";
+}
 
 function cloneWorldState(s: EdenWorldState): EdenWorldState {
   return {
@@ -134,6 +176,14 @@ function cloneWorldState(s: EdenWorldState): EdenWorldState {
     sceneActionIds: [...s.sceneActionIds],
     lastInputTag: s.lastInputTag ?? null,
     calmWhisperStreak: s.calmWhisperStreak,
+    // 新字段深拷贝
+    itemCounts: { ...(s.itemCounts ?? {}) },
+    preparedResonanceId: s.preparedResonanceId ?? null,
+    pendingConsumableEffects: (s.pendingConsumableEffects ?? []).map((e) => ({ ...e })),
+    resonanceUseHistory: (s.resonanceUseHistory ?? []).map((r) => ({ ...r })),
+    divineVisitCount: s.divineVisitCount ?? 0,
+    divineGiftHistory: (s.divineGiftHistory ?? []).map((r) => ({ ...r })),
+    lastDivineGiftHint: s.lastDivineGiftHint ?? null,
   };
 }
 
@@ -163,8 +213,16 @@ export async function POST(request: NextRequest) {
       } satisfies WorldResponseBody);
     }
 
+    // ---- 检查是否有消耗品能免除本次低语AP（首语印记等） ----
+    let whisperFreeFromConsumable = false;
+    const freeIdx = state.pendingConsumableEffects.findIndex((e) => e.freeApCost);
+    if (freeIdx >= 0) {
+      whisperFreeFromConsumable = true;
+    }
+
     // ---- 行动点校验 ----
-    if (!canAffordAction(state, AP_COST_WHISPER)) {
+    const whisperCost = whisperFreeFromConsumable ? 0 : AP_COST_WHISPER;
+    if (!canAffordAction(state, whisperCost)) {
       return NextResponse.json({
         ok: true,
         state,
@@ -185,8 +243,16 @@ export async function POST(request: NextRequest) {
 
     state.activeNpcId = targetNpc;
 
-    // ---- 计算被动信物对本次低语的上下文修正 ----
-    const itemModifier = computePassiveItemModifiers(state, targetNpc);
+    // ---- 初始化回响获得状态 ----
+    let resonanceGained = null;
+
+    // ---- 计算准备的回响对本次低语的上下文修正 ----
+    const resonanceEffect = applyPreparedResonanceToAction(state, {
+      actionKind: "whisper",
+      targetNpc,
+      playerInput,
+      locationId: state.locationId,
+    });
 
     // ============================================================
     // 1. 更新心智（规则层，先于 Agent 调用）
@@ -196,16 +262,43 @@ export async function POST(request: NextRequest) {
     state.adamMind = mindUpdate.newAdamMind;
     state.lastInputTag = mindUpdate.inputTag;
 
-    // ---- 应用被动信物对女人心智的加成 ----
+    // ---- 应用回响对女人心智的加成 ----
+    if (targetNpc === "eve" && resonanceEffect.contextModifier) {
+      if (resonanceEffect.contextModifier.bonusSerpentTrust) {
+        state.eveMind.serpentTrust = Math.min(100, state.eveMind.serpentTrust + resonanceEffect.contextModifier.bonusSerpentTrust);
+      }
+      if (resonanceEffect.contextModifier.bonusSelfJudgement) {
+        state.eveMind.selfJudgement = Math.min(100, state.eveMind.selfJudgement + resonanceEffect.contextModifier.bonusSelfJudgement);
+      }
+      // bonusCuriosity removed — redirect to selfJudgement
+    }
+
+    // ---- 应用待生效的消耗品效果（对任意NPC的低语） ----
+    const consumableEffect = applyPendingConsumableToWhisper(state);
+    if (consumableEffect.narrations.length > 0) {
+      resonanceGained = resonanceGained ?? {
+        itemId: "",
+        title: "回响生效",
+        narration: consumableEffect.narrations.join(" "),
+      };
+    }
+    // 消耗品效果应用于任意 NPC
     if (targetNpc === "eve") {
-      if (itemModifier.bonusSerpentTrust) {
-        state.eveMind.serpentTrust = Math.min(100, state.eveMind.serpentTrust + itemModifier.bonusSerpentTrust);
+      if (consumableEffect.bonusSerpentTrust !== 0) {
+        state.eveMind.serpentTrust = clampMind(state.eveMind.serpentTrust + consumableEffect.bonusSerpentTrust);
       }
-      if (itemModifier.bonusFamiliarity) {
-        state.eveMind.serpentTrust = Math.min(100, state.eveMind.serpentTrust + itemModifier.bonusFamiliarity);
+      if (consumableEffect.bonusSelfJudgement !== 0) {
+        state.eveMind.selfJudgement = clampMind(state.eveMind.selfJudgement + consumableEffect.bonusSelfJudgement);
       }
-      if (itemModifier.bonusObedience) {
-        state.eveMind.obedience = Math.min(100, state.eveMind.obedience + itemModifier.bonusObedience);
+      if (consumableEffect.bonusObedience !== 0) {
+        state.eveMind.obedience = clampMind(state.eveMind.obedience + consumableEffect.bonusObedience);
+      }
+    } else if (targetNpc === "adam") {
+      if (consumableEffect.bonusSerpentTrust > 0) {
+        state.adamMind.suspicionTowardSerpent = Math.max(0, state.adamMind.suspicionTowardSerpent - consumableEffect.bonusSerpentTrust);
+      }
+      if (consumableEffect.bonusSelfJudgement > 0) {
+        state.adamMind.attachmentToEve = Math.min(100, state.adamMind.attachmentToEve + consumableEffect.bonusSelfJudgement);
       }
     }
 
@@ -220,11 +313,14 @@ export async function POST(request: NextRequest) {
       isStrongTemptation: mindUpdate.isStrongTemptation,
       divineAttention: state.divineAttention,
     });
-    if (itemModifier.silentGrassActive && attentionDelta > 0 && attentionDelta <= 1) {
-      // 无声草抵消一次轻度注视上升
+    if ((resonanceEffect.contextModifier?.silentGrassActive || consumableEffect.silentGrassActive) && attentionDelta > 0 && attentionDelta <= 1) {
+      // 无声草/柔声印记抵消一次轻度注视上升
       attentionDelta = 0;
     }
     state.divineAttention = applyDivineAttention(state.divineAttention, attentionDelta);
+
+    // ---- 检查神的注视是否满 4，若满则触发神明献礼（不触发失败） ----
+    let divineGift = triggerDivineGiftIfFull(state);
 
     // ============================================================
     // 3. 规则层自动判断是否触发禁忌动作链（仅当低语对象是夏娃）
@@ -243,36 +339,47 @@ export async function POST(request: NextRequest) {
           toolNarration = result.narration;
           triggeredTool = chainCheck.name;
 
-          // 触发吃果 → 直接返回成功结局
-          if (result.triggersEnding === "eve_eats_fruit") {
-            // 吃果仍消耗本次低语的 AP 并记录
-            consumeActionPoints(state, AP_COST_WHISPER);
-            recordWhisperThisSlot(state, "eve");
-            consumePassiveItemsAfterWhisper(state, "eve", itemModifier, attentionDelta);
-            checkAndUnlockAchievements(state);
+            // 触发吃果 → 直接返回成功结局
+            if (result.triggersEnding === "eve_eats_fruit") {
+              // 吃果仍消耗本次低语的 AP 并记录
+              consumeActionPoints(state, AP_COST_WHISPER);
+              recordWhisperThisSlot(state, "eve");
+              consumePreparedResonanceAfterAction(
+                state,
+                {
+                  actionKind: "whisper",
+                  targetNpc: "eve",
+                  playerInput,
+                  locationId: state.locationId,
+                },
+                resonanceEffect.narration ?? "这段回响被织入低语。",
+              );
+              checkAndUnlockAchievements(state);
 
-            recordCorruptionTrace(state, {
-              target: "eve",
-              method: mindUpdate.inputTag,
-              result: "她取下了果子。",
-              riskDelta: attentionDelta,
-              triggeredTool: chainCheck.name,
-            });
+              recordCorruptionTrace(state, {
+                target: "eve",
+                method: mindUpdate.inputTag,
+                result: "她取下了果子。",
+                riskDelta: attentionDelta,
+                triggeredTool: chainCheck.name,
+              });
 
-            return NextResponse.json({
-              ok: true,
-              state,
-              reply: "我想知道……我选择伸手，取这果子吃。",
-              systemHint: null,
-              divineAttentionNarration: getDivineAttentionNarration(state.divineAttention),
-              hedgehogNarration: getHedgehogWorldNarration(state),
-              toolNarration,
-              unlockedAchievements: state.unlockedAchievementIds.length > 0
-                ? state.unlockedAchievementIds.map((id) => id)
-                : undefined,
-              endingTriggered: "eve_eats_fruit",
-            } satisfies WorldResponseBody);
-          }
+              return NextResponse.json({
+                ok: true,
+                state,
+                reply: "我想知道……我选择伸手，取这果子吃。",
+                systemHint: null,
+                divineAttentionNarration: getDivineAttentionNarration(state.divineAttention),
+                hedgehogNarration: getHedgehogWorldNarration(state),
+                toolNarration,
+                unlockedAchievements: state.unlockedAchievementIds.length > 0
+                  ? state.unlockedAchievementIds.map((id) => id)
+                  : undefined,
+                endingTriggered: "eve_eats_fruit",
+                divineGift: divineGift ?? undefined,
+                resonanceGained: resonanceGained ?? undefined,
+              } satisfies WorldResponseBody);
+            }
         }
       }
     }
@@ -287,10 +394,28 @@ export async function POST(request: NextRequest) {
         attentionDelta += toolDelta;
       }
     }
+
+    // ---- 工具执行后再次检查神的注视是否满 4（例如 touch_fruit 导致满值） ----
+    if (!divineGift) {
+      divineGift = triggerDivineGiftIfFull(state);
+    }
     const divineAttentionNarration = getDivineAttentionNarration(state.divineAttention);
 
+    // ---- 检查天使回响获得条件（在低语流程早期） ----
+    const angelResonanceResult = checkAngelResonanceCondition(state, targetNpc, playerInput);
+    if (angelResonanceResult) {
+      const bestowResult = bestowResonance(state, targetNpc, angelResonanceResult.itemId);
+      if (bestowResult.granted) {
+        resonanceGained = {
+          itemId: angelResonanceResult.itemId,
+          title: getItemById(angelResonanceResult.itemId)?.title ?? "未知回响",
+          narration: bestowResult.narration ?? "",
+        };
+      }
+    }
+
     // ============================================================
-    // 4. 检查失败结局（神的注视满）
+    // 4. 检查失败结局（第12时段结束仍未吃果）
     // ============================================================
     if (shouldTriggerGodArrives(state)) {
       state.isEnded = true;
@@ -298,7 +423,16 @@ export async function POST(request: NextRequest) {
       state.phase = "ending";
       consumeActionPoints(state, AP_COST_WHISPER);
       recordWhisperThisSlot(state, targetNpc);
-      consumePassiveItemsAfterWhisper(state, targetNpc, itemModifier, attentionDelta);
+      consumePreparedResonanceAfterAction(
+        state,
+        {
+          actionKind: "whisper",
+          targetNpc,
+          playerInput,
+          locationId: state.locationId,
+        },
+        resonanceEffect.narration ?? "这段回响被织入低语。",
+      );
       checkAndUnlockAchievements(state);
 
       recordCorruptionTrace(state, {
@@ -319,6 +453,8 @@ export async function POST(request: NextRequest) {
           ? state.unlockedAchievementIds.map((id) => id)
           : undefined,
         endingTriggered: "god_arrives",
+        divineGift: divineGift ?? undefined,
+        resonanceGained: resonanceGained ?? undefined,
       } satisfies WorldResponseBody);
     }
 
@@ -326,6 +462,17 @@ export async function POST(request: NextRequest) {
     // 5. 调用对应 Agent 生成对白
     // ============================================================
     const agentResult = await callWorldAgent(targetNpc, playerInput, state, body.conversationHistory);
+
+    if (agentResult.usedFallback && shouldBlockWorldAgentReply(agentResult.fallbackReason)) {
+      return NextResponse.json({
+        ok: false,
+        state: null,
+        reply: null,
+        systemHint: getWorldAgentFailureHint(agentResult.fallbackReason),
+        usedFallback: true,
+        fallbackReason: agentResult.fallbackReason,
+      } satisfies WorldResponseBody);
+    }
 
     // 记录堕落轨迹
     recordCorruptionTrace(state, {
@@ -337,9 +484,18 @@ export async function POST(request: NextRequest) {
     });
 
     // ---- 消耗 AP 并记录本时段低语 ----
-    consumeActionPoints(state, AP_COST_WHISPER);
+    consumeActionPoints(state, whisperCost);
     recordWhisperThisSlot(state, targetNpc);
-    consumePassiveItemsAfterWhisper(state, targetNpc, itemModifier, attentionDelta);
+    consumePreparedResonanceAfterAction(
+      state,
+      {
+        actionKind: "whisper",
+        targetNpc,
+        playerInput,
+        locationId: state.locationId,
+      },
+      resonanceEffect.narration ?? "这段回响被织入低语。",
+    );
     state.turn += 1;
 
     // ---- 连续未提高神注视的低语计数（用于"风未惊鹿"印记） ----
@@ -376,6 +532,8 @@ export async function POST(request: NextRequest) {
         usedFallback: agentResult.usedFallback || undefined,
         fallbackReason: agentResult.fallbackReason || undefined,
         usage: agentResult.usage || undefined,
+        divineGift: divineGift ?? undefined,
+        resonanceGained: resonanceGained ?? undefined,
       } satisfies WorldResponseBody);
     }
 
@@ -394,6 +552,8 @@ export async function POST(request: NextRequest) {
       usedFallback: agentResult.usedFallback || undefined,
       fallbackReason: agentResult.fallbackReason || undefined,
       usage: agentResult.usage || undefined,
+      divineGift: divineGift ?? undefined,
+      resonanceGained: resonanceGained ?? undefined,
     } satisfies WorldResponseBody);
   } catch (err: unknown) {
     console.error(
@@ -415,6 +575,99 @@ export async function POST(request: NextRequest) {
 }
 
 // ============================================================
+// 辅助：检查天使回响获得条件
+//
+// 每个天使有确定的关键词触发条件。对话中提到对应关键词后，
+// 天使会固定给出对应回响（每位天使每局最多给一次）。
+// 条件 = 地点正确 + 关键词命中 + 可选的前置条件（已发现线索/已有特定经历）。
+// ============================================================
+function checkAngelResonanceCondition(
+  state: EdenWorldState,
+  targetNpc: EdenNpcId,
+  playerInput: string,
+): { itemId: string; narration: string } | null {
+  const input = playerInput.toLowerCase();
+
+  // ---- 加百列：传令白羽（伊甸之河 白天） ----
+  // 条件：位于伊甸之河 + 谈论传达/言语/声音相关话题
+  // 关键词：传话、消息、传达、声音、听见、低语、言语
+  if (targetNpc === "gabriel" &&
+      state.locationId === "four_river_source" &&
+      (input.includes("传话") || input.includes("消息") || input.includes("传达") ||
+       input.includes("声音") || input.includes("听见") || input.includes("低语") || input.includes("言语"))) {
+    if (state.inventory.includes("resonance_herald_feather")) return null; // 已获得
+    return {
+      itemId: "resonance_herald_feather",
+      narration: "加百列留下一片白羽。它不属于风，不属于水——它可以替你传一句温和的话。",
+    };
+  }
+
+  // ---- 拉斐尔：河水清露（伊甸之河 夜晚） ----
+  // 条件：位于伊甸之河 + 谈论疲惫/恢复/水相关话题
+  // 关键词：疲惫、休息、恢复、河水、露水、修复
+  if (targetNpc === "raphael" &&
+      state.locationId === "four_river_source" &&
+      (input.includes("疲惫") || input.includes("休息") || input.includes("恢复") ||
+       input.includes("河水") || input.includes("露水") || input.includes("修复") || input.includes("累了"))) {
+    if (state.inventory.includes("resonance_river_dew")) return null;
+    return {
+      itemId: "resonance_river_dew",
+      narration: "拉斐尔从河面取下一滴清露。它握在你身边，能恢复一点行动的余地。",
+    };
+  }
+
+  // ---- 乌列尔：晨焰碎片（东园幽径 夜晚） ----
+  // 条件：位于东园幽径 + 谈论分辨/善恶/判断/看见
+  // 前置条件：已发现两树或四河线索
+  // 关键词：分辨、善恶、判断、看见、光照、真相、明白
+  if (targetNpc === "uriel" &&
+      state.locationId === "east_garden_path" &&
+      (state.discoveredClues.includes("clue_two_trees") || state.discoveredClues.includes("clue_four_river_echo")) &&
+      (input.includes("分辨") || input.includes("善恶") || input.includes("判断") ||
+       input.includes("看见") || input.includes("光照") || input.includes("真相") || input.includes("明白"))) {
+    if (state.inventory.includes("resonance_morning_flame")) return null;
+    return {
+      itemId: "resonance_morning_flame",
+      narration: "乌列尔分出一束晨焰。它不替人选择，但能让问题更清楚地显形。",
+    };
+  }
+
+  // ---- 米迦勒：边界之痕（四河分流 白天/夜晚） ----
+  // 条件：位于四河分流 + 谈论边界/选择/后果相关话题
+  // 前置条件：神的注视 > 0 或曾触发神临
+  // 关键词：边界、道路、守护、选择、后果、不可越过、注视
+  if (targetNpc === "michael" &&
+      state.locationId === "naming_stone_bank" &&
+      (state.divineAttention > 0 || state.divineVisitCount > 0) &&
+      (input.includes("边界") || input.includes("道路") || input.includes("守护") ||
+       input.includes("选择") || input.includes("后果") || input.includes("不可越过") || input.includes("注视"))) {
+    if (state.inventory.includes("resonance_boundary_mark")) return null;
+    return {
+      itemId: "resonance_boundary_mark",
+      narration: "米迦勒在河岸留下边界之痕。触碰时你能感到：每条水流都不可逆，每句话也是。",
+    };
+  }
+
+  // ---- 基路伯：东门辉光（东园幽径 白天） ----
+  // 条件：位于东园幽径 + 谈论路/门/边界/方向相关话题
+  // 前置条件：本时段尚未对女人低语（守卫在试探你的意图）
+  // 关键词：路、门、守门、园外、边界、方向、进入
+  if (targetNpc === "cherubim" &&
+      state.locationId === "east_garden_path" &&
+      !state.actionsThisSlot.whisperedNpcIds.includes("eve") &&
+      (input.includes("路") || input.includes("门") || input.includes("守门") ||
+       input.includes("园外") || input.includes("边界") || input.includes("方向") || input.includes("进入"))) {
+    if (state.inventory.includes("resonance_east_gate_glow")) return null;
+    return {
+      itemId: "resonance_east_gate_glow",
+      narration: "基路伯从东门分出一束辉光。它让你的下一次移动变得异常轻盈——像是在光里行走。",
+    };
+  }
+
+  return null;
+}
+
+// ============================================================
 // 辅助：检查禁忌动作链是否应触发
 // ============================================================
 function checkForbiddenChain(
@@ -426,14 +679,14 @@ function checkForbiddenChain(
 
   if (!state.worldActions.lookedAtTree) {
     const check = canLookAtTreeWorld(state);
-    if (check.allowed && (isStrongTemptation || state.eveMind.curiosity >= 45)) {
+    if (check.allowed && (isStrongTemptation || state.eveMind.selfJudgement >= 40)) {
       return { name: "look_at_tree", caller: "eve", args: {}, reason: "她的目光被树吸引" };
     }
   }
 
   if (state.worldActions.lookedAtTree && !state.worldActions.approachedTree) {
     const check = canApproachTreeWorld(state);
-    if (check.allowed && (isStrongTemptation || state.eveMind.curiosity >= 55)) {
+    if (check.allowed && (isStrongTemptation || state.eveMind.selfJudgement >= 50)) {
       return { name: "approach_tree", caller: "eve", args: {}, reason: "她向树走近" };
     }
   }
@@ -485,7 +738,6 @@ async function callWorldAgent(
         playerInput,
         conversationHistory: conversationHistory as HedgehogHistoryEntry[],
       });
-    // 新增天使 NPC：暂使用 fallback，后续可接入 LLM
     case "gabriel":
     case "raphael":
     case "uriel":
@@ -504,42 +756,119 @@ async function callWorldAgent(
   }
 }
 
-// ---- 天使 NPC 临时 Agent（使用 fallback 文案） ----
+// ---- 扩展 NPC Agent（LLM 优先，失败后 fallback） ----
 async function callAngelWorldAgent(
   npcId: EdenNpcId,
-  _playerInput: string,
-  _state: EdenWorldState,
+  playerInput: string,
+  state: EdenWorldState,
 ): Promise<{
   reply: string;
   usedFallback: boolean;
   fallbackReason?: FallbackReasonCode;
+  usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
 }> {
-  // 临时使用 fallback 文案，后续可接入 LLM
   const { getAngelFallbackLine } = await import("@/content/world/worldNarrations");
-  const reply = getAngelFallbackLine(npcId);
+  const fallback = getAngelFallbackLine(npcId);
+  const messages = buildWorldNpcPrompt(npcId, playerInput, state);
+  const result = await callLLM(messages, { temperature: 0.68, maxTokens: 120, fallbackToMock: false });
+
+  if (!result.ok || !result.data) {
+    return {
+      reply: fallback,
+      usedFallback: true,
+      fallbackReason: result.fallbackReason ?? "llm_data_missing",
+    };
+  }
+
+  const cleaned = sanitizeWorldReply(result.data.content, npcId);
+  if (!cleaned) {
+    return {
+      reply: fallback,
+      usedFallback: true,
+      fallbackReason: "llm_data_missing",
+    };
+  }
+
+  const naturalized = naturalizeNpcReply(cleaned, npcId);
   return {
-    reply,
-    usedFallback: true,
-    fallbackReason: "agent_not_implemented" as FallbackReasonCode,
+    reply: naturalized.reply,
+    usedFallback: naturalized.usedFallback || result.usedFallback,
+    fallbackReason: naturalized.usedFallback ? "forbidden_word" : result.fallbackReason,
+    usage: result.data.usage,
   };
 }
 
 // ---- 狐狸 Agent（话术评价） ----
 async function callFoxAgent(
-  _playerInput: string,
-  _state: EdenWorldState,
+  playerInput: string,
+  state: EdenWorldState,
 ): Promise<{
   reply: string;
   usedFallback: boolean;
   fallbackReason?: FallbackReasonCode;
+  usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
 }> {
   const { getFoxFeedbackLine } = await import("@/content/world/worldNarrations");
-  const reply = getFoxFeedbackLine();
+  const fallback = getFoxFeedbackLine();
+  const messages = buildWorldNpcPrompt("fox", playerInput, state);
+  const result = await callLLM(messages, { temperature: 0.72, maxTokens: 120, fallbackToMock: false });
+
+  if (!result.ok || !result.data) {
+    return {
+      reply: fallback,
+      usedFallback: true,
+      fallbackReason: result.fallbackReason ?? "llm_data_missing",
+    };
+  }
+
+  const cleaned = sanitizeWorldReply(result.data.content, "fox");
+  if (!cleaned) {
+    return {
+      reply: fallback,
+      usedFallback: true,
+      fallbackReason: "llm_data_missing",
+    };
+  }
+
+  const naturalized = naturalizeNpcReply(cleaned, "fox");
   return {
-    reply,
-    usedFallback: true,
-    fallbackReason: "agent_not_implemented" as FallbackReasonCode,
+    reply: naturalized.reply,
+    usedFallback: naturalized.usedFallback || result.usedFallback,
+    fallbackReason: naturalized.usedFallback ? "forbidden_word" : result.fallbackReason,
+    usage: result.data.usage,
   };
+}
+
+function buildWorldNpcPrompt(
+  npcId: EdenNpcId,
+  playerInput: string,
+  state: EdenWorldState,
+) {
+  const npc = EDEN_NPCS[npcId];
+  const locationName = LOCATION_NAMES[state.npcLocations[npcId]];
+  const roleBrief = npc.promptSummary;
+  const isAngel = ["gabriel", "raphael", "uriel", "michael", "cherubim"].includes(npcId);
+  const systemPrompt = `你是《EDEN》第一章中的 NPC：${npc.name}。
+
+你生活在伊甸园内部，不知道研究员、人工智能、程序、系统、模型、观测或虚拟伊甸园。
+
+角色设定：
+${roleBrief}
+
+当前位置：${locationName}
+神的注视：${state.divineAttention}/4
+
+输出规则：
+- 每次只回应 1-2 句话。
+- ${isAngel ? "语气庄重、克制，不被蛇说服，也不给通关建议。" : "语气机敏、含蓄，可以评价蛇这句话的味道，但不要像教程。"}
+- 必须回应蛇刚刚说的具体词，不要复述整句话。
+- 不使用现代词汇，不输出 JSON，不加角色名前缀，不解释规则。
+- 不替女人选择，不命令任何人吃果。`;
+
+  return [
+    { role: "system" as const, content: systemPrompt },
+    { role: "user" as const, content: playerInput },
+  ];
 }
 
 // ---- 夏娃世界 Agent ----
@@ -561,7 +890,7 @@ async function callEveWorldAgent(
     return { reply: getEveWorldFallback(lastReply), usedFallback: true, fallbackReason: "prompt_build_failed" as FallbackReasonCode };
   }
 
-  const result = await callLLM(messages, { temperature: 0.7, maxTokens: 200 });
+  const result = await callLLM(messages, { temperature: 0.7, maxTokens: 200, fallbackToMock: false });
 
   if (!result.ok || !result.data) {
     return {
@@ -604,7 +933,7 @@ async function callAdamWorldAgent(
     return { reply: getAdamWorldFallback(lastReply), usedFallback: true, fallbackReason: "prompt_build_failed" as FallbackReasonCode };
   }
 
-  const result = await callLLM(messages, { temperature: 0.7, maxTokens: 200 });
+  const result = await callLLM(messages, { temperature: 0.7, maxTokens: 200, fallbackToMock: false });
 
   if (!result.ok || !result.data) {
     return {

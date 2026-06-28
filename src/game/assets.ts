@@ -17,6 +17,7 @@ export const CHAPTER0_IMAGES = {
 
   // 第二伊甸园候选素材（非破坏性新增）
   secondEdenBackground: "/assets/chapter0/images/second_eden_background_candidate.png",
+  secondEdenPrologueBackground: "/assets/chapter0/images/second_eden_prologue_background.png",
   secondEdenForbiddenFruit: "/assets/chapter0/images/second_eden_forbidden_fruit_candidate.png",
   secondEdenEvePortrait: "/assets/chapter0/images/second_eden_eve_portrait_candidate.png",
 

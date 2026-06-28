@@ -31,7 +31,7 @@ const ADAM_FALLBACK_REPLIES: Record<string, string> = {
   direct_command:
     "你不能命令我。我不是你管辖的。神吩咐了我，我听从祂。",
   irrelevant:
-    "你说的这些，和神吩咐我的无关。我在看守园子，你不要打扰我。",
+    "我在看守园子，也在记着那句话。若你不是为了这园子的安宁而来，就不要再靠近那棵树。",
 };
 
 // ---- 解析结果 ----

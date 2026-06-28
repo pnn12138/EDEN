@@ -227,7 +227,7 @@ export default function GamePage() {
   const handleIntroAdvance = useCallback(() => {
     retryIntroBgm(); // 用户手势后重试播放 intro BGM
     if (introBeat < INTRO_BEATS.length - 1) {
-      setIntroBeat((b) => (b + 1) as 0 | 1 | 2 | 3);
+      setIntroBeat((b) => (b + 1) as 0 | 1 | 2 | 3 | 4);
     } else {
       // 最后一个 beat，进入场景选择阶段
       setState((prev) => ({
@@ -863,9 +863,11 @@ export default function GamePage() {
         ? CHAPTER0_IMAGES.edenBackground
         : beat.bgKey === "forbiddenFruit"
           ? CHAPTER0_IMAGES.forbiddenFruit
-          : beat.bgKey === "genesisCreationLight"
-            ? CHAPTER0_IMAGES.genesisCreationLight
-            : CHAPTER0_IMAGES.secondEdenBackground;
+          : beat.bgKey === "secondEdenPrologueBackground"
+            ? CHAPTER0_IMAGES.secondEdenPrologueBackground
+            : beat.bgKey === "genesisCreationLight"
+              ? CHAPTER0_IMAGES.genesisCreationLight
+              : CHAPTER0_IMAGES.secondEdenBackground;
 
     return (
       <div className="eden-game eden-game--intro" onClick={handleIntroAdvance}>

@@ -3,7 +3,6 @@
 //
 // 不做完整 NPC 自主规划器。每次时段推进时做规则化结算：
 // - 神的注视升高时，刺猬/小鹿警觉或躲藏
-// - 夜晚四河分流出现鸽子传话机会
 // - 夜晚伊甸之河出现天使边界提示
 // - 后期女人心智达标时，可被规则推进到园子中央
 //
@@ -51,15 +50,7 @@ export function resolveNpcSlotBehaviors(state: EdenWorldState): NpcSlotResolutio
     state.hedgehog.mood = "idle";
   }
 
-  // 2. 夜晚四河分流：鸽子传话机会出现（仅叙事提示，不强制）
-  if (state.timeOfDay === "night" && state.locationId === "naming_stone_bank") {
-    pushResolution({
-      npcId: "dove",
-      narration: "白鸽停在分流河岸的低枝上，安静地看着你。若你持着白羽回声，它愿意替你带走一句话。",
-    });
-  }
-
-  // 3. 夜晚伊甸之河：天使边界提示
+  // 2. 夜晚伊甸之河：天使边界提示
   if (state.timeOfDay === "night" && state.locationId === "four_river_source") {
     pushResolution({
       npcId: "gabriel",
@@ -67,11 +58,11 @@ export function resolveNpcSlotBehaviors(state: EdenWorldState): NpcSlotResolutio
     });
   }
 
-  // 4. 后期女人心智达标时，可被规则推进到园子中央
+  // 3. 后期女人心智达标时，可被规则推进到园子中央
   //    条件：timeSlot >= 9 且女人好奇心高且已看过树，但尚未靠近
   if (
     state.timeSlot >= 9 &&
-    state.eveMind.curiosity >= 55 &&
+    state.eveMind.selfJudgement >= 55 &&
     state.worldActions.lookedAtTree &&
     !state.worldActions.approachedTree &&
     state.npcLocations.eve !== "central_meadow"

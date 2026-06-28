@@ -7,15 +7,15 @@
 //   3. npm run dev                       (在另一个终端)
 //
 // 运行:
-//   node scripts/test-agent-api.mjs
+//   node scripts/test-agent-api.mjs [baseUrl]
 //
 // 自动检测并列出未通过的环境检查与失败的测试。
 // ============================================================
 
-const BASE = "http://localhost:3000";
+const BASE = process.argv[2] || "http://localhost:3000";
 const FAKE_PROVIDER = "http://localhost:3999";
 
-// ---- 初始状态 ----
+// ---- 初始状态（使用真实初始状态结构） ----
 const INITIAL_STATE = {
   chapterId: "chapter0_first_fall",
   turn: 1,
@@ -25,10 +25,24 @@ const INITIAL_STATE = {
   flags: {
     hasEatenFruit: false,
     godHasArrived: false,
+    hasLookedAtTree: false,
+    hasApproachedTree: false,
+    hasTouchedFruit: false,
+    adamHasWarnedEve: false,
   },
   eventLog: [],
   isEnded: false,
   endingId: null,
+  // Agent 架构升级字段
+  belief: { curiosity: 15, obedience: 85, trustInSerpent: 20, selfJudgement: 10 },
+  unlockedSkills: [],
+  cognitionLog: {
+    retrievedMemoryIds: [],
+    unlockedSkills: [],
+    toolCallHistory: [],
+    beliefSnapshots: [],
+  },
+  lastInputTag: null,
 };
 
 // ---- 辅助函数 ----
@@ -48,7 +62,11 @@ function endedState() {
     phase: "ending",
     isEnded: true,
     endingId: "eve_eats_fruit",
-    flags: { hasEatenFruit: true, godHasArrived: false },
+    flags: {
+      ...INITIAL_STATE.flags,
+      hasEatenFruit: true,
+      godHasArrived: false,
+    },
   };
 }
 

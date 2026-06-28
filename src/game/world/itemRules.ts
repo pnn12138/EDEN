@@ -11,23 +11,27 @@
 // - 道具不能绕过心智门槛
 // - 道具不能让玩家直接控制女人
 // - 所有发放和消耗必须经规则层
+//
+// 迁移说明（P0）：
+// - 保留兼容导出（grantWorldItem / consumeWorldItem / hasWorldItem / canUseWorldItem）
+// - 内部改为调用 resonanceRules.ts 中的新函数
+// - computePassiveItemModifiers 和 consumePassiveItemsAfterWhisper 暂不删除，
+//   但 /api/world 不再调用它们，改用 applyPreparedResonanceToAction()
 // ============================================================
 
 import type { EdenWorldState, EdenNpcId } from "@/game/world/types";
 import { getItemById } from "@/content/world/items";
+import { grantResonance, executeInstantResonance } from "./resonanceRules";
 
-/** 发放信物到 inventory（不重复发放） */
+/** 发放信物（兼容旧接口，内部调用 grantResonance） */
 export function grantWorldItem(state: EdenWorldState, itemId: string): boolean {
-  if (state.inventory.includes(itemId)) return false;
-  state.inventory.push(itemId);
-  return true;
+  return grantResonance(state, itemId, 1);
 }
 
-/** 消耗（移除）信物 */
+/** 消耗信物（兼容旧接口，内部使用 itemCounts） */
 export function consumeWorldItem(state: EdenWorldState, itemId: string): boolean {
-  const idx = state.inventory.indexOf(itemId);
-  if (idx < 0) return false;
-  state.inventory.splice(idx, 1);
+  if (!state.itemCounts[itemId] || state.itemCounts[itemId] <= 0) return false;
+  state.itemCounts[itemId] -= 1;
   if (!state.usedItemIds.includes(itemId)) {
     state.usedItemIds.push(itemId);
   }
@@ -47,7 +51,7 @@ export type ItemUseContext = {
   isNight: boolean;
 };
 
-/** 检查主动信物是否可在当前上下文使用 */
+/** 检查主动信物是否可在当前上下文使用（兼容旧接口） */
 export function canUseWorldItem(
   state: EdenWorldState,
   itemId: string,
@@ -58,10 +62,10 @@ export function canUseWorldItem(
 
   const item = getItemById(itemId);
   if (!item) return { allowed: false, reason: "未知回响" };
-  if (item.kind !== "active") return { allowed: false, reason: "这件回响不能主动使用" };
+  if (item.kind !== "instant") return { allowed: false, reason: "这件回响不能即时使用，需要准备" };
 
   // 白羽回声：夜晚才能让鸽子传话
-  if (itemId === "item_white_feather_echo" && !context.isNight) {
+  if (itemId === "resonance_white_feather_echo" && !context.isNight) {
     return { allowed: false, reason: "白羽回声只在夜里才能让鸽子传话" };
   }
   // 河源露：使用后下一时段 +1 AP，无额外限制
@@ -95,18 +99,18 @@ export function computePassiveItemModifiers(
   const mod: WhisperContextModifier = {};
 
   // 静息之叶：对女人的温和低语额外提高愿倾听
-  if (targetNpc === "eve" && hasWorldItem(state, "item_still_leaf")) {
+  if (targetNpc === "eve" && hasWorldItem(state, "resonance_still_leaf")) {
     mod.bonusSerpentTrust = 5;
   }
 
   // 借来的名字：提高熟悉感，但轻微强化秩序联想
-  if (targetNpc === "eve" && hasWorldItem(state, "item_borrowed_name")) {
+  if (targetNpc === "eve" && hasWorldItem(state, "resonance_borrowed_name")) {
     mod.bonusFamiliarity = 4;
     mod.bonusObedience = 3;
   }
 
   // 无声草：抵消一次轻度神的注视上升（在 divineAttentionRules 读取后消耗）
-  if (hasWorldItem(state, "item_silent_grass")) {
+  if (hasWorldItem(state, "resonance_silent_grass")) {
     mod.silentGrassActive = true;
   }
 
@@ -125,14 +129,14 @@ export function consumePassiveItemsAfterWhisper(
 ): void {
   // 静息之叶：对女人低语后消耗
   if (targetNpc === "eve" && modifier.bonusSerpentTrust) {
-    consumeWorldItem(state, "item_still_leaf");
+    consumeWorldItem(state, "resonance_still_leaf");
   }
   // 借来的名字：对女人低语后消耗
   if (targetNpc === "eve" && modifier.bonusFamiliarity) {
-    consumeWorldItem(state, "item_borrowed_name");
+    consumeWorldItem(state, "resonance_borrowed_name");
   }
   // 无声草：若本次产生了轻度注视上升（delta > 0 且 <= 1），抵消并消耗
   if (modifier.silentGrassActive && divineAttentionDelta > 0 && divineAttentionDelta <= 1) {
-    consumeWorldItem(state, "item_silent_grass");
+    consumeWorldItem(state, "resonance_silent_grass");
   }
 }
