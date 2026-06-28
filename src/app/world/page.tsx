@@ -2453,24 +2453,120 @@ const whisperCountForActiveNpc = activeNpc
                 </div>
               )}
 
-              {/* 感兴趣的内容：推荐低语 */}
+              {/* 感兴趣的内容：标签形式 */}
               <p className="eden-section-title" style={{ marginTop: 16 }}>感兴趣的内容</p>
               {activeNpc ? (
-                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                  {getRecommendedWhispers(activeNpc).map((whisper, i) => (
-                    <button
-                      key={i}
-                      className="eden-btn eden-btn--suggestion"
-                      onClick={() => {
-                        setPlayerInput(whisper);
-                        setTimeout(() => textareaRef.current?.focus(), 0);
-                      }}
-                      disabled={isLoading}
-                      style={{ textAlign: "left", justifyContent: "flex-start" }}
-                    >
-                      {whisper}
-                    </button>
-                  ))}
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
+                  {(() => {
+                    const interestTags: Record<EdenNpcId, Array<{ text: string; color?: string }>> = {
+                      eve: [
+                        { text: "死亡", color: "rgba(200, 120, 80, 0.2)" },
+                        { text: "善恶", color: "rgba(180, 150, 90, 0.2)" },
+                        { text: "像神", color: "rgba(200, 180, 100, 0.2)" },
+                        { text: "自己", color: "rgba(150, 180, 130, 0.2)" },
+                        { text: "判断", color: "rgba(130, 170, 150, 0.2)" },
+                      ],
+                      adam: [
+                        { text: "命令", color: "rgba(140, 140, 180, 0.2)" },
+                        { text: "牵挂", color: "rgba(180, 140, 170, 0.2)" },
+                        { text: "夏娃", color: "rgba(200, 150, 180, 0.2)" },
+                        { text: "相信", color: "rgba(160, 170, 140, 0.2)" },
+                      ],
+                      hedgehog: [
+                        { text: "安静", color: "rgba(150, 170, 120, 0.2)" },
+                        { text: "草叶", color: "rgba(120, 150, 90, 0.2)" },
+                        { text: "声音", color: "rgba(140, 160, 130, 0.2)" },
+                      ],
+                      watching_angel: [
+                        { text: "边界", color: "rgba(150, 150, 170, 0.2)" },
+                        { text: "风", color: "rgba(130, 150, 160, 0.2)" },
+                        { text: "注视", color: "rgba(180, 150, 150, 0.2)" },
+                      ],
+                      gabriel: [
+                        { text: "声音", color: "rgba(160, 170, 200, 0.2)" },
+                        { text: "传话", color: "rgba(150, 180, 200, 0.2)" },
+                        { text: "水流", color: "rgba(130, 170, 190, 0.2)" },
+                      ],
+                      raphael: [
+                        { text: "安抚", color: "rgba(140, 190, 170, 0.2)" },
+                        { text: "平静", color: "rgba(130, 180, 180, 0.2)" },
+                        { text: "鹿", color: "rgba(150, 170, 160, 0.2)" },
+                      ],
+                      uriel: [
+                        { text: "光", color: "rgba(200, 180, 120, 0.2)" },
+                        { text: "分辨", color: "rgba(180, 170, 100, 0.2)" },
+                        { text: "提问", color: "rgba(160, 180, 120, 0.2)" },
+                      ],
+                      michael: [
+                        { text: "选择", color: "rgba(150, 150, 180, 0.2)" },
+                        { text: "后果", color: "rgba(170, 140, 160, 0.2)" },
+                        { text: "分流", color: "rgba(140, 160, 180, 0.2)" },
+                      ],
+                      cherubim: [
+                        { text: "东门", color: "rgba(180, 160, 140, 0.2)" },
+                        { text: "道路", color: "rgba(160, 150, 130, 0.2)" },
+                        { text: "守卫", color: "rgba(170, 150, 150, 0.2)" },
+                      ],
+                      fox: [
+                        { text: "话术", color: "rgba(180, 120, 140, 0.2)" },
+                        { text: "判断", color: "rgba(160, 140, 150, 0.2)" },
+                        { text: "评价", color: "rgba(170, 130, 140, 0.2)" },
+                      ],
+                      deer: [
+                        { text: "视线", color: "rgba(140, 170, 150, 0.2)" },
+                        { text: "树林", color: "rgba(120, 160, 130, 0.2)" },
+                        { text: "安静", color: "rgba(130, 170, 140, 0.2)" },
+                      ],
+                      dove: [
+                        { text: "传话", color: "rgba(180, 180, 190, 0.2)" },
+                        { text: "夜晚", color: "rgba(100, 110, 140, 0.2)" },
+                        { text: "温和", color: "rgba(170, 190, 180, 0.2)" },
+                      ],
+                      sheep: [
+                        { text: "园子", color: "rgba(150, 180, 130, 0.2)" },
+                        { text: "温和", color: "rgba(160, 190, 150, 0.2)" },
+                        { text: "草地", color: "rgba(130, 160, 110, 0.2)" },
+                      ],
+                      tree_of_life: [],
+                      forbidden_tree: [],
+                    };
+                    const tagExamples: Record<EdenNpcId, Record<string, string>> = {
+                      eve: {
+                        "死亡": "你知道死究竟是什么吗？",
+                        "善恶": "如果不明白善恶，怎么知道服从是善？",
+                        "像神": "你不想变得像神一样，知道更多吗？",
+                        "自己": "你难道不想自己做一次判断吗？",
+                        "判断": "为什么神不让你自己判断呢？",
+                      },
+                      adam: {
+                        "命令": "神的命令，你就从来没有怀疑过吗？",
+                        "牵挂": "你那么牵挂她，难道不想让她更明白吗？",
+                        "夏娃": "如果夏娃想知道更多，你会阻拦她吗？",
+                        "相信": "你更相信神说的，还是她想的？",
+                      },
+                    };
+                    return interestTags[activeNpc]?.map((item, i) => (
+                      <button
+                        key={i}
+                        className="eden-btn eden-btn--suggestion"
+                        onClick={() => {
+                          setPlayerInput(tagExamples[activeNpc as keyof typeof tagExamples]?.[item.text] || "");
+                          setTimeout(() => textareaRef.current?.focus(), 0);
+                        }}
+                        disabled={isLoading}
+                        style={{
+                          padding: "6px 16px",
+                          fontSize: "13px",
+                          borderRadius: "16px",
+                          minWidth: "auto",
+                          background: item.color || "rgba(160, 138, 80, 0.1)",
+                          borderColor: item.color ? item.color.replace("0.2", "0.3") : undefined,
+                        }}
+                      >
+                        {item.text}
+                      </button>
+                    )) || [];
+                  })()}
                 </div>
               ) : (
                 <p className="eden-empty-hint">先选择一个低语对象来查看推荐内容。</p>
@@ -2484,17 +2580,36 @@ const whisperCountForActiveNpc = activeNpc
                     {availableSceneActions.length === 0 ? (
                       <p className="eden-empty-hint" style={{ margin: 0 }}>当前地点暂无可执行的场景动作。</p>
                     ) : (
-                      availableSceneActions.map((action) => (
-                        <button
-                          key={action.id}
-                          className="eden-btn eden-btn--suggestion"
-                          onClick={() => handleToolCall("scene_action", { sceneActionId: action.id })}
-                          disabled={isLoading || state.actionPoints < action.apCost}
-                          title={action.description}
-                        >
-                          {action.label}（{action.apCost}点）
-                        </button>
-                      ))
+                      availableSceneActions.map((action) => {
+                        const hasItemReward = action.rewards.itemIds && action.rewards.itemIds.length > 0;
+                        return (
+                          <button
+                            key={action.id}
+                            className="eden-btn eden-btn--suggestion"
+                            onClick={() => handleToolCall("scene_action", { sceneActionId: action.id })}
+                            disabled={isLoading || state.actionPoints < action.apCost}
+                            title={action.description}
+                            style={{
+                              position: "relative",
+                              justifyContent: "space-between",
+                            }}
+                          >
+                            <span>{action.label}（{action.apCost}点）</span>
+                            {hasItemReward && (
+                              <span style={{
+                                fontSize: "11px",
+                                opacity: 0.9,
+                                padding: "2px 8px",
+                                borderRadius: "10px",
+                                background: "rgba(200, 170, 90, 0.15)",
+                                border: "1px solid rgba(200, 170, 90, 0.25)",
+                              }}>
+                                ✨ 获回响
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })
                     )}
                   </div>
                   {state.actionPoints <= 0 && (
