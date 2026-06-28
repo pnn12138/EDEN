@@ -28,15 +28,15 @@ export type EdenNpcMeta = {
 export const EDEN_NPCS: Record<EdenNpcId, EdenNpcMeta> = {
   // ---- 原有 P0 NPC ----
   eve: {
-    id: “eve”,
-    name: “夏娃”,
-    shortDesc: “园中的夏娃，初生而纯真”,
-    kind: “main_target”,
+    id: "eve",
+    name: "夏娃",
+    shortDesc: "园中的夏娃，初生而纯真",
+    kind: "main_target",
     canWhisper: true,
     usesLLM: true,
     hasVoice: true,
     promptSummary:
-      “她是夏娃，还没有名字。她初生、纯真，缺乏识别欺骗的经验。她记得神说不可吃，但不真正理解死亡。她对温柔的问题、死亡的含义、自我判断与善恶之知敏感。她不知道自己是角色，不说现代词，不报状态。”,
+      "她是夏娃，还没有名字。她初生、纯真，缺乏识别欺骗的经验。她记得神说不可吃，但不真正理解死亡。她对温柔的问题、死亡的含义、自我判断与善恶之知敏感。她不知道自己是角色，不说现代词，不报状态。",
     appearance: ["day", "night"],
   },
   adam: {
