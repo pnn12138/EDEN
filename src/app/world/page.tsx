@@ -44,12 +44,6 @@ import { getDivineAttentionStage } from "@/game/world/divineGiftRules";
 // ---- 对话历史条目（按 NPC 区分） ----
 type HistoryEntry = { role: "serpent" | "npc"; text: string };
 
-type SerpentTokenStats = {
-  lastTotal: number;
-  total: number;
-  lastWasEstimated: boolean;
-};
-
 type AttributeRow = {
   label: string;
   value: number;
@@ -137,12 +131,6 @@ function clampPercent(value: number): number {
 
 function clampNumber(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
-}
-
-function estimateWorldTokenUsage(parts: Array<string | null | undefined>): number {
-  const text = parts.filter(Boolean).join("\n");
-  if (!text.trim()) return 0;
-  return Math.max(1, Math.ceil(Array.from(text).length / 2));
 }
 
 function buildAttributeProfile(
@@ -475,12 +463,12 @@ const SCENE_FOCUS_HOTSPOTS: SceneFocusHotspot[] = [
     sceneActionId: "listen_to_naming_stone",
     locationId: "adam_garden_work",
     label: "刻名石",
-    hint: "点击中间的刻名石 3 次，石痕会逐渐变亮。",
+    hint: "点击中间的刻名石 2 次，石痕会逐渐变亮。",
     x: 50,
     y: 70,
     width: 16,
     height: 15,
-    requiredClicks: 3,
+    requiredClicks: 2,
     tone: "stone",
   },
   // 刺猬交互改为点击刺猬NPC本体3次触发，不再使用独立hotspot
@@ -729,11 +717,6 @@ export default function WorldPage() {
   const [slotNarrations, setSlotNarrations] = useState<string[] | null>(null);
   const [achievementToast, setAchievementToast] = useState<string | null>(null);
   const [selectedWhisperStyle, setSelectedWhisperStyle] = useState<WhisperStyle["id"] | null>(null);
-  const [serpentTokenStats, setSerpentTokenStats] = useState<SerpentTokenStats>({
-    lastTotal: 0,
-    total: 0,
-    lastWasEstimated: false,
-  });
 
   // ---- 面板状态 ----
   const [activeTab, setActiveTab] = useState<PanelTab>("dialogue");
@@ -1049,22 +1032,6 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
           const ach = getAchievementById(last);
           setAchievementToast(ach ? `解锁印记：${ach.name}` : null);
         }
-        const turnTokenUsage = data.usage?.total_tokens ?? estimateWorldTokenUsage([
-          currentInput,
-          data.reply,
-          data.systemHint,
-          data.divineAttentionNarration,
-          data.hedgehogNarration,
-          data.toolNarration,
-          data.resonanceNarration,
-          ...(data.slotNarrations ?? []),
-        ]);
-        setSerpentTokenStats((prev) => ({
-          lastTotal: turnTokenUsage,
-          total: prev.total + turnTokenUsage,
-          lastWasEstimated: !data.usage,
-        }));
-
         const newEntries: HistoryEntry[] = [{ role: "serpent", text: currentInput }];
         if (data.reply) newEntries.push({ role: "npc", text: data.reply });
         setConversationHistories((prev) => {
@@ -1332,11 +1299,6 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
     setAchievementToast(null);
     setSelectedWhisperStyle(null);
     setSceneFocusProgress({});
-    setSerpentTokenStats({
-      lastTotal: 0,
-      total: 0,
-      lastWasEstimated: false,
-    });
     setActiveTab("dialogue");
     setSceneFocusMode("browse");
   }, []);
@@ -1598,15 +1560,6 @@ const whisperCountForActiveNpc = activeNpc
             <span className="eden-top-action-label">地图</span>
           </button>
           <button
-            className="eden-btn eden-top-action-btn eden-btn--achievement-icon"
-            onClick={() => setAchievementModalOpen(true)}
-            aria-label="查看园中印记"
-            title={`园中印记（${state.unlockedAchievementIds.length}/${ACHIEVEMENTS.length}）`}
-          >
-            <span className="eden-top-action-icon">✧</span>
-            <span className="eden-top-action-label">印记 {state.unlockedAchievementIds.length}</span>
-          </button>
-          <button
             className="eden-btn eden-top-action-btn eden-btn--suggestion"
             onClick={() => setWorldPanelOpen((open) => !open)}
             aria-pressed={isWorldPanelOpen}
@@ -1738,7 +1691,7 @@ const whisperCountForActiveNpc = activeNpc
             </button>
           )}
 
-          {/* 刺猬（氛围动物，可点击低语 / 连续点击3次触发互动）—— 第一章使用圆润版透明立绘 */}
+          {/* 刺猬（氛围动物，可点击低语 / 连续点击2次触发互动）—— 第一章使用圆润版透明立绘 */}
           {currentNpcs.includes("hedgehog") && (
             <button
               className={`eden-stage-animal ${activeNpc !== "hedgehog" ? "eden-stage-character--dim" : ""}`}
@@ -1752,7 +1705,7 @@ const whisperCountForActiveNpc = activeNpc
                 hedgehogClickTimerRef.current = setTimeout(() => {
                   hedgehogClickCountRef.current = 0;
                 }, 2000);
-                if (count >= 3) {
+                if (count >= 2) {
                   hedgehogClickCountRef.current = 0;
                   if (hedgehogClickTimerRef.current) {
                     clearTimeout(hedgehogClickTimerRef.current);
@@ -1764,9 +1717,9 @@ const whisperCountForActiveNpc = activeNpc
                 if (count === 1 && activeNpc !== "hedgehog") {
                   handleSelectNpc("hedgehog");
                 }
-                setSystemHint(`刺猬动了动刺（${count}/3）……`);
+                setSystemHint(`刺猬动了动刺（${count}/2）……`);
               }}
-              aria-label="与刺猬低语（连续点击3次可互动）"
+              aria-label="与刺猬低语（连续点击2次可互动）"
               tabIndex={activeNpc === "hedgehog" ? -1 : 0}
               style={{ border: "none", background: "transparent", padding: 0, cursor: "pointer", pointerEvents: "auto" }}
             >
@@ -2416,19 +2369,6 @@ const whisperCountForActiveNpc = activeNpc
                 )}
               </div>
 
-              <p className="eden-section-title" style={{ marginTop: 16 }}>
-                {serpentTokenStats.lastWasEstimated ? "词元消耗（估算）" : "词元消耗"}
-              </p>
-              <div className="eden-serpent-token-card">
-                <div className="eden-token-row">
-                  <span>本轮消耗</span>
-                  <strong>{serpentTokenStats.lastTotal}</strong>
-                </div>
-                <div className="eden-token-row">
-                  <span>总消耗</span>
-                  <strong>{serpentTokenStats.total}</strong>
-                </div>
-              </div>
             </div>
           )}
 

@@ -28,15 +28,15 @@ export type EdenNpcMeta = {
 export const EDEN_NPCS: Record<EdenNpcId, EdenNpcMeta> = {
   // ---- 原有 P0 NPC ----
   eve: {
-    id: "eve",
-    name: "女人",
-    shortDesc: "园中的女人，初生而纯真",
-    kind: "main_target",
+    id: “eve”,
+    name: “夏娃”,
+    shortDesc: “园中的夏娃，初生而纯真”,
+    kind: “main_target”,
     canWhisper: true,
     usesLLM: true,
     hasVoice: true,
     promptSummary:
-      "她是园中的女人（内部 id: eve），还没有名字。她初生、纯真，缺乏识别欺骗的经验。她记得神说不可吃，但不真正理解死亡。她对温柔的问题、死亡的含义、自我判断与善恶之知敏感。她不知道自己是角色，不说现代词，不报状态；玩家可见称呼统一为“女人”。",
+      “她是夏娃，还没有名字。她初生、纯真，缺乏识别欺骗的经验。她记得神说不可吃，但不真正理解死亡。她对温柔的问题、死亡的含义、自我判断与善恶之知敏感。她不知道自己是角色，不说现代词，不报状态。”,
     appearance: ["day", "night"],
   },
   adam: {
@@ -48,7 +48,7 @@ export const EDEN_NPCS: Record<EdenNpcId, EdenNpcMeta> = {
     usesLLM: true,
     hasVoice: true,
     promptSummary:
-      "亚当被神安置在园中修理看守，曾亲自听见神的禁令。他稳重、回避冲突，对那个女人有牵挂，是二手权威与关系牵挂的交汇点。他不轻易被蛇动摇，但可能透露禁令如何被转述、女人如何理解死亡。他不知道外层真相，不说现代词。",
+      "亚当被神安置在园中修理看守，曾亲自听见神的禁令。他稳重、回避冲突，对夏娃有牵挂，是二手权威与关系牵挂的交汇点。他不轻易被蛇动摇，但可能透露禁令如何被转述、女人如何理解死亡。他不知道外层真相，不说现代词。",
     appearance: ["day", "night"],
   },
   hedgehog: {
@@ -121,7 +121,7 @@ export const EDEN_NPCS: Record<EdenNpcId, EdenNpcMeta> = {
     usesLLM: true,
     hasVoice: false,
     promptSummary:
-      "乌列尔是光照天使，游戏扩展角色。银金色光影，少言，目光锐利。夜晚出现在伊甸之河附近。主题：提问比断言更不容易惊动对方；光照不是替人选择，而是让问题显形。若玩家频繁命令那个女人，乌列尔的反馈会提高神的注视。不说现代词。",
+      "乌列尔是光照天使，游戏扩展角色。银金色光影，少言，目光锐利。夜晚出现在伊甸之河附近。主题：提问比断言更不容易惊动对方；光照不是替人选择，而是让问题显形。若玩家频繁命令夏娃，乌列尔的反馈会提高神的注视。不说现代词。",
     appearance: ["night"],
   },
   michael: {

@@ -77,7 +77,7 @@ export const SCENE_ACTIONS: SceneAction[] = [
     id: "interact_with_hedgehog",
     locationId: "adam_garden_work",
     label: "观察刺猬",
-    description: "刺猬在草边。连续点击刺猬3次，安静地观察它，或许能获得它的信任。",
+    description: "刺猬在草边。连续点击刺猬2次，安静地观察它，或许能获得它的信任。",
     apCost: 1,
     availability: {},
     rewards: {
