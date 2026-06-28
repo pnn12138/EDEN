@@ -483,7 +483,7 @@ const SCENE_FOCUS_HOTSPOTS: SceneFocusHotspot[] = [
     requiredClicks: 3,
     tone: "stone",
   },
-  // 刺猬交互改为点击刺猬NPC本体5次触发，不再使用独立hotspot
+  // 刺猬交互改为点击刺猬NPC本体3次触发，不再使用独立hotspot
   {
     id: "deer-gaze-leaf",
     sceneActionId: "watch_deer_gaze",
