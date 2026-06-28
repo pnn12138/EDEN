@@ -147,10 +147,13 @@ export function applyPreparedResonanceToAction(
     return {};
   }
 
-  // 检查是否匹配 bindTargets
-  const matchesTarget = item.bindTargets?.includes(
-    context.actionKind as unknown as ResonanceBindTarget,
-  );
+  // 检查是否匹配 bindTargets —— "any_npc" 匹配 whisper/dove_message
+  const actionKind = context.actionKind;
+  const matchesTarget = item.bindTargets?.some((bt) => {
+    if (bt === actionKind) return true;
+    if (bt === "any_npc" && (actionKind === "whisper" || actionKind === "dove_message")) return true;
+    return false;
+  });
 
   if (!matchesTarget) {
     // 不匹配，不生效，不消耗
@@ -194,6 +197,14 @@ export function applyPreparedResonanceToAction(
     // 狐尾评语：用于低语，略增信任与好奇
     effect.contextModifier = { bonusSerpentTrust: 2, bonusSelfJudgement: 2 };
     effect.narration = "狐狸尾尖扫出的弯痕让话语避开直路，绕到她愿意思考的地方。";
+  } else if (itemId === "resonance_herald_feather") {
+    // 传令白羽：用于低语，大幅提高对方信任
+    effect.contextModifier = { bonusSerpentTrust: 5 };
+    effect.narration = "白羽的光泽融入你的低语，让你的声音像水面传递的风一样温和。";
+  } else if (itemId === "resonance_boundary_mark") {
+    // 边界之痕：用于低语，让对方更愿意思考边界与选择
+    effect.contextModifier = { bonusSelfJudgement: 4 };
+    effect.narration = "边界之痕的震颤融入你的低语，让她思考选择与界限。";
   }
 
   return effect;
@@ -216,10 +227,13 @@ export function consumePreparedResonanceAfterAction(
     return;
   }
 
-  // 检查是否匹配 bindTargets
-  const matchesTarget = item.bindTargets?.includes(
-    context.actionKind as unknown as ResonanceBindTarget,
-  );
+  // 检查是否匹配 bindTargets —— "any_npc" 匹配 whisper/dove_message
+  const actionKind = context.actionKind;
+  const matchesTarget = item.bindTargets?.some((bt) => {
+    if (bt === actionKind) return true;
+    if (bt === "any_npc" && (actionKind === "whisper" || actionKind === "dove_message")) return true;
+    return false;
+  });
 
   if (!matchesTarget) {
     // 不匹配，不消耗，但保留准备状态
