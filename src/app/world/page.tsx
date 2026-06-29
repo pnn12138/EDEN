@@ -1044,6 +1044,10 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
         });
 
         playWhisperSubmit();
+      } else if (data.usedFallback) {
+        // LLM 未连接或请求失败：不显示假回复，明确提示
+        setSystemHint("模型未连接。园中的声音暂时无法回应你。");
+        setCurrentReply(null);
       } else {
         setSystemHint(data.systemHint ?? "园中起了风，声音暂时听不清。");
       }
@@ -1381,7 +1385,7 @@ const whisperCountForActiveNpc = activeNpc
             fill
             priority
             sizes="100vw"
-            style={{ objectFit: "cover" }}
+            style={{ objectFit: "cover", maxWidth: "100vw", maxHeight: "100vh" }}
           />
           <div className="eden-bg-overlay eden-bg-overlay--intro" />
         </div>
