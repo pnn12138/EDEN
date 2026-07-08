@@ -42,13 +42,14 @@ import {
 import { checkAndUnlockAchievements } from "@/game/world/achievementRules";
 import { triggerDivineGiftIfFull } from "@/game/world/divineGiftRules";
 import {
-  prepareResonance,
-  cancelPreparedResonance,
   executeInstantResonance,
   executeConsumableResonance,
-  applyPreparedResonanceToAction,
-  consumePreparedResonanceAfterAction,
   applyPendingConsumableToMove,
+  applyPendingConsumableToSceneAction,
+  applyPendingConsumableToDoveMessage,
+  hasPendingFreeApForAction,
+  hasPassiveLightStepForMove,
+  applyPassiveLightStepToMove,
 } from "@/game/world/resonanceRules";
 import { getItemById } from "@/content/world/items";
 
@@ -63,7 +64,7 @@ type ToolRequestBody = {
     focus?: string;
     /** 场景互动 ID */
     sceneActionId?: string;
-    /** 回响 ID（用于准备/使用） */
+    /** 回响 ID（用于使用） */
     itemId?: string;
     /** 渐进点击序号（1-based），用于多击场景互动 */
     clickIndex?: number;
@@ -123,7 +124,7 @@ function cloneWorldState(s: EdenWorldState): EdenWorldState {
     calmWhisperStreak: s.calmWhisperStreak ?? 0,
     // Chapter 1 新增字段（兼容旧状态）
     itemCounts: { ...(s.itemCounts ?? {}) },
-    preparedResonanceId: s.preparedResonanceId ?? null,
+    preparedResonanceId: null,
     pendingConsumableEffects: (s.pendingConsumableEffects ?? []).map((e) => ({ ...e })),
     resonanceUseHistory: (s.resonanceUseHistory ?? []).map((r) => ({ ...r })),
     divineVisitCount: s.divineVisitCount ?? 0,
@@ -178,7 +179,6 @@ export async function POST(request: NextRequest) {
     // end_slot：主动结束时段（玩家点击"进入下一轮"）
     // ============================================================
     if (tool === "end_slot") {
-      // 取消准备的回响（不消耗道具）
       state.preparedResonanceId = null;
 
       // 直接推进时段（消耗剩余 AP 并推进到下一时段）
@@ -209,24 +209,23 @@ export async function POST(request: NextRequest) {
     }
 
     // ============================================================
-    // 回响准备 / 取消准备 / 即时使用（不消耗 AP）
+    // 回响使用（不消耗 AP）；准备/取消准备仅为旧请求兼容
     // ============================================================
     if (tool === "prepare_resonance") {
-      const result = prepareResonance(state, args.itemId!);
       return NextResponse.json({
-        ok: result.allowed,
+        ok: false,
         state,
-        narration: result.allowed ? "这段回响已被你握住，等待下一次合适的行动。" : null,
-        reason: result.reason,
+        narration: null,
+        reason: "回响现在无需准备，请直接使用。",
       } satisfies ToolResponseBody);
     }
 
     if (tool === "cancel_prepared_resonance") {
-      cancelPreparedResonance(state);
+      state.preparedResonanceId = null;
       return NextResponse.json({
         ok: true,
         state,
-        narration: "你松开了这段回响。它仍留在园中回响里。",
+        narration: "你松开了旧的准备状态。现在回响会在使用后等待匹配行动生效。",
       } satisfies ToolResponseBody);
     }
 
@@ -237,19 +236,35 @@ export async function POST(request: NextRequest) {
       }
       if (item.kind === "consumable") {
         const result = executeConsumableResonance(state, args.itemId!);
+        checkAndUnlockAchievements(state);
         return NextResponse.json({
           ok: result.allowed,
           state,
           narration: result.narration ?? null,
           reason: result.reason,
+          unlockedAchievements: state.unlockedAchievementIds.length > 0
+            ? state.unlockedAchievementIds.map((id) => id)
+            : undefined,
+        } satisfies ToolResponseBody);
+      }
+      if (item.kind === "passive") {
+        return NextResponse.json({
+          ok: false,
+          state,
+          narration: null,
+          reason: "这段回响会自动生效，不需要主动使用。",
         } satisfies ToolResponseBody);
       }
       const result = executeInstantResonance(state, args.itemId!);
+      checkAndUnlockAchievements(state);
       return NextResponse.json({
         ok: result.allowed,
         state,
         narration: result.narration ?? null,
         reason: result.reason,
+        unlockedAchievements: state.unlockedAchievementIds.length > 0
+          ? state.unlockedAchievementIds.map((id) => id)
+          : undefined,
       } satisfies ToolResponseBody);
     }
 
@@ -284,8 +299,8 @@ export async function POST(request: NextRequest) {
       if (state.actionsThisSlot.sceneActionIds.includes(actionId)) {
         return NextResponse.json({ ok: false, state, narration: null, reason: "这一时段你已经做过这件事了" } satisfies ToolResponseBody);
       }
-      // AP 校验
-      if (!canAffordAction(state, AP_COST_SCENE_ACTION)) {
+      const sceneHasFreeAp = hasPendingFreeApForAction(state, "scene_action");
+      if (!canAffordAction(state, sceneHasFreeAp ? 0 : AP_COST_SCENE_ACTION)) {
         return NextResponse.json({
           ok: false,
           state,
@@ -299,12 +314,8 @@ export async function POST(request: NextRequest) {
       const clickIndex: number = typeof args.clickIndex === "number" ? (args.clickIndex as number) : 1;
       const isFinalClick = clickIndex >= requiredClicks;
 
-      // 检查准备的回响是否匹配场景互动
-      const resonanceEffect = applyPreparedResonanceToAction(state, {
-        actionKind: "scene_action",
-        locationId: state.locationId,
-      });
-      const sceneCost = resonanceEffect.freeApCost ? 0 : AP_COST_SCENE_ACTION;
+      const sceneResonanceEffect = applyPendingConsumableToSceneAction(state);
+      const sceneCost = sceneResonanceEffect.freeApCost ? 0 : AP_COST_SCENE_ACTION;
 
       // 消耗 AP（每次点击都消耗）
       consumeActionPoints(state, sceneCost);
@@ -313,9 +324,9 @@ export async function POST(request: NextRequest) {
       if (!isFinalClick) {
         const resp = buildResponse(
           state,
-          `${action.label}亮起了一些（${clickIndex}/${requiredClicks}）。`,
+          `${sceneResonanceEffect.narrations.join(" ")} ${action.label}亮起了一些（${clickIndex}/${requiredClicks}）。`.trim(),
         );
-        return NextResponse.json({ ...resp, resonanceNarration: undefined } satisfies ToolResponseBody);
+        return NextResponse.json({ ...resp, resonanceNarration: sceneResonanceEffect.narrations.join(" ") || undefined } satisfies ToolResponseBody);
       }
 
       // 最终点击：记录完成，发放奖励
@@ -336,17 +347,12 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // 消耗准备的回响（如果匹配场景互动）
-      consumePreparedResonanceAfterAction(state, {
-        actionKind: "scene_action",
-        locationId: state.locationId,
-      }, resonanceEffect.narration ?? action.rewards.narration);
-
       // 河声入耳：获得第一条地点线索后解锁
       checkAndUnlockAchievements(state);
 
-      const resp = buildResponse(state, action.rewards.narration, newlyDiscoveredTitles.length > 0 ? newlyDiscoveredTitles : undefined);
-      return NextResponse.json(resp satisfies ToolResponseBody);
+      const narration = `${sceneResonanceEffect.narrations.join(" ")} ${action.rewards.narration}`.trim();
+      const resp = buildResponse(state, narration, newlyDiscoveredTitles.length > 0 ? newlyDiscoveredTitles : undefined);
+      return NextResponse.json({ ...resp, resonanceNarration: sceneResonanceEffect.narrations.join(" ") || undefined } satisfies ToolResponseBody);
     }
 
     // ============================================================
@@ -354,7 +360,10 @@ export async function POST(request: NextRequest) {
     // 这些都消耗 1 AP（移动/观察/传话/评价）
     // ============================================================
     const apCost = AP_COST_MOVE;
-    if (!canAffordAction(state, apCost)) {
+    const generalActionFree =
+      (tool === "move_to_location" && (hasPendingFreeApForAction(state, "move") || hasPassiveLightStepForMove(state))) ||
+      (tool === "carry_words" && hasPendingFreeApForAction(state, "dove_message"));
+    if (!canAffordAction(state, generalActionFree ? 0 : apCost)) {
       return NextResponse.json({
         ok: false,
         state,
@@ -395,6 +404,16 @@ export async function POST(request: NextRequest) {
         if (!state.usedItemIds.includes("moonlight_path_marker")) {
           state.usedItemIds.push("moonlight_path_marker");
         }
+        if (!state.actionsThisSlot.usedItemIds.includes("moonlight_path_marker")) {
+          state.actionsThisSlot.usedItemIds.push("moonlight_path_marker");
+        }
+        state.resonanceUseHistory.push({
+          timeSlot: state.timeSlot,
+          itemId: "moonlight_path_marker",
+          actionKind: "move",
+          targetId: target,
+          result: "月光道标让蛇直接走向非相邻地点",
+        });
         // 替换为月光叙事
         toolCall.reason = "蛇借月光道标走捷径";
       } else if (!validation.allowed) {
@@ -406,29 +425,22 @@ export async function POST(request: NextRequest) {
         } satisfies ToolResponseBody);
       }
 
-      // 检查准备的回响是否匹配移动
-      const resonanceEffect = applyPreparedResonanceToAction(state, {
-        actionKind: "move",
-        locationId: target,
-      });
-      // 检查待生效的消耗品效果（移动类）
       const consumableMoveEffect = applyPendingConsumableToMove(state);
-      const moveCost = (resonanceEffect.freeApCost || consumableMoveEffect.freeApCost) ? 0 : apCost;
+      const passiveMoveEffect = applyPassiveLightStepToMove(state);
+      const moveCost = (consumableMoveEffect.freeApCost || passiveMoveEffect.freeApCost) ? 0 : apCost;
 
       consumeActionPoints(state, moveCost);
       const result = executeWorldTool(state, toolCall);
 
-      // 消耗准备的回响（如果匹配）
-      consumePreparedResonanceAfterAction(state, {
-        actionKind: "move",
-        locationId: target,
-      }, result.narration ?? "");
-
-      const moveNarration = consumableMoveEffect.narrations.length > 0
-        ? `${consumableMoveEffect.narrations.join(" ")} ${result.narration ?? ""}`
+      const moveResonanceNarrations = [
+        ...consumableMoveEffect.narrations,
+        passiveMoveEffect.narration,
+      ].filter((n): n is string => Boolean(n));
+      const moveNarration = moveResonanceNarrations.length > 0
+        ? `${moveResonanceNarrations.join(" ")} ${result.narration ?? ""}`.trim()
         : result.narration;
       const resp = buildResponse(state, moveNarration, result.discoveredClueTitles);
-      return NextResponse.json(resp satisfies ToolResponseBody);
+      return NextResponse.json({ ...resp, resonanceNarration: moveResonanceNarrations.join(" ") || undefined } satisfies ToolResponseBody);
     }
 
     // ---- 观察地点：observe_location（蛇观察当前地点，caller="serpent"） ----
@@ -523,12 +535,17 @@ export async function POST(request: NextRequest) {
         } satisfies ToolResponseBody);
       }
 
-      consumeActionPoints(state, apCost);
+      const doveFreeAp = hasPendingFreeApForAction(state, "dove_message");
+      consumeActionPoints(state, doveFreeAp ? 0 : apCost);
+      const doveEffect = applyPendingConsumableToDoveMessage(state);
       const result = executeWorldTool(state, toolCall);
       // 鸽子传话解锁"借翼传言"
       checkAndUnlockAchievements(state);
-      const resp = buildResponse(state, result.narration);
-      return NextResponse.json(resp satisfies ToolResponseBody);
+      const narration = doveEffect.narrations.length > 0
+        ? `${doveEffect.narrations.join(" ")} ${result.narration}`.trim()
+        : result.narration;
+      const resp = buildResponse(state, narration);
+      return NextResponse.json({ ...resp, resonanceNarration: doveEffect.narrations.join(" ") || undefined } satisfies ToolResponseBody);
     }
 
     // ---- 狐狸评价话术：judge_whisper_style ----

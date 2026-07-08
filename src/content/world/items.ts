@@ -10,7 +10,10 @@
 import type { EdenItem } from "@/game/world/types";
 
 // ---- 回响类型 ----
-export type WorldItemKind = "instant" | "prepared" | "passive" | "consumable";
+// instant：点击后立即结算。
+// consumable：点击后激活，只在下一次匹配行动中生效。
+// passive：获得后自动提供固定收益，不显示主动使用入口。
+export type WorldItemKind = "instant" | "passive" | "consumable";
 
 // ---- 回响可绑定的行动类型 ----
 export type ResonanceBindTarget =
@@ -18,7 +21,7 @@ export type ResonanceBindTarget =
   | "move"
   | "scene_action"
   | "dove_message"
-  | "any_npc";     // consumable: 对任意NPC的下一次低语生效
+  | "any_npc";     // consumable: 对任意 NPC 的下一次低语/传话生效
 
 // ---- 回响来源类型 ----
 export type ResonanceSourceType = "angel" | "character" | "scene" | "divine";
@@ -26,7 +29,7 @@ export type ResonanceSourceType = "angel" | "character" | "scene" | "divine";
 // ---- 扩展的道具类型 ----
 export type WorldItem = EdenItem & {
   kind: WorldItemKind;
-  /** 可绑定的行动类型（prepared 类型需要） */
+  /** 可生效的行动类型（consumable 类型需要） */
   bindTargets?: ResonanceBindTarget[];
   /** 是否可重复获得 */
   repeatable?: boolean;
@@ -236,11 +239,12 @@ export const EDEN_ITEMS: WorldItem[] = [
     title: "白羽回声",
     description: "一根白羽在河面泛起的银光。它能让鸽子在夜里带走一句温和的话。",
     obtainLocation: "naming_stone_bank",
-    kind: "instant",
+    kind: "consumable",
+    bindTargets: ["dove_message"],
     repeatable: true,
     sourceType: "scene",
     sourceName: "四河分流",
-    shortEffect: "即时使用，让鸽子传递一次温和低语。",
+    shortEffect: "使用后消耗，下一次鸽子传话会更温和，并提高女人愿意倾听的程度。",
     icon: "🕊️",
   },
   {
@@ -285,11 +289,12 @@ export const EDEN_ITEMS: WorldItem[] = [
     title: "宽行之印",
     description: "神留下的印，能让一条路暂时被宽恕。",
     obtainLocation: "east_garden_path",
-    kind: "instant",
+    kind: "consumable",
+    bindTargets: ["move", "scene_action"],
     repeatable: true,
     sourceType: "divine",
     sourceName: "神",
-    shortEffect: "即时使用，免除一次移动或场景互动的行动点消耗。",
+    shortEffect: "使用后消耗，免除下一次移动或场景互动的行动点消耗。",
     icon: "✨",
   },
 
@@ -303,7 +308,7 @@ export const EDEN_ITEMS: WorldItem[] = [
     repeatable: false,
     sourceType: "scene",
     sourceName: "园中风韵",
-    shortEffect: "永久被动：每次移动消耗的行动点降低1点（最低1点）。",
+    shortEffect: "永久被动：每个时段第一次移动不消耗行动点。",
     icon: "👣",
   },
   {
@@ -315,7 +320,7 @@ export const EDEN_ITEMS: WorldItem[] = [
     repeatable: false,
     sourceType: "character",
     sourceName: "回响回忆",
-    shortEffect: "永久被动：每次低语提升神注视的概率降低20%。",
+    shortEffect: "永久被动：每个时段第一次轻微惊动神的低语会被压低 1 点注视。",
     icon: "🤫",
   },
 
@@ -325,11 +330,11 @@ export const EDEN_ITEMS: WorldItem[] = [
     title: "月光道标",
     description: "夜晚在园子中央点击月亮获得的神秘道标，能让蛇走捷径。",
     obtainLocation: "central_meadow",
-    kind: "instant",
+    kind: "passive",
     repeatable: true,
     sourceType: "scene",
     sourceName: "月亮",
-    shortEffect: "即时使用：本次可直接移动到任意地点，无需绕行园子中央。",
+    shortEffect: "自动生效：下一次前往非相邻地点时消耗一枚，直接走月光捷径。",
     icon: "🌙",
   },
 ];

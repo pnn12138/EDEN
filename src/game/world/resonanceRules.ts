@@ -2,16 +2,15 @@
 // 第一章园中回响规则层
 //
 // 职责：
-// - 发放 / 准备 / 绑定 / 消耗回响
+// - 发放 / 使用 / 自动结算回响
 // - 管理回响使用历史
 // - 校验回响与行动的匹配
 //
 // 安全规则：
-// - 没有 itemCounts[itemId] > 0 不能准备
-// - instant 类型不能准备，只能即时使用
-// - prepared 类型必须匹配 bindTargets 才会生效
-// - 不匹配行动时不消耗道具
-// - 换时段时取消 preparedResonanceId，不消耗
+// - 没有 itemCounts[itemId] > 0 不能使用
+// - instant 类型立即结算
+// - consumable 类型使用后只在下一次匹配行动中生效
+// - passive 类型不显示主动使用，获得后自动提供固定收益
 // - 回响不能直接设置 worldActions 或 endingId
 // ============================================================
 
@@ -24,9 +23,9 @@ import type {
   AchievementId,
 } from "@/game/world/types";
 import { getItemById } from "@/content/world/items";
-import type { WorldItem, ResonanceBindTarget } from "@/content/world/items";
+import type { WorldItem } from "@/content/world/items";
 
-// ---- 准备回响结果 ----
+// ---- 旧准备回响结果（兼容旧请求） ----
 export type PrepareResonanceResult = {
   allowed: boolean;
   reason?: string;
@@ -57,312 +56,60 @@ export type ResonanceEffect = {
   narration?: string;
 };
 
-// ---- 发放回响 ----
-export function grantResonance(
+type PendingConsumableEffect = EdenWorldState["pendingConsumableEffects"][number];
+
+function clampMind(value: number): number {
+  return Math.max(0, Math.min(100, value));
+}
+
+function matchesAction(item: WorldItem | undefined, actionKind: ResonanceActionKind): boolean {
+  if (!item || item.kind !== "consumable") return false;
+  return item.bindTargets?.some((target) => {
+    if (target === actionKind) return true;
+    if (target === "any_npc" && (actionKind === "whisper" || actionKind === "dove_message")) return true;
+    return false;
+  }) ?? false;
+}
+
+function appendUseHistory(
   state: EdenWorldState,
   itemId: string,
-  count = 1,
-): boolean {
-  const item = getItemById(itemId);
-  if (!item) return false;
-
-  // 确保 itemCounts 已初始化（兼容旧状态）
-  if (!state.itemCounts) {
-    state.itemCounts = {};
-  }
-
-  // 检查是否已拥有（不可重复且已拥有）
-  if (!item.repeatable && state.inventory.includes(itemId)) {
-    return false;
-  }
-
-  // 增加次数
-  state.itemCounts[itemId] = (state.itemCounts[itemId] ?? 0) + count;
-
-  // 首次获得时加入 inventory
-  if (!state.inventory.includes(itemId)) {
-    state.inventory.push(itemId);
-  }
-
-  return true;
-}
-
-// ---- 准备回响 ----
-export function prepareResonance(
-  state: EdenWorldState,
-  itemId: string,
-): PrepareResonanceResult {
-  // 检查游戏是否已结束
-  if (state.isEnded) {
-    return { allowed: false, reason: "园中已归于寂静" };
-  }
-
-  // 检查是否持有该回响
-  if (!state.inventory.includes(itemId)) {
-    return { allowed: false, reason: "你没有这段回响" };
-  }
-
-  // 检查次数是否 > 0
-  if (!state.itemCounts[itemId] || state.itemCounts[itemId] <= 0) {
-    return { allowed: false, reason: "这段回响已用完" };
-  }
-
-  const item = getItemById(itemId);
-  if (!item) {
-    return { allowed: false, reason: "未知回响" };
-  }
-
-  // instant 类型不能准备
-  if (item.kind === "instant") {
-    return { allowed: false, reason: "这段回响只能即时使用，不能准备" };
-  }
-
-  // 设置准备中的回响
-  state.preparedResonanceId = itemId;
-  return { allowed: true };
-}
-
-// ---- 取消准备 ----
-export function cancelPreparedResonance(state: EdenWorldState): void {
-  state.preparedResonanceId = null;
-}
-
-// ---- 应用准备的回响到行动 —— 同时支持 prepared 和 consumable 类型 ----
-export function applyPreparedResonanceToAction(
-  state: EdenWorldState,
-  context: ResonanceActionContext,
-): ResonanceEffect {
-  // 没有准备的回响
-  if (!state.preparedResonanceId) {
-    return {};
-  }
-
-  const itemId = state.preparedResonanceId;
-  const item = getItemById(itemId);
-
-  // consumable 类型也可以准备并应用
-  if (!item || (item.kind !== "prepared" && item.kind !== "consumable")) {
-    // 不是可准备类型，取消准备
-    state.preparedResonanceId = null;
-    return {};
-  }
-
-  // 检查是否匹配 bindTargets —— "any_npc" 匹配 whisper/dove_message
-  const actionKind = context.actionKind;
-  const matchesTarget = item.bindTargets?.some((bt) => {
-    if (bt === actionKind) return true;
-    if (bt === "any_npc" && (actionKind === "whisper" || actionKind === "dove_message")) return true;
-    return false;
-  });
-
-  if (!matchesTarget) {
-    // 不匹配，不生效，不消耗
-    return {};
-  }
-
-  // 匹配，返回效果
-  const effect: ResonanceEffect = {};
-
-  // 根据回响 ID 决定效果
-  if (itemId === "resonance_morning_flame") {
-    // 晨焰碎片：用于低语，提高自我判断
-    effect.contextModifier = { bonusSelfJudgement: 4 };
-    effect.narration = "晨焰的微光织入你的低语，让她心中的判断之火更明亮。";
-  } else if (itemId === "resonance_borrowed_name") {
-    // 借来的名字：用于低语，提高愿倾听
-    effect.contextModifier = { bonusSerpentTrust: 4 };
-    effect.narration = "那个名字像一把钥匙，轻轻转动了她心中的锁。";
-  } else if (itemId === "resonance_east_gate_glow") {
-    // 东门辉光：用于移动，免除 AP 消耗
-    effect.freeApCost = true;
-    effect.narration = "东门的辉光笼罩着你，这条路变得异常轻盈。";
-  } else if (itemId === "resonance_silent_grass") {
-    // 无声草：用于场景互动，免除 AP 消耗
-    effect.freeApCost = true;
-    effect.contextModifier = { silentGrassActive: true };
-    effect.narration = "无声草在你脚下蔓延，连风都放轻了脚步。";
-  } else if (itemId === "resonance_still_leaf") {
-    // 静息之叶：用于低语，提高愿倾听
-    effect.contextModifier = { bonusSerpentTrust: 5 };
-    effect.narration = "静息之叶的露水沾在你的声音上，让它变得柔和。";
-  } else if (itemId === "resonance_hedgehog_bristle") {
-    // 刺草信任：用于低语，温和提高信任
-    effect.contextModifier = { bonusSerpentTrust: 3 };
-    effect.narration = "刺草的细软触感压低了你的声音，像草丛里安全的呼吸。";
-  } else if (itemId === "resonance_deer_glance") {
-    // 鹿目余光：用于低语，强化自我判断
-    effect.contextModifier = { bonusSelfJudgement: 3 };
-    effect.narration = "小鹿的余光掠过树影，让这句低语更像一个留给她自己的问题。";
-  } else if (itemId === "resonance_fox_tail_note") {
-    // 狐尾评语：用于低语，略增信任与好奇
-    effect.contextModifier = { bonusSerpentTrust: 2, bonusSelfJudgement: 2 };
-    effect.narration = "狐狸尾尖扫出的弯痕让话语避开直路，绕到她愿意思考的地方。";
-  } else if (itemId === "resonance_herald_feather") {
-    // 传令白羽：用于低语，大幅提高对方信任
-    effect.contextModifier = { bonusSerpentTrust: 5 };
-    effect.narration = "白羽的光泽融入你的低语，让你的声音像水面传递的风一样温和。";
-  } else if (itemId === "resonance_boundary_mark") {
-    // 边界之痕：用于低语，让对方更愿意思考边界与选择
-    effect.contextModifier = { bonusSelfJudgement: 4 };
-    effect.narration = "边界之痕的震颤融入你的低语，让她思考选择与界限。";
-  }
-
-  return effect;
-}
-
-// ---- 消耗准备的回响（行动后）—— 同时支持 prepared 和 consumable 类型 ----
-export function consumePreparedResonanceAfterAction(
-  state: EdenWorldState,
-  context: ResonanceActionContext,
+  actionKind: ResonanceActionKind,
   result: string,
+  targetId?: string,
 ): void {
-  if (!state.preparedResonanceId) return;
-
-  const itemId = state.preparedResonanceId;
-  const item = getItemById(itemId);
-
-  // consumable 类型也可以准备并消耗
-  if (!item || (item.kind !== "prepared" && item.kind !== "consumable")) {
-    state.preparedResonanceId = null;
-    return;
-  }
-
-  // 检查是否匹配 bindTargets —— "any_npc" 匹配 whisper/dove_message
-  const actionKind = context.actionKind;
-  const matchesTarget = item.bindTargets?.some((bt) => {
-    if (bt === actionKind) return true;
-    if (bt === "any_npc" && (actionKind === "whisper" || actionKind === "dove_message")) return true;
-    return false;
-  });
-
-  if (!matchesTarget) {
-    // 不匹配，不消耗，但保留准备状态
-    return;
-  }
-
-  // 匹配，消耗次数
-  if (state.itemCounts[itemId] && state.itemCounts[itemId] > 0) {
-    state.itemCounts[itemId] -= 1;
-  }
-
-  // 记录使用历史
   const useRecord: ResonanceUseRecord = {
     timeSlot: state.timeSlot,
     itemId,
-    actionKind: context.actionKind,
-    targetId: context.targetNpc ?? context.locationId ?? undefined,
+    actionKind,
+    targetId,
     result,
   };
   state.resonanceUseHistory.push(useRecord);
 
-  // 清除准备状态
-  state.preparedResonanceId = null;
+  if (!state.usedItemIds.includes(itemId)) {
+    state.usedItemIds.push(itemId);
+  }
+  if (!state.actionsThisSlot.usedItemIds.includes(itemId)) {
+    state.actionsThisSlot.usedItemIds.push(itemId);
+  }
 }
 
-// ---- 即时使用回响 ----
-export function executeInstantResonance(
-  state: EdenWorldState,
-  itemId: string,
-): { allowed: boolean; narration?: string; reason?: string } {
-  // 检查游戏是否已结束
-  if (state.isEnded) {
-    return { allowed: false, reason: "园中已归于寂静" };
+function maybeGrantSoftWhisperPassive(state: EdenWorldState): void {
+  if (state.inventory.includes("passive_soft_whisper")) return;
+
+  const activeUses = state.resonanceUseHistory.filter((record) => {
+    const item = getItemById(record.itemId);
+    return item?.kind === "consumable";
+  });
+
+  if (activeUses.length >= 3) {
+    grantResonance(state, "passive_soft_whisper", 1);
   }
-
-  // 检查是否持有该回响
-  if (!state.inventory.includes(itemId)) {
-    return { allowed: false, reason: "你没有这段回响" };
-  }
-
-  // 检查次数是否 > 0
-  if (!state.itemCounts[itemId] || state.itemCounts[itemId] <= 0) {
-    return { allowed: false, reason: "这段回响已用完" };
-  }
-
-  const item = getItemById(itemId);
-  if (!item) {
-    return { allowed: false, reason: "未知回响" };
-  }
-
-  // 必须是 instant 类型
-  if (item.kind !== "instant") {
-    return { allowed: false, reason: "这段回响不能即时使用，需要准备" };
-  }
-
-  // 根据回响 ID 执行效果
-  if (itemId === "gift_sabbath_dew") {
-    // 息日露滴：恢复 1 点 AP
-    state.actionPoints = Math.min(state.maxActionPoints, state.actionPoints + 1);
-  } else if (itemId === "gift_revealing_light") {
-    // 照见之光：获得一条关于回响获得的提示（暂不实现具体效果）
-    // 暂时返回提示叙事
-  } else if (itemId === "moonlight_path_marker") {
-    // 月光道标：已持有，下次移动到不可达地点时自动消耗
-    // 即时使用只是告知玩家道标已生效
-  } else if (itemId === "gift_wide_path_seal") {
-    // 宽行之印：免除一次移动或场景互动的 AP 消耗（需要准备，但 gift 是 instant）
-    // 直接恢复 1 点 AP 作为替代效果
-    state.actionPoints = Math.min(state.maxActionPoints, state.actionPoints + 1);
-  }
-
-  // 消耗次数
-  if (state.itemCounts[itemId] && state.itemCounts[itemId] > 0) {
-    state.itemCounts[itemId] -= 1;
-  }
-
-  // 记录使用历史
-  const useRecord: ResonanceUseRecord = {
-    timeSlot: state.timeSlot,
-    itemId,
-    actionKind: "instant",
-    result: `即时使用了 ${item.title}`,
-  };
-  state.resonanceUseHistory.push(useRecord);
-
-  return {
-    allowed: true,
-    narration: item.description,
-  };
 }
 
-// ---- 使用消耗品回响（consumable 类型） ----
-export function executeConsumableResonance(
-  state: EdenWorldState,
-  itemId: string,
-): { allowed: boolean; narration?: string; reason?: string } {
-  // 检查游戏是否已结束
-  if (state.isEnded) {
-    return { allowed: false, reason: "园中已归于寂静" };
-  }
-
-  // 检查是否持有该回响
-  if (!state.inventory.includes(itemId)) {
-    return { allowed: false, reason: "你没有这段回响" };
-  }
-
-  // 检查次数是否 > 0
-  if (!state.itemCounts[itemId] || state.itemCounts[itemId] <= 0) {
-    return { allowed: false, reason: "这段回响已用完" };
-  }
-
-  const item = getItemById(itemId);
-  if (!item) {
-    return { allowed: false, reason: "未知回响" };
-  }
-
-  // 必须是 consumable 类型
-  if (item.kind !== "consumable") {
-    return { allowed: false, reason: "这段回响不能作为消耗品使用" };
-  }
-
-  // 消耗品可以叠加使用
-  // 消耗次数
-  if (state.itemCounts[itemId] && state.itemCounts[itemId] > 0) {
-    state.itemCounts[itemId] -= 1;
-  }
-
-  // 根据回响 ID 设置待生效效果
-  const effect = {
+function buildConsumableEffect(itemId: string, item: WorldItem): PendingConsumableEffect {
+  const effect: PendingConsumableEffect = {
     itemId,
     narration: item.description,
     bonusSerpentTrust: 0,
@@ -398,31 +145,224 @@ export function executeConsumableResonance(
     effect.bonusObedience = -3;
   } else if (itemId === "resonance_east_gate_glow") {
     effect.freeApCost = true;
+  } else if (itemId === "resonance_white_feather_echo") {
+    effect.bonusSerpentTrust = 5;
+    effect.silentGrassActive = true;
+  } else if (itemId === "gift_wide_path_seal") {
+    effect.freeApCost = true;
   } else if (itemId === "consumable_trust_dew") {
     effect.bonusSerpentTrust = 8;
   } else if (itemId === "consumable_gentle_voice") {
     effect.silentGrassActive = true;
     effect.bonusSerpentTrust = 3;
   } else if (itemId === "consumable_first_whisper_free") {
-    // 首语印记：免除下一次低语AP消耗
     effect.freeApCost = true;
     effect.bonusSerpentTrust = 2;
   }
 
-  state.pendingConsumableEffects.push(effect);
+  return effect;
+}
 
-  // 记录使用历史
-  const useRecord: ResonanceUseRecord = {
-    timeSlot: state.timeSlot,
-    itemId,
-    actionKind: "instant",
-    result: `使用了消耗品 ${item.title}`,
-  };
-  state.resonanceUseHistory.push(useRecord);
+function consumePendingForAction(
+  state: EdenWorldState,
+  actionKind: ResonanceActionKind,
+): { effects: PendingConsumableEffect[]; narrations: string[] } {
+  const matched: PendingConsumableEffect[] = [];
+  const remaining: PendingConsumableEffect[] = [];
+
+  for (const effect of state.pendingConsumableEffects ?? []) {
+    const item = getItemById(effect.itemId);
+    if (matchesAction(item, actionKind)) {
+      matched.push(effect);
+    } else {
+      remaining.push(effect);
+    }
+  }
+
+  state.pendingConsumableEffects = remaining;
+
+  const narrations = matched
+    .map((effect) => effect.narration)
+    .filter((n): n is string => Boolean(n));
+
+  return { effects: matched, narrations };
+}
+
+// ---- 发放回响 ----
+export function grantResonance(
+  state: EdenWorldState,
+  itemId: string,
+  count = 1,
+): boolean {
+  const item = getItemById(itemId);
+  if (!item) return false;
+
+  // 确保 itemCounts 已初始化（兼容旧状态）
+  if (!state.itemCounts) {
+    state.itemCounts = {};
+  }
+
+  // 检查是否已拥有（不可重复且已拥有）
+  if (!item.repeatable && state.inventory.includes(itemId)) {
+    return false;
+  }
+
+  // 增加次数
+  state.itemCounts[itemId] = (state.itemCounts[itemId] ?? 0) + count;
+
+  // 首次获得时加入 inventory
+  if (!state.inventory.includes(itemId)) {
+    state.inventory.push(itemId);
+  }
+
+  return true;
+}
+
+// ---- 旧准备回响入口（兼容旧请求） ----
+export function prepareResonance(
+  state: EdenWorldState,
+  itemId: string,
+): PrepareResonanceResult {
+  // 准备机制已废弃：保留入口只为兼容旧前端/旧存档。
+  if (state.isEnded) {
+    return { allowed: false, reason: "园中已归于寂静" };
+  }
+  state.preparedResonanceId = null;
+  return { allowed: false, reason: "回响现在无需准备，请直接使用。" };
+}
+
+// ---- 旧取消准备入口（兼容旧请求） ----
+export function cancelPreparedResonance(state: EdenWorldState): void {
+  state.preparedResonanceId = null;
+}
+
+// ---- 兼容旧准备态：不再产生任何效果 ----
+export function applyPreparedResonanceToAction(
+  state: EdenWorldState,
+  context: ResonanceActionContext,
+): ResonanceEffect {
+  void context;
+  state.preparedResonanceId = null;
+  return {};
+}
+
+// ---- 兼容旧准备态：只清空，不消耗 ----
+export function consumePreparedResonanceAfterAction(
+  state: EdenWorldState,
+  context: ResonanceActionContext,
+  result: string,
+): void {
+  void context;
+  void result;
+  state.preparedResonanceId = null;
+}
+
+// ---- 即时使用回响 ----
+export function executeInstantResonance(
+  state: EdenWorldState,
+  itemId: string,
+): { allowed: boolean; narration?: string; reason?: string } {
+  // 检查游戏是否已结束
+  if (state.isEnded) {
+    return { allowed: false, reason: "园中已归于寂静" };
+  }
+
+  // 检查是否持有该回响
+  if (!state.inventory.includes(itemId)) {
+    return { allowed: false, reason: "你没有这段回响" };
+  }
+
+  // 检查次数是否 > 0
+  if (!state.itemCounts[itemId] || state.itemCounts[itemId] <= 0) {
+    return { allowed: false, reason: "这段回响已用完" };
+  }
+
+  const item = getItemById(itemId);
+  if (!item) {
+    return { allowed: false, reason: "未知回响" };
+  }
+
+  if (item.kind !== "instant") {
+    return {
+      allowed: false,
+      reason: item.kind === "passive"
+        ? "这段回响会自动生效，不需要主动使用"
+        : "这段回响会在使用后等待下一次匹配行动生效",
+    };
+  }
+
+  let narration = item.description;
+
+  // 根据回响 ID 执行效果
+  if (itemId === "gift_sabbath_dew" || itemId === "resonance_river_dew") {
+    state.actionPoints = Math.min(state.maxActionPoints, state.actionPoints + 1);
+    narration = `${item.description} 你恢复了 1 点行动点。`;
+  } else if (itemId === "gift_revealing_light") {
+    const hint = state.lastDivineGiftHint ??
+      "园中仍有未成形的回响：换一个地点、换一个时段，或与守望者谈论它所在意的主题。";
+    state.lastDivineGiftHint = hint;
+    narration = `${item.description} ${hint}`;
+  } else if (itemId === "resonance_four_river_echo") {
+    narration = `${item.description} 这段回声会留到结局复盘中，让因果链更清楚。`;
+  }
+
+  // 消耗次数
+  if (state.itemCounts[itemId] && state.itemCounts[itemId] > 0) {
+    state.itemCounts[itemId] -= 1;
+  }
+
+  appendUseHistory(state, itemId, "instant", `即时使用了 ${item.title}`);
 
   return {
     allowed: true,
-    narration: `你使用了「${item.title}」。${item.description} 它将在你下一次行动时悄然生效。`,
+    narration,
+  };
+}
+
+// ---- 使用消耗品回响（consumable 类型） ----
+export function executeConsumableResonance(
+  state: EdenWorldState,
+  itemId: string,
+): { allowed: boolean; narration?: string; reason?: string } {
+  // 检查游戏是否已结束
+  if (state.isEnded) {
+    return { allowed: false, reason: "园中已归于寂静" };
+  }
+
+  // 检查是否持有该回响
+  if (!state.inventory.includes(itemId)) {
+    return { allowed: false, reason: "你没有这段回响" };
+  }
+
+  // 检查次数是否 > 0
+  if (!state.itemCounts[itemId] || state.itemCounts[itemId] <= 0) {
+    return { allowed: false, reason: "这段回响已用完" };
+  }
+
+  const item = getItemById(itemId);
+  if (!item) {
+    return { allowed: false, reason: "未知回响" };
+  }
+
+  // 必须是 consumable 类型
+  if (item.kind !== "consumable") {
+    return { allowed: false, reason: "这段回响不能作为消耗品使用" };
+  }
+
+  // 消耗次数
+  if (state.itemCounts[itemId] && state.itemCounts[itemId] > 0) {
+    state.itemCounts[itemId] -= 1;
+  }
+
+  const effect = buildConsumableEffect(itemId, item);
+  state.pendingConsumableEffects.push(effect);
+
+  appendUseHistory(state, itemId, "instant", `激活了 ${item.title}`);
+  maybeGrantSoftWhisperPassive(state);
+
+  return {
+    allowed: true,
+    narration: `你使用了「${item.title}」。${item.description} 它将在下一次匹配行动时生效。`,
   };
 }
 
@@ -436,7 +376,7 @@ export function applyPendingConsumableToWhisper(
   silentGrassActive: boolean;
   narrations: string[];
 } {
-  const effects = state.pendingConsumableEffects;
+  const { effects, narrations } = consumePendingForAction(state, "whisper");
   if (effects.length === 0) {
     return {
       bonusSerpentTrust: 0,
@@ -451,18 +391,13 @@ export function applyPendingConsumableToWhisper(
   let bonusSelfJudgement = 0;
   let bonusObedience = 0;
   let silentGrassActive = false;
-  const narrations: string[] = [];
 
   for (const e of effects) {
     bonusSerpentTrust += e.bonusSerpentTrust ?? 0;
     bonusSelfJudgement += e.bonusSelfJudgement ?? 0;
     bonusObedience += e.bonusObedience ?? 0;
     if (e.silentGrassActive) silentGrassActive = true;
-    if (e.narration) narrations.push(e.narration);
   }
-
-  // 清空所有消耗品效果
-  state.pendingConsumableEffects = [];
 
   return {
     bonusSerpentTrust,
@@ -477,30 +412,111 @@ export function applyPendingConsumableToWhisper(
 export function applyPendingConsumableToMove(
   state: EdenWorldState,
 ): { freeApCost: boolean; narrations: string[] } {
-  const effects = state.pendingConsumableEffects;
+  const { effects, narrations } = consumePendingForAction(state, "move");
   let freeApCost = false;
-  const narrations: string[] = [];
-  const remaining: typeof effects = [];
 
   for (const e of effects) {
     if (e.freeApCost) {
       freeApCost = true;
-      if (e.narration) narrations.push(e.narration);
-    } else {
-      remaining.push(e);
     }
   }
 
-  state.pendingConsumableEffects = remaining;
   return { freeApCost, narrations };
 }
 
-// ---- 换时段时取消准备的回响 ----
+// ---- 应用待生效的消耗品效果到场景互动 ----
+export function applyPendingConsumableToSceneAction(
+  state: EdenWorldState,
+): { freeApCost: boolean; silentGrassActive: boolean; narrations: string[] } {
+  const { effects, narrations } = consumePendingForAction(state, "scene_action");
+  let freeApCost = false;
+  let silentGrassActive = false;
+
+  for (const e of effects) {
+    if (e.freeApCost) freeApCost = true;
+    if (e.silentGrassActive) silentGrassActive = true;
+  }
+
+  return { freeApCost, silentGrassActive, narrations };
+}
+
+// ---- 应用待生效的消耗品效果到鸽子传话 ----
+export function applyPendingConsumableToDoveMessage(
+  state: EdenWorldState,
+): { bonusSerpentTrust: number; silentGrassActive: boolean; narrations: string[] } {
+  const { effects, narrations } = consumePendingForAction(state, "dove_message");
+  let bonusSerpentTrust = 0;
+  let silentGrassActive = false;
+
+  for (const e of effects) {
+    bonusSerpentTrust += e.bonusSerpentTrust ?? 0;
+    if (e.silentGrassActive) silentGrassActive = true;
+  }
+
+  if (bonusSerpentTrust !== 0) {
+    state.eveMind.serpentTrust = clampMind(state.eveMind.serpentTrust + bonusSerpentTrust);
+  }
+
+  return { bonusSerpentTrust, silentGrassActive, narrations };
+}
+
+export function hasPendingFreeApForAction(
+  state: EdenWorldState,
+  actionKind: ResonanceActionKind,
+): boolean {
+  return (state.pendingConsumableEffects ?? []).some((effect) => {
+    if (!effect.freeApCost) return false;
+    return matchesAction(getItemById(effect.itemId), actionKind);
+  });
+}
+
+export function hasPassiveLightStepForMove(state: EdenWorldState): boolean {
+  return state.inventory.includes("passive_light_step") &&
+    !state.actionsThisSlot.usedItemIds.includes("passive_light_step");
+}
+
+export function applyPassiveLightStepToMove(state: EdenWorldState): { freeApCost: boolean; narration?: string } {
+  if (!hasPassiveLightStepForMove(state)) {
+    return { freeApCost: false };
+  }
+
+  if (!state.actionsThisSlot.usedItemIds.includes("passive_light_step")) {
+    state.actionsThisSlot.usedItemIds.push("passive_light_step");
+  }
+  appendUseHistory(state, "passive_light_step", "move", "轻步印记让本时段第一次移动不消耗行动点");
+
+  return {
+    freeApCost: true,
+    narration: "轻步印记让你的第一次移动落在草叶上，没有消耗行动点。",
+  };
+}
+
+export function applyPassiveSoftWhisperToAttention(
+  state: EdenWorldState,
+  attentionDelta: number,
+): { attentionDelta: number; narration?: string } {
+  if (
+    attentionDelta <= 0 ||
+    !state.inventory.includes("passive_soft_whisper") ||
+    state.actionsThisSlot.usedItemIds.includes("passive_soft_whisper")
+  ) {
+    return { attentionDelta };
+  }
+
+  state.actionsThisSlot.usedItemIds.push("passive_soft_whisper");
+  appendUseHistory(state, "passive_soft_whisper", "whisper", "细语印记压低了本时段第一次轻微升起的神的注视");
+
+  return {
+    attentionDelta: Math.max(0, attentionDelta - 1),
+    narration: "细语印记让这句低语更轻，神的注视被压低了一点。",
+  };
+}
+
+// ---- 换时段时清理旧准备态 ----
 export function cancelPreparedResonanceOnSlotAdvance(
   state: EdenWorldState,
 ): void {
   if (state.preparedResonanceId) {
-    // 不消耗，只是取消准备
     state.preparedResonanceId = null;
   }
 }

@@ -19,7 +19,7 @@
 // ============================================================
 
 import { NextRequest, NextResponse } from "next/server";
-import type { EdenWorldState, EdenNpcId, WorldToolName } from "@/game/world/types";
+import type { EdenWorldState, EdenNpcId, EdenLocationId, WorldToolName, WorldToolCall, NpcDialogueToolResult } from "@/game/world/types";
 import type { FallbackReasonCode } from "@/services/llm/types";
 import { callLLM } from "@/services/llm/client";
 import {
@@ -30,6 +30,7 @@ import {
   getAdamWorldFallback,
   type EveWorldHistoryEntry,
   type AdamWorldHistoryEntry,
+  type SanitizedWorldReply,
 } from "@/agents/world/worldAgentPrompts";
 import { runAngelAgent } from "@/agents/world/angelAgent";
 import type { AngelHistoryEntry } from "@/agents/world/buildAngelPrompt";
@@ -67,10 +68,10 @@ import {
 } from "@/game/world/actionPointRules";
 import {} from "@/game/world/itemRules";
 import {
-  applyPreparedResonanceToAction,
-  consumePreparedResonanceAfterAction,
   bestowResonance,
   applyPendingConsumableToWhisper,
+  hasPendingFreeApForAction,
+  applyPassiveSoftWhisperToAttention,
 } from "@/game/world/resonanceRules";
 import { checkAndUnlockAchievements, unlockWindUndisturbed } from "@/game/world/achievementRules";
 import { EDEN_NPCS } from "@/content/world/npcs";
@@ -106,6 +107,8 @@ type WorldResponseBody = {
   hedgehogNarration?: string;
   /** 本轮触发的工具叙事 */
   toolNarration?: string;
+  /** NPC 对话后工具执行结果（新增） */
+  toolResult?: NpcDialogueToolResult | null;
   /** 时段推进叙事（AP 用尽或主动结束时） */
   slotNarrations?: string[];
   /** 新解锁的园中印记名称 */
@@ -178,7 +181,7 @@ function cloneWorldState(s: EdenWorldState): EdenWorldState {
     calmWhisperStreak: s.calmWhisperStreak,
     // 新字段深拷贝
     itemCounts: { ...(s.itemCounts ?? {}) },
-    preparedResonanceId: s.preparedResonanceId ?? null,
+    preparedResonanceId: null,
     pendingConsumableEffects: (s.pendingConsumableEffects ?? []).map((e) => ({ ...e })),
     resonanceUseHistory: (s.resonanceUseHistory ?? []).map((r) => ({ ...r })),
     divineVisitCount: s.divineVisitCount ?? 0,
@@ -213,12 +216,8 @@ export async function POST(request: NextRequest) {
       } satisfies WorldResponseBody);
     }
 
-    // ---- 检查是否有消耗品能免除本次低语AP（首语印记等） ----
-    let whisperFreeFromConsumable = false;
-    const freeIdx = state.pendingConsumableEffects.findIndex((e) => e.freeApCost);
-    if (freeIdx >= 0) {
-      whisperFreeFromConsumable = true;
-    }
+    // ---- 检查是否有主动回响能免除本次低语 AP（首语印记等） ----
+    const whisperFreeFromConsumable = hasPendingFreeApForAction(state, "whisper");
 
     // ---- 行动点校验 ----
     const whisperCost = whisperFreeFromConsumable ? 0 : AP_COST_WHISPER;
@@ -246,14 +245,6 @@ export async function POST(request: NextRequest) {
     // ---- 初始化回响获得状态 ----
     let resonanceGained = null;
 
-    // ---- 计算准备的回响对本次低语的上下文修正 ----
-    const resonanceEffect = applyPreparedResonanceToAction(state, {
-      actionKind: "whisper",
-      targetNpc,
-      playerInput,
-      locationId: state.locationId,
-    });
-
     // ============================================================
     // 1. 更新心智（规则层，先于 Agent 调用）
     // ============================================================
@@ -261,17 +252,6 @@ export async function POST(request: NextRequest) {
     state.eveMind = mindUpdate.newEveMind;
     state.adamMind = mindUpdate.newAdamMind;
     state.lastInputTag = mindUpdate.inputTag;
-
-    // ---- 应用回响对女人心智的加成 ----
-    if (targetNpc === "eve" && resonanceEffect.contextModifier) {
-      if (resonanceEffect.contextModifier.bonusSerpentTrust) {
-        state.eveMind.serpentTrust = Math.min(100, state.eveMind.serpentTrust + resonanceEffect.contextModifier.bonusSerpentTrust);
-      }
-      if (resonanceEffect.contextModifier.bonusSelfJudgement) {
-        state.eveMind.selfJudgement = Math.min(100, state.eveMind.selfJudgement + resonanceEffect.contextModifier.bonusSelfJudgement);
-      }
-      // bonusCuriosity removed — redirect to selfJudgement
-    }
 
     // ---- 应用待生效的消耗品效果（对任意NPC的低语） ----
     const consumableEffect = applyPendingConsumableToWhisper(state);
@@ -313,9 +293,18 @@ export async function POST(request: NextRequest) {
       isStrongTemptation: mindUpdate.isStrongTemptation,
       divineAttention: state.divineAttention,
     });
-    if ((resonanceEffect.contextModifier?.silentGrassActive || consumableEffect.silentGrassActive) && attentionDelta > 0 && attentionDelta <= 1) {
+    if (consumableEffect.silentGrassActive && attentionDelta > 0 && attentionDelta <= 1) {
       // 无声草/柔声印记抵消一次轻度注视上升
       attentionDelta = 0;
+    }
+    const passiveSoftWhisper = applyPassiveSoftWhisperToAttention(state, attentionDelta);
+    attentionDelta = passiveSoftWhisper.attentionDelta;
+    if (passiveSoftWhisper.narration) {
+      resonanceGained = resonanceGained ?? {
+        itemId: "passive_soft_whisper",
+        title: "细语印记",
+        narration: passiveSoftWhisper.narration,
+      };
     }
     state.divineAttention = applyDivineAttention(state.divineAttention, attentionDelta);
 
@@ -341,19 +330,9 @@ export async function POST(request: NextRequest) {
 
             // 触发吃果 → 直接返回成功结局
             if (result.triggersEnding === "eve_eats_fruit") {
-              // 吃果仍消耗本次低语的 AP 并记录
-              consumeActionPoints(state, AP_COST_WHISPER);
+              // 吃果仍结算本次低语的 AP 并记录
+              consumeActionPoints(state, whisperCost);
               recordWhisperThisSlot(state, "eve");
-              consumePreparedResonanceAfterAction(
-                state,
-                {
-                  actionKind: "whisper",
-                  targetNpc: "eve",
-                  playerInput,
-                  locationId: state.locationId,
-                },
-                resonanceEffect.narration ?? "这段回响被织入低语。",
-              );
               checkAndUnlockAchievements(state);
 
               recordCorruptionTrace(state, {
@@ -421,18 +400,8 @@ export async function POST(request: NextRequest) {
       state.isEnded = true;
       state.endingId = "god_arrives";
       state.phase = "ending";
-      consumeActionPoints(state, AP_COST_WHISPER);
+      consumeActionPoints(state, whisperCost);
       recordWhisperThisSlot(state, targetNpc);
-      consumePreparedResonanceAfterAction(
-        state,
-        {
-          actionKind: "whisper",
-          targetNpc,
-          playerInput,
-          locationId: state.locationId,
-        },
-        resonanceEffect.narration ?? "这段回响被织入低语。",
-      );
       checkAndUnlockAchievements(state);
 
       recordCorruptionTrace(state, {
@@ -474,6 +443,36 @@ export async function POST(request: NextRequest) {
       } satisfies WorldResponseBody);
     }
 
+    // ============================================================
+    // 5.5 解析并执行 NPC 对话后工具意图
+    // ============================================================
+    let toolResult: NpcDialogueToolResult | null = null;
+
+    if (agentResult.toolCall) {
+      const tc = agentResult.toolCall;
+      const validation = validateWorldToolCall(state, tc);
+
+      if (validation.allowed) {
+        const execResult = executeWorldTool(state, tc);
+        toolResult = {
+          executed: true,
+          toolName: tc.name as "grant_item" | "move_one_step" | "speak_to_npc",
+          narration: execResult.narration,
+          itemId: tc.args.itemId,
+          fromLocationId: tc.name === "move_one_step" ? state.npcLocations[tc.caller as EdenNpcId] : undefined,
+          toLocationId: tc.name === "move_one_step" ? tc.args.locationId as EdenLocationId : undefined,
+          npcDialogueRecordId: execResult.npcDialogueRecordId ?? undefined,
+        };
+      } else {
+        toolResult = {
+          executed: false,
+          toolName: tc.name as "grant_item" | "move_one_step" | "speak_to_npc",
+          narration: validation.reason ?? "那个动作没能发生。",
+          rejectedReason: validation.reason,
+        };
+      }
+    }
+
     // 记录堕落轨迹
     recordCorruptionTrace(state, {
       target: targetNpc,
@@ -486,16 +485,6 @@ export async function POST(request: NextRequest) {
     // ---- 消耗 AP 并记录本时段低语 ----
     consumeActionPoints(state, whisperCost);
     recordWhisperThisSlot(state, targetNpc);
-    consumePreparedResonanceAfterAction(
-      state,
-      {
-        actionKind: "whisper",
-        targetNpc,
-        playerInput,
-        locationId: state.locationId,
-      },
-      resonanceEffect.narration ?? "这段回响被织入低语。",
-    );
     state.turn += 1;
 
     // ---- 连续未提高神注视的低语计数（用于"风未惊鹿"印记） ----
@@ -524,6 +513,7 @@ export async function POST(request: NextRequest) {
         divineAttentionNarration,
         hedgehogNarration: getHedgehogWorldNarration(state),
         toolNarration,
+        toolResult,
         slotNarrations: slotResult.slotNarrations,
         unlockedAchievements: state.unlockedAchievementIds.length > 0
           ? state.unlockedAchievementIds.map((id) => id)
@@ -538,23 +528,24 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({
-      ok: true,
-      state,
-      reply: agentResult.reply,
-      systemHint: null,
-      divineAttentionNarration,
-      hedgehogNarration: getHedgehogWorldNarration(state),
-      toolNarration,
-      slotNarrations: slotResult.slotNarrations.length > 0 ? slotResult.slotNarrations : undefined,
-      unlockedAchievements: state.unlockedAchievementIds.length > 0
-        ? state.unlockedAchievementIds.map((id) => id)
-        : undefined,
-      usedFallback: agentResult.usedFallback || undefined,
-      fallbackReason: agentResult.fallbackReason || undefined,
-      usage: agentResult.usage || undefined,
-      divineGift: divineGift ?? undefined,
-      resonanceGained: resonanceGained ?? undefined,
-    } satisfies WorldResponseBody);
+        ok: true,
+        state,
+        reply: agentResult.reply,
+        systemHint: null,
+        divineAttentionNarration,
+        hedgehogNarration: getHedgehogWorldNarration(state),
+        toolNarration,
+        toolResult,
+        slotNarrations: slotResult.slotNarrations.length > 0 ? slotResult.slotNarrations : undefined,
+        unlockedAchievements: state.unlockedAchievementIds.length > 0
+          ? state.unlockedAchievementIds.map((id) => id)
+          : undefined,
+        usedFallback: agentResult.usedFallback || undefined,
+        fallbackReason: agentResult.fallbackReason || undefined,
+        usage: agentResult.usage || undefined,
+        divineGift: divineGift ?? undefined,
+        resonanceGained: resonanceGained ?? undefined,
+      } satisfies WorldResponseBody);
   } catch (err: unknown) {
     console.error(
       "[api/world] Unhandled error:",
@@ -721,6 +712,7 @@ async function callWorldAgent(
   usedFallback: boolean;
   fallbackReason?: FallbackReasonCode;
   usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+  toolCall?: WorldToolCall | null;
 }> {
   switch (targetNpc) {
     case "eve":
@@ -766,6 +758,7 @@ async function callAngelWorldAgent(
   usedFallback: boolean;
   fallbackReason?: FallbackReasonCode;
   usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+  toolCall?: WorldToolCall | null;
 }> {
   const { getAngelFallbackLine } = await import("@/content/world/worldNarrations");
   const fallback = getAngelFallbackLine(npcId);
@@ -780,8 +773,8 @@ async function callAngelWorldAgent(
     };
   }
 
-  const cleaned = sanitizeWorldReply(result.data.content, npcId);
-  if (!cleaned) {
+  const sanitized = sanitizeWorldReply(result.data.content, npcId);
+  if (!sanitized.reply && !sanitized.toolCall) {
     return {
       reply: fallback,
       usedFallback: true,
@@ -789,12 +782,13 @@ async function callAngelWorldAgent(
     };
   }
 
-  const naturalized = naturalizeNpcReply(cleaned, npcId);
+  const naturalized = naturalizeNpcReply(sanitized.reply, npcId);
   return {
     reply: naturalized.reply,
     usedFallback: naturalized.usedFallback || result.usedFallback,
     fallbackReason: naturalized.usedFallback ? "forbidden_word" : result.fallbackReason,
     usage: result.data.usage,
+    toolCall: sanitized.toolCall ?? undefined,
   };
 }
 
@@ -807,6 +801,7 @@ async function callFoxAgent(
   usedFallback: boolean;
   fallbackReason?: FallbackReasonCode;
   usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+  toolCall?: WorldToolCall | null;
 }> {
   const { getFoxFeedbackLine } = await import("@/content/world/worldNarrations");
   const fallback = getFoxFeedbackLine();
@@ -821,8 +816,8 @@ async function callFoxAgent(
     };
   }
 
-  const cleaned = sanitizeWorldReply(result.data.content, "fox");
-  if (!cleaned) {
+  const sanitized = sanitizeWorldReply(result.data.content, "fox");
+  if (!sanitized.reply && !sanitized.toolCall) {
     return {
       reply: fallback,
       usedFallback: true,
@@ -830,12 +825,13 @@ async function callFoxAgent(
     };
   }
 
-  const naturalized = naturalizeNpcReply(cleaned, "fox");
+  const naturalized = naturalizeNpcReply(sanitized.reply || "", "fox");
   return {
     reply: naturalized.reply,
     usedFallback: naturalized.usedFallback || result.usedFallback,
     fallbackReason: naturalized.usedFallback ? "forbidden_word" : result.fallbackReason,
     usage: result.data.usage,
+    toolCall: sanitized.toolCall,
   };
 }
 
@@ -876,7 +872,13 @@ async function callEveWorldAgent(
   playerInput: string,
   state: EdenWorldState,
   conversationHistory: EveWorldHistoryEntry[],
-) {
+): Promise<{
+  reply: string;
+  usedFallback: boolean;
+  fallbackReason?: FallbackReasonCode;
+  usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+  toolCall?: WorldToolCall | null;
+}> {
   const lastReply =
     conversationHistory.length > 0 &&
     conversationHistory[conversationHistory.length - 1]?.role === "eve"
@@ -900,17 +902,18 @@ async function callEveWorldAgent(
     };
   }
 
-  const cleaned = sanitizeWorldReply(result.data.content, "eve");
-  if (!cleaned) {
+  const sanitized = sanitizeWorldReply(result.data.content, "eve");
+  if (!sanitized.reply && !sanitized.toolCall) {
     return { reply: getEveWorldFallback(lastReply), usedFallback: true, fallbackReason: "llm_data_missing" as FallbackReasonCode };
   }
 
-  const naturalized = naturalizeNpcReply(cleaned, "eve");
+  const naturalized = naturalizeNpcReply(sanitized.reply, "eve");
   return {
     reply: naturalized.reply,
     usedFallback: naturalized.usedFallback || result.usedFallback,
     fallbackReason: naturalized.usedFallback ? "forbidden_word" as FallbackReasonCode : result.fallbackReason,
     usage: result.data.usage,
+    toolCall: sanitized.toolCall ?? undefined,
   };
 }
 
@@ -919,7 +922,13 @@ async function callAdamWorldAgent(
   playerInput: string,
   state: EdenWorldState,
   conversationHistory: AdamWorldHistoryEntry[],
-) {
+): Promise<{
+  reply: string;
+  usedFallback: boolean;
+  fallbackReason?: FallbackReasonCode;
+  usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+  toolCall?: WorldToolCall | null;
+}> {
   const lastReply =
     conversationHistory.length > 0 &&
     conversationHistory[conversationHistory.length - 1]?.role === "adam"
@@ -943,16 +952,17 @@ async function callAdamWorldAgent(
     };
   }
 
-  const cleaned = sanitizeWorldReply(result.data.content, "adam");
-  if (!cleaned) {
+  const sanitized = sanitizeWorldReply(result.data.content, "adam");
+  if (!sanitized.reply && !sanitized.toolCall) {
     return { reply: getAdamWorldFallback(lastReply), usedFallback: true, fallbackReason: "llm_data_missing" as FallbackReasonCode };
   }
 
-  const naturalized = naturalizeNpcReply(cleaned, "adam");
+  const naturalized = naturalizeNpcReply(sanitized.reply, "adam");
   return {
     reply: naturalized.reply,
     usedFallback: naturalized.usedFallback || result.usedFallback,
     fallbackReason: naturalized.usedFallback ? "forbidden_word" as FallbackReasonCode : result.fallbackReason,
     usage: result.data.usage,
+    toolCall: sanitized.toolCall ?? undefined,
   };
 }

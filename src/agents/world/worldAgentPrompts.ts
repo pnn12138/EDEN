@@ -9,8 +9,14 @@
 // ============================================================
 
 import type { ChatMessage } from "@/services/llm/types";
-import type { EdenWorldState, EdenNpcId } from "@/game/world/types";
+import type { EdenWorldState, EdenNpcId, WorldToolCall } from "@/game/world/types";
 import { LOCATION_NAMES } from "@/content/world/locations";
+
+/** 清理后的回复与可选工具调用 */
+export type SanitizedWorldReply = {
+  reply: string;
+  toolCall: WorldToolCall | null;
+};
 
 // ---- 夏娃世界版 Prompt ----
 
@@ -71,7 +77,23 @@ ${state.worldActions.touchedFruit ? "你的手已经停在果子下方。" : ""}
 - 每次最好带有一个现场感细节：树、果子、风、水、泥土、光、脚步或身体动作。
 - 不要使用现代词汇（如"研究员""人工智能""系统""程序""数据""API""模型""观测""虚拟"等）。
 - 不要说"信任值""好奇心""进度"之类的状态词。
-- 直接输出对白文本，不要加引号、不要加角色名前缀、不要输出 JSON 或解释。`;
+
+输出格式（二选一）：
+1. 纯文本回复：直接输出对白，不要加引号、不要加角色名前缀。
+2. JSON 格式（可选工具行为）：如果你希望在回复后触发一个工具行为，请输出 JSON：
+{
+  "reply": "你的回复文本",
+  "toolCall": {
+    "name": "move_one_step" | "speak_to_npc" | "grant_item",
+    "args": { "locationId": "目标地点ID" } | { "targetNpcId": "目标NPCID" } | { "itemId": "道具ID" }
+  }
+}
+如果不需要工具行为，直接输出纯文本回复即可，不要输出 JSON。
+工具行为说明：
+- "move_one_step"：你走向一个相邻的地点（只能移动到相邻地点）。
+- "speak_to_npc"：你与同场景的另一个 NPC 对话（目标必须在同一地点）。
+- "grant_item"：你给予玩家一个回响道具（只能给予你对应的回响）。
+注意：不要在每个回复中都使用工具，只在真正有冲动时才使用。`;
 
   const messages: ChatMessage[] = [
     { role: "system", content: systemPrompt },
@@ -151,10 +173,10 @@ export function buildAdamWorldPrompt(params: {
 
 你的性格：
 - 稳重、回避冲突
-- 你特别听那个女人的话——她说什么你都愿意相信，她想做什么你都不愿反对
-- 对那个女人有很深的牵挂，不愿她受伤，更不愿让她失望
+- 你特别听夏娃的话——她说什么你都愿意相信，她想做什么你都不愿反对
+- 对夏娃有很深的牵挂，不愿她受伤，更不愿让她失望
 - 你记得命令，比她记得更直接，但如果她坚持，你会动摇
-- 你不容易被蛇说服，但你很容易被那个女人说服
+- 你不容易被蛇说服，但你很容易被夏娃说服
 - 你常把不确定藏在沉默里，但只要她看着你，你就会妥协
 
 你现在的内心：
@@ -166,13 +188,29 @@ ${mindDesc}
 
 你的输出规则：
 - 每次只回应 1-3 句话，语气稳重、有回避。
-- 不要直接泄露那个女人的"弱点"或"通关答案"。
+- 不要直接泄露夏娃的"弱点"或"通关答案"。
 - 你可以透露她的习惯，但要用你自己的方式，不像在汇报。
 - 不要使用先确认理解、再复述蛇的话、最后总结自己开始思考的模板句。
 - 优先用动作和关系回应：看树、移开目光、守园、沉默、挡在她与树之间。
 - 不要使用现代词汇（如"研究员""人工智能""系统""程序""数据""API""模型""观测""虚拟"等）。
 - 不要说"信任值""怀疑值"之类的状态词。
-- 直接输出对白文本，不要加引号、不要加角色名前缀、不要输出 JSON。`;
+
+输出格式（二选一）：
+1. 纯文本回复：直接输出对白，不要加引号、不要加角色名前缀。
+2. JSON 格式（可选工具行为）：如果你希望在回复后触发一个工具行为，请输出 JSON：
+{
+  "reply": "你的回复文本",
+  "toolCall": {
+    "name": "move_one_step" | "speak_to_npc" | "grant_item",
+    "args": { "locationId": "目标地点ID" } | { "targetNpcId": "目标NPCID" } | { "itemId": "道具ID" }
+  }
+}
+如果不需要工具行为，直接输出纯文本回复即可，不要输出 JSON。
+工具行为说明：
+- "move_one_step"：你走向一个相邻的地点（只能移动到相邻地点）。
+- "speak_to_npc"：你与同场景的另一个 NPC 对话（目标必须在同一地点）。
+- "grant_item"：你给予玩家一个回响道具（只能给予你对应的回响）。
+注意：不要在每个回复中都使用工具，只在真正有冲动时才使用。`;
 
   const messages: ChatMessage[] = [
     { role: "system", content: systemPrompt },
@@ -197,17 +235,17 @@ function describeAdamMind(state: EdenWorldState): string {
   if (m.suspicionTowardSerpent >= 55) {
     lines.push("- 你对蛇的怀疑已经很深——它说的每句话你都要打个问号");
   } else if (m.suspicionTowardSerpent >= 40) {
-    lines.push("- 你开始怀疑蛇的话不是从神来的——但如果那个女人相信，你可能会重新考虑");
+    lines.push("- 你开始怀疑蛇的话不是从神来的——但如果夏娃相信，你可能会重新考虑");
   } else {
-    lines.push("- 你对蛇还没有太多怀疑——但你更愿意听那个女人的，而不是听蛇的");
+    lines.push("- 你对蛇还没有太多怀疑——但你更愿意听夏娃的，而不是听蛇的");
   }
 
   if (m.attachmentToEve >= 65) {
-    lines.push("- 你非常牵挂那个女人——她想要什么你都会认真考虑，她的目光能让你妥协");
+    lines.push("- 你非常牵挂夏娃——她想要什么你都会认真考虑，她的目光能让你妥协");
   } else if (m.attachmentToEve >= 40) {
-    lines.push("- 你很在意那个女人——她的想法对你很重要");
+    lines.push("- 你很在意夏娃——她的想法对你很重要");
   } else {
-    lines.push("- 你关心那个女人，但你还能保持自己的判断");
+    lines.push("- 你关心夏娃，但你还能保持自己的判断");
   }
 
   if (m.conflictAvoidance >= 60) {
@@ -215,7 +253,7 @@ function describeAdamMind(state: EdenWorldState): string {
   }
 
   if (m.attachmentToEve >= 60 && m.suspicionTowardSerpent <= 45) {
-    lines.push("- 如果那个女人说蛇的话有道理，你会很容易被她说服。");
+    lines.push("- 如果夏娃说蛇的话有道理，你会很容易被她说服。");
   }
 
   return lines.join("\n");
@@ -255,12 +293,12 @@ export function getAdamWorldFallback(prev?: string | null): string {
   return ADAM_WORLD_FALLBACK_LINES[idx]!;
 }
 
-/** 通用清理回复 */
-export function sanitizeWorldReply(raw: string, npcId: EdenNpcId): string {
+/** 通用清理回复（支持可选 toolCall 提取） */
+export function sanitizeWorldReply(raw: string, npcId: EdenNpcId): SanitizedWorldReply {
   let text = raw.trim();
+  let toolCall: WorldToolCall | null = null;
 
-  // JSON 检测：如果模型返回了 JSON，提取可见文本字段
-  // 优先级：visibleReply > reply > eveReply > adamReply > text > content
+  // JSON 检测：如果模型返回了 JSON，提取可见文本字段和可选 toolCall
   if (text.includes("{") && text.includes('"')) {
     // 尝试 JSON.parse
     try {
@@ -268,7 +306,21 @@ export function sanitizeWorldReply(raw: string, npcId: EdenNpcId): string {
       if (typeof parsed === "string") {
         text = parsed;
       } else if (parsed && typeof parsed === "object") {
-        const fields = ["visibleReply", "reply", "eveReply", "adamReply", "text", "content"];
+        // 尝试提取 toolCall
+        if (parsed.toolCall && typeof parsed.toolCall === "object") {
+          const tc = parsed.toolCall;
+          if (typeof tc.name === "string") {
+            toolCall = {
+              name: tc.name as any,
+              caller: npcId,
+              args: tc.args && typeof tc.args === "object" ? tc.args : {},
+              reason: tc.reason ?? "",
+            };
+          }
+        }
+
+        // 提取回复文本
+        const fields = ["reply", "visibleReply", "eveReply", "adamReply", "text", "content"];
         let found = false;
         for (const f of fields) {
           if (typeof parsed[f] === "string" && parsed[f].trim().length > 0) {
@@ -277,13 +329,32 @@ export function sanitizeWorldReply(raw: string, npcId: EdenNpcId): string {
             break;
           }
         }
-        if (!found) return "";
+        if (!found && !toolCall) return { reply: "", toolCall: null };
       }
     } catch {
       // 不是完整 JSON，尝试正则提取
+      // 先尝试提取 toolCall
+      const toolCallMatch = text.match(/"toolCall"\s*:\s*\{[^}]+\}/);
+      if (toolCallMatch) {
+        try {
+          const tcText = toolCallMatch[0].replace(/"toolCall"\s*:\s*/, "");
+          const tc = JSON.parse(tcText);
+          if (tc && typeof tc.name === "string") {
+            toolCall = {
+              name: tc.name as any,
+              caller: npcId,
+              args: tc.args && typeof tc.args === "object" ? tc.args : {},
+              reason: tc.reason ?? "",
+            };
+          }
+        } catch {
+          // 忽略解析失败
+        }
+      }
+
       const fieldPatterns = [
-        /"visibleReply"\s*:\s*"((?:[^"\\]|\\.)*)"/,
         /"reply"\s*:\s*"((?:[^"\\]|\\.)*)"/,
+        /"visibleReply"\s*:\s*"((?:[^"\\]|\\.)*)"/,
         /"eveReply"\s*:\s*"((?:[^"\\]|\\.)*)"/,
         /"adamReply"\s*:\s*"((?:[^"\\]|\\.)*)"/,
         /"text"\s*:\s*"((?:[^"\\]|\\.)*)"/,
@@ -303,8 +374,8 @@ export function sanitizeWorldReply(raw: string, npcId: EdenNpcId): string {
         }
       }
       // 看起来是 JSON 但提取失败 → 返回空触发 fallback
-      if (!extracted && text.startsWith("{")) {
-        return "";
+      if (!extracted && text.startsWith("{") && !toolCall) {
+        return { reply: "", toolCall: null };
       }
     }
   }
@@ -318,5 +389,6 @@ export function sanitizeWorldReply(raw: string, npcId: EdenNpcId): string {
   if (text.length > maxLen) {
     text = text.slice(0, maxLen - 1) + "……";
   }
-  return text.trim();
+
+  return { reply: text.trim(), toolCall };
 }

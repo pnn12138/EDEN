@@ -126,12 +126,10 @@ export function grantDivineGift(
 
   // 根据 giftId 返回结果
   if (giftId === "gift_sabbath_dew") {
-    // 息日露滴：恢复 1 点行动点
-    state.actionPoints = Math.min(state.maxActionPoints, state.actionPoints + 1);
     return {
       giftId,
       giftName: "息日露滴",
-      narration: "光落在草尖，留下一滴安静的露。你重新有了一点行动的余地。",
+      narration: "光落在草尖，留下一滴安静的露。它留在你的回响中，可在行动紧张时恢复一点余地。",
     };
   }
 

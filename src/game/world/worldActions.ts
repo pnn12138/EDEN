@@ -23,6 +23,8 @@ import {
   type NpcDialogueTemplate,
 } from "@/content/world/worldNarrations";
 import { triggerNpcDialogue } from "@/game/world/npcDialogueRules";
+import { bestowResonance, type PrepareResonanceResult } from "@/game/world/resonanceRules";
+import { getItemById } from "@/content/world/items";
 
 export type WorldActionResult = {
   /** 玩家可见叙事 */
@@ -31,6 +33,8 @@ export type WorldActionResult = {
   triggersEnding?: "eve_eats_fruit" | "god_arrives";
   /** 是否触发了 NPC 之间对话 */
   triggeredNpcDialogue?: NpcDialogueTemplate;
+  /** NPC 对话记录 ID（用于前端显示） */
+  npcDialogueRecordId?: string;
   /** 是否发现了新线索 */
   discoveredClueTitles?: string[];
 };
@@ -228,6 +232,22 @@ export function executeWorldTool(state: EdenWorldState, toolCall: WorldToolCall)
       return executeCarryWords(state, toolCall.caller);
     case "judge_whisper_style":
       return executeJudgeWhisperStyle(state, toolCall.caller);
+    case "grant_item": {
+      const itemId = toolCall.args.itemId!;
+      // caller 必为 NPC（权限层已禁止 serpent）
+      if (toolCall.caller === "serpent") {
+        return { narration: "蛇不能直接给予回响。" };
+      }
+      return executeGrantItem(state, toolCall.caller, itemId);
+    }
+    case "move_one_step": {
+      const target = toolCall.args.locationId!;
+      // caller 必为 NPC
+      if (toolCall.caller === "serpent") {
+        return { narration: "蛇不能代替他人移动。" };
+      }
+      return executeMoveOneStep(state, toolCall.caller, target);
+    }
     default:
       return { narration: "园中起了细微的动静。" };
   }
@@ -239,6 +259,9 @@ export function executeWorldTool(state: EdenWorldState, toolCall: WorldToolCall)
 export function executeCarryWords(state: EdenWorldState, caller: WorldToolCaller): WorldActionResult {
   // 鸽子传话：不直接影响结局，不修改状态
   // 温和话语可轻微提高夏娃愿意倾听
+  if (!state.toolCallHistory.includes("carry_words")) {
+    state.toolCallHistory.push("carry_words");
+  }
   if (state.eveMind.serpentTrust < 40) {
     state.eveMind.serpentTrust = Math.min(100, state.eveMind.serpentTrust + 3);
   }
@@ -280,4 +303,53 @@ function applyDialogueMindEffect(state: EdenWorldState, dialogue: NpcDialogueTem
     default:
       break;
   }
+}
+
+// ---- 新增工具执行 ----
+
+/** 执行 grant_item（NPC 给予玩家道具/回响） */
+export function executeGrantItem(
+  state: EdenWorldState,
+  caller: EdenNpcId,
+  itemId: string,
+): WorldActionResult {
+  const item = getItemById(itemId);
+  if (!item) {
+    return {
+      narration: "祂手中空空如也。",
+    };
+  }
+
+  // 通过规则层发放回响
+  const { granted, narration: grantNarration, reason } = bestowResonance(state, caller, itemId);
+
+  if (!granted) {
+    return {
+      narration: reason ?? "祂没有给你什么。",
+    };
+  }
+
+  // 获得回响的叙事
+  const npcName = caller === "eve" ? "她" : caller === "adam" ? "亚当" : caller;
+  const narration = `${npcName}递给你一段回响：「${item.title}」。\n${item.description}`;
+
+  return {
+    narration,
+  };
+}
+
+/** 执行 move_one_step（NPC 对话后移动一格） */
+export function executeMoveOneStep(
+  state: EdenWorldState,
+  caller: EdenNpcId,
+  targetLocation: EdenLocationId,
+): WorldActionResult {
+  const result = executeMoveToLocation(state, caller, targetLocation);
+  // 修改叙事，使其更适合对话后展示
+  const npcName = caller === "eve" ? "她" : caller === "adam" ? "亚当" : caller;
+  const loc = EDEN_LOCATIONS[targetLocation];
+  return {
+    narration: `${npcName}走向了${loc.name}。`,
+    discoveredClueTitles: result.discoveredClueTitles,
+  };
 }

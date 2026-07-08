@@ -25,6 +25,7 @@ import type {
 } from "@/game/world/types";
 import { WORLD_AGENT_TOOL_PERMISSIONS } from "@/game/world/types";
 import { EDEN_LOCATIONS } from "@/content/world/locations";
+import { getItemById } from "@/content/world/items";
 
 // ---- 工具白名单 ----
 export const WORLD_TOOL_WHITELIST: ReadonlySet<WorldToolName> = new Set<WorldToolName>([
@@ -37,6 +38,8 @@ export const WORLD_TOOL_WHITELIST: ReadonlySet<WorldToolName> = new Set<WorldToo
   "eat_fruit",
   "carry_words",
   "judge_whisper_style",
+  "grant_item",           // NPC 给予玩家道具/回响
+  "move_one_step",        // NPC 对话后移动一格（语义别名，校验复用 move_to_location）
 ]);
 
 // ---- caller → Agent ID 映射（用于权限查询） ----
@@ -299,6 +302,34 @@ export function canJudgeWhisperStyle(
   return { allowed: true };
 }
 
+/** grant_item 条件：itemId 存在、NPC 有权限给予、道具发放走规则层 */
+export function canGrantItem(
+  state: EdenWorldState,
+  caller: EdenNpcId,
+  itemId: string,
+): { allowed: boolean; reason?: string } {
+  if (state.isEnded) return { allowed: false, reason: "园中已归于寂静" };
+
+  // 检查 itemId 是否存在
+  const item = getItemById(itemId);
+  if (!item) {
+    return { allowed: false, reason: "那不是园中存在的回响" };
+  }
+
+  // 检查是否是 NPC 给予玩家的道具（只允许特定 NPC 给予特定类型）
+  // 这里只做基础校验，具体逻辑由 bestowResonance 处理
+  const allowedGivers: EdenNpcId[] = [
+    "adam", "eve", "hedgehog",
+    "gabriel", "raphael", "uriel", "michael", "cherubim",
+    "watching_angel",
+  ];
+  if (!allowedGivers.includes(caller)) {
+    return { allowed: false, reason: "他不愿给你什么" };
+  }
+
+  return { allowed: true };
+}
+
 // ---- 完整校验流程 ----
 
 /**
@@ -352,6 +383,21 @@ export function validateWorldToolCall(
       return canCarryWords(state, toolCall.caller);
     case "judge_whisper_style":
       return canJudgeWhisperStyle(state, toolCall.caller);
+    case "grant_item": {
+      const itemId = toolCall.args.itemId;
+      if (!itemId) return { allowed: false, reason: "未指定要给予的回响" };
+      // caller 必为 NPC（权限层已禁止 serpent）
+      if (toolCall.caller === "serpent") {
+        return { allowed: false, reason: "蛇不能直接给予回响" };
+      }
+      return canGrantItem(state, toolCall.caller, itemId);
+    }
+    case "move_one_step": {
+      // move_one_step 语义等价于 move_to_location，但只用于 NPC 对话后
+      const target = toolCall.args.locationId;
+      if (!target) return { allowed: false, reason: "未指定前往的地点" };
+      return canMoveToLocation(state, toolCall.caller, target);
+    }
     default:
       return { allowed: false, reason: `未知动作: ${toolCall.name}` };
   }

@@ -111,7 +111,9 @@ export type ForbiddenToolName =
 // ---- 新增非禁忌工具 ----
 export type NewToolName =
   | "carry_words"          // 鸽子传话
-  | "judge_whisper_style"; // 狐狸评价话术
+  | "judge_whisper_style" // 狐狸评价话术
+  | "grant_item"           // 给予玩家道具/回响
+  | "move_one_step";       // NPC 对话后移动一格（等价于 move_to_location，语义更明确）
 
 export type WorldToolName = GeneralToolName | ForbiddenToolName | NewToolName;
 
@@ -137,8 +139,30 @@ export type WorldToolCall = {
     topicId?: string;
     focus?: string;
     reason?: string;
+    /** grant_item 使用：道具/回响 ID */
+    itemId?: string;
   };
   reason: string;
+};
+
+// ---- NPC 对话后工具执行结果（API 响应用） ----
+export type NpcDialogueToolResult = {
+  /** 工具是否执行成功 */
+  executed: boolean;
+  /** 执行的工具名 */
+  toolName: "grant_item" | "move_one_step" | "speak_to_npc";
+  /** 玩家可见叙事（用于在对话框中展示） */
+  narration: string;
+  /** grant_item 时返回获得的道具 ID */
+  itemId?: string;
+  /** move_one_step 时返回移动前地点 */
+  fromLocationId?: EdenLocationId;
+  /** move_one_step 时返回移动后地点 */
+  toLocationId?: EdenLocationId;
+  /** speak_to_npc 时返回 NPC 对话记录 ID */
+  npcDialogueRecordId?: string;
+  /** 工具被拒绝的原因（executed=false 时有值） */
+  rejectedReason?: string;
 };
 
 // ---- 线索 ----
@@ -214,7 +238,7 @@ export type ResonanceActionKind =
   | "instant";
 
 // ---- 回响使用类型 ----
-export type ResonanceUseType = "instant" | "prepared" | "passive";
+export type ResonanceUseType = "instant" | "active" | "passive";
 
 // ---- 神明献礼 ID ----
 export type DivineGiftId =
@@ -287,7 +311,7 @@ export type EdenWorldState = {
   /** 道具次数记录（支持可重复获得的次数型道具） */
   itemCounts: Record<string, number>;
 
-  /** 当前准备的回响 ID（null 表示未准备） */
+  /** 兼容旧存档：准备机制已废弃，运行时始终清空 */
   preparedResonanceId: string | null;
 
   /** 待生效的消耗品效果列表（consumable类型道具使用后追加，下次匹配行动时全部自动生效） */

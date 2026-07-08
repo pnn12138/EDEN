@@ -56,8 +56,8 @@ export const EDEN_LOCATIONS: Record<EdenLocationId, EdenLocation> = {
       "月光照在两树上，影子拉得很长。生命树和分别善恶树在夜色中像是两道沉默的见证。草地比白天更安静，你能听见自己的呼吸。这里的静，比白天的静更重。",
     connections: ["four_river_source", "adam_garden_work", "tree_court", "naming_stone_bank"],
     defaultNpcs: ["forbidden_tree", "tree_of_life"],
-    dayNpcs: ["tree_of_life", "forbidden_tree"],
-    nightNpcs: ["tree_of_life", "forbidden_tree"],
+    dayNpcs: ["tree_of_life", "forbidden_tree", "eve", "adam"],
+    nightNpcs: ["tree_of_life", "forbidden_tree", "eve", "adam"],
     riskLevel: "medium",
   },
   four_river_source: {
@@ -93,8 +93,8 @@ export const EDEN_LOCATIONS: Record<EdenLocationId, EdenLocation> = {
       "月光下的万物受名处，命名石痕泛着淡淡的银白。亚当坐在石头上，望着夜空。刺猬在草丛里窸窣作响。这里比白天更安静，像是整个园子都在呼吸。",
     connections: ["central_meadow"],
     defaultNpcs: ["adam", "hedgehog"],
-    dayNpcs: ["adam", "hedgehog", "deer", "sheep"],
-    nightNpcs: ["adam", "hedgehog"],
+    dayNpcs: ["adam", "hedgehog", "eve", "deer", "sheep"],
+    nightNpcs: ["adam", "hedgehog", "eve"],
     riskLevel: "low",
   },
   tree_court: {

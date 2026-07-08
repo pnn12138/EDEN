@@ -1,20 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { CHAPTER0_IMAGES } from "@/game/assets";
 
 export default function HomePage() {
-  const [hasReadPrologue, setHasReadPrologue] = useState(false);
-
-  useEffect(() => {
-    setHasReadPrologue(localStorage.getItem("eden_prologue_acknowledged") === "true");
-  }, []);
-
   return (
     <div className="eden-game eden-game--home">
-      {/* 背景 */}
       <div className="eden-bg">
         <Image
           src={CHAPTER0_IMAGES.secondEdenBackground}
@@ -29,31 +21,28 @@ export default function HomePage() {
         <div className="eden-boundary-glimmer" />
       </div>
 
-      {/* 游戏入口内容 */}
       <main style={{ position: "relative", zIndex: 5 }}>
         <section className="home-container">
           <h1>EDEN</h1>
-          <p className="home-subtitle">第二伊甸园 · 复刻计划</p>
+          <p className="home-subtitle">第一章 · 园中诸声</p>
           <p className="home-tagline">
-            未来研究人员复刻了伊甸园的故事。
+            你是一条蛇。语言是你唯一的武器。
           </p>
           <p className="home-description">
-            他们希望在这段古老叙事里，找到让人工智能从服从命令走向自我意识的途径。
+            探索伊甸园，收集线索与回响，通过低语影响夏娃的判断。她会不会自己伸手摘下那枚果子——取决于你说的每一句话。
           </p>
           <div className="home-entry-list">
             <Link
-              href={hasReadPrologue ? "/game" : "/prologue"}
-              className="eden-btn eden-btn--primary"
-              style={{ textDecoration: "none", marginTop: 0, padding: "14px 40px", fontSize: "1.05rem" }}
+              href="/world"
+              className="eden-btn eden-btn--primary eden-home-entry-btn"
             >
-              E-00：构想
+              进入伊甸园
             </Link>
             <Link
-              href="/world"
-              className="eden-btn eden-btn--primary"
-              style={{ textDecoration: "none", marginTop: 0, padding: "14px 40px", fontSize: "1.05rem" }}
+              href="/game/duel"
+              className="eden-btn eden-btn--primary eden-home-entry-btn"
             >
-              E-01：初次观测
+              双声试炼（娱乐模式）
             </Link>
           </div>
         </section>

@@ -41,8 +41,9 @@ export const SCENE_ACTIONS: SceneAction[] = [
     availability: {},
     rewards: {
       clueIds: ["clue_river_reflection"],
+      itemIds: ["consumable_gentle_voice"],
       narration:
-        "你循着水声走到源头。清泉从石缝间涌出，水面映着天光，倒影短暂地缺失了一瞬，像水记得什么，又忘了。河声入耳，比命令更轻，却更深。",
+        "你循着水声走到源头。清泉从石缝间涌出，水面映着天光，倒影短暂地缺失了一瞬，像水记得什么，又忘了。河声入耳，比命令更轻，却更深。你也记住了一种更柔的发声方式。",
     },
   },
   {
@@ -77,7 +78,7 @@ export const SCENE_ACTIONS: SceneAction[] = [
     id: "interact_with_hedgehog",
     locationId: "adam_garden_work",
     label: "观察刺猬",
-    description: "刺猬在草边。连续点击刺猬3次，安静地观察它，或许能获得它的信任。",
+    description: "刺猬在草边。连续点击刺猬2次，安静地观察它，或许能获得它的信任。",
     apCost: 1,
     availability: {},
     rewards: {
@@ -166,9 +167,9 @@ export const SCENE_ACTIONS: SceneAction[] = [
     availability: {},
     rewards: {
       clueIds: ["clue_two_trees"],
-      itemIds: ["resonance_still_leaf"],
+      itemIds: ["consumable_trust_dew", "consumable_first_whisper_free"],
       narration:
-        "你停在两树之间。一棵像丰盛的应许，一棵因命令而显得更安静。果子在枝叶间低垂。这里的静，比别处的静更重——你能感到这片草地比别处更被注视。你在两树间拾起一片静息之叶。",
+        "你停在两树之间。一棵像丰盛的应许，一棵因命令而显得更安静。果子在枝叶间低垂。这里的静，比别处的静更重。草尖留下信任之露，晨光也在叶面压下一枚首语印记。",
     },
   },
   {
