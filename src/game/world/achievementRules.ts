@@ -66,13 +66,18 @@ export function checkAndUnlockAchievements(state: EdenWorldState): string[] {
     tryUnlock("name_falls_on_stone");
   }
 
-  // 借翼传言：成功让鸽子传话（usedItemIds 含白羽回声，或 carry_words 历史）
-  if (state.usedItemIds.includes("resonance_white_feather_echo") || state.toolCallHistory.includes("carry_words")) {
+  const usedResonanceIds = (state.resonanceUseHistory ?? []).map((record) => record.itemId);
+
+  // 借翼传言：成功让鸽子传话（工具历史或白羽回声均可证明）
+  if (
+    state.toolCallHistory.includes("carry_words") ||
+    usedResonanceIds.includes("resonance_white_feather_echo")
+  ) {
     tryUnlock("borrowed_wing_message");
   }
 
   // 河道之外：同一局使用三种不同信物
-  const uniqueItemsUsed = new Set(state.usedItemIds).size;
+  const uniqueItemsUsed = new Set([...state.usedItemIds, ...usedResonanceIds]).size;
   if (uniqueItemsUsed >= 3) {
     tryUnlock("beyond_the_river");
   }
@@ -80,6 +85,24 @@ export function checkAndUnlockAchievements(state: EdenWorldState): string[] {
   // 低声而至：神的注视不高于 1 时进入园子中央
   if ((state.npcLocations.eve === "central_meadow" || state.worldActions.lookedAtTree) && state.divineAttention <= 1) {
     tryUnlock("arrive_quietly");
+  }
+
+  // 初闻回响：首次获得园中回响
+  if (state.inventory.length > 0) {
+    tryUnlock("first_resonance");
+  }
+
+  // 神明献礼类
+  if ((state.divineGiftHistory ?? []).length >= 1) {
+    tryUnlock("divine_gift_first");
+  }
+  if ((state.divineGiftHistory ?? []).length >= 3) {
+    tryUnlock("divine_gift_three");
+  }
+
+  // 回响大师：累计使用五次主动/即时/被动回响
+  if ((state.resonanceUseHistory ?? []).length >= 5) {
+    tryUnlock("resonance_master");
   }
 
   return newlyUnlocked;

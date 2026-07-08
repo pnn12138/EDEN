@@ -16,7 +16,7 @@
 // - 保留兼容导出（grantWorldItem / consumeWorldItem / hasWorldItem / canUseWorldItem）
 // - 内部改为调用 resonanceRules.ts 中的新函数
 // - computePassiveItemModifiers 和 consumePassiveItemsAfterWhisper 暂不删除，
-//   但 /api/world 不再调用它们，改用 applyPreparedResonanceToAction()
+//   但 /api/world 不再调用它们，主动/被动效果由 resonanceRules.ts 统一处理。
 // ============================================================
 
 import type { EdenWorldState, EdenNpcId } from "@/game/world/types";
@@ -62,7 +62,7 @@ export function canUseWorldItem(
 
   const item = getItemById(itemId);
   if (!item) return { allowed: false, reason: "未知回响" };
-  if (item.kind !== "instant") return { allowed: false, reason: "这件回响不能即时使用，需要准备" };
+  if (item.kind === "passive") return { allowed: false, reason: "这件回响会自动生效，不需要主动使用" };
 
   // 白羽回声：夜晚才能让鸽子传话
   if (itemId === "resonance_white_feather_echo" && !context.isNight) {

@@ -39,6 +39,7 @@ const worldPage = read("src/app/world/page.tsx");
 const css = read("src/app/globals.css");
 const locations = read("src/content/world/locations.ts");
 const naturalizeContent = read("src/agents/common/naturalizeNpcReply.ts");
+const npcScheduleRules = read("src/game/world/npcScheduleRules.ts");
 const introNarrationsContent = read("src/content/world/worldNarrations.ts");
 
 // ---- 地图资产 ----
@@ -169,6 +170,9 @@ check("园中树林含 deer", treeCourtLoc.includes("deer"));
 check("园中树林不含 uriel（无天使）", !treeCourtLoc.includes("uriel"));
 check("园中树林不含 gabriel（无天使）", !treeCourtLoc.includes("gabriel"));
 check("园中树林不含 raphael（无天使）", !treeCourtLoc.includes("raphael"));
+const centralMeadowLoc = locations.split("central_meadow:")[1]?.split("},")[0] ?? "";
+check("园子中央允许动态显示 eve", centralMeadowLoc.includes("eve"));
+check("/world 地图详情按动态位置显示 NPC", worldPage.includes("getVisibleNpcsAtLocation(state, selectedMapLocationId)") && !worldPage.includes("const timeNpcs = state.timeOfDay"));
 
 const namingStoneBankLoc = locations.split("naming_stone_bank:")[1]?.split("},")[0] ?? "";
 check("四河分流含 michael", namingStoneBankLoc.includes("michael"));
@@ -179,6 +183,11 @@ check("东园幽径白天含 cherubim 与 fox", eastGardenPathLoc.includes('dayN
 check("东园幽径夜晚含 uriel 与 fox", eastGardenPathLoc.includes('nightNpcs: ["uriel", "fox"]'));
 check("东园幽径含 fox", eastGardenPathLoc.includes("fox"));
 check("东园幽径白天不含 hedgehog", !eastGardenPathLoc.includes('dayNpcs: ["cherubim", "fox", "hedgehog"]'));
+
+check("NPC 时段结算只移动本轮低语过的 NPC", npcScheduleRules.includes("whisperedNpcIds") && npcScheduleRules.includes("spokenNpcIds"));
+check("女人低语后可去找亚当或去园子中央", npcScheduleRules.includes('state.npcLocations.eve = "adam_garden_work"') && npcScheduleRules.includes('state.npcLocations.eve = "central_meadow"'));
+check("亚当低语后可去园子中央", npcScheduleRules.includes('state.npcLocations.adam = "central_meadow"'));
+check("NPC 移动叙事提示新地点", npcScheduleRules.includes("去了万物受名处") && npcScheduleRules.includes("走向园子中央"));
 
 // ---- MAP_HOTSPOTS 6 地点 ----
 check("/world MAP_HOTSPOTS 配置包含 6 个地点",
@@ -192,20 +201,21 @@ check("/world MAP_HOTSPOTS 配置包含 6 个地点",
 );
 check("/world MAP_HOTSPOTS 包含 east_garden_path 锚点", worldPage.includes("east_garden_path: { x: 79, y: 72"));
 
-// ---- 行动点系统 / 圭中回响 / 圭中印记 UI ----
+// ---- 行动点系统 / 园中回响 UI ----
 check("/world 顶部显示行动点圆点", worldPage.includes("eden-ap-dots"));
 check("/world 有行动点文案 行动", worldPage.includes("行动"));
 check("/world 顶部有进入下一轮按钮", worldPage.includes("进入下一轮"));
-check("/world 顶部有园中印记图标", worldPage.includes("eden-btn--achievement-icon"));
+check("/world 顶部有园中回响入口", worldPage.includes('title="园中回响"') || worldPage.includes("打开园中回响面板"));
 check("/world 顶部按钮统一为图标加文字形式",
   worldPage.includes("eden-top-action-btn") &&
   worldPage.includes("eden-top-action-icon") &&
   worldPage.includes("eden-top-action-label") &&
-  worldPage.includes("园中印记")
+  worldPage.includes("回响") &&
+  worldPage.includes("地图")
 );
 check("/world 顶部按钮宽度统一", css.includes(".eden-top-action-btn") && css.includes("min-width: 96px"));
 check("/world 有成就浮窗", worldPage.includes("eden-achievement-modal"));
-check("/world 有场景互动区", worldPage.includes("eden-scene-actions"));
+check("/world 有场景可行动作区", worldPage.includes("可行动作") && worldPage.includes("availableSceneActions"));
 check("/world 有场景互动 scene_action 调用", worldPage.includes('"scene_action"'));
 check("/world 有 end_slot 调用", worldPage.includes('"end_slot"'));
 check("/world 持有物品改为园中回响", worldPage.includes("园中回响") && !worldPage.includes("持有物品"));
@@ -227,9 +237,9 @@ check("/world 对话框内不重复推荐低语", !worldPage.includes("eden-reco
 check("/world 默认对话框宽度收敛到最小宽度360", worldPage.includes("width: 360"));
 check("/world AP 空点使用空心圆", worldPage.includes('? "●" : "○"'));
 
-// ---- 玩家可见命名：玩法主体仍用"女人"，E-01 开场按叙事需要允许出现"夏娃仍未伸手" ----
+// ---- 玩家可见命名：玩法主体仍用"女人"，E-01 开场按当前叙事文本校验 ----
 check("/world 玩法主体保留女人称谓", worldPage.includes("那个女人") || worldPage.includes("女人"));
-check("/world E-01 开场包含观测记录", introNarrationsContent.includes("观测记录：E-01") && introNarrationsContent.includes("夏娃仍未伸手"));
+check("/world E-01 开场包含初次观测文本", introNarrationsContent.includes("E-01：初次观测") && introNarrationsContent.includes("夏娃尚未触及禁果"));
 check("NPC 回复清洗识别 JSON 泄漏字段", naturalizeContent.includes("JSON_LEAK_PATTERNS") && naturalizeContent.includes("eveReply") && naturalizeContent.includes("toolCall"));
 
 // ---- sceneActions.ts 内容文件存在 ----
@@ -242,7 +252,10 @@ check("sceneActions 含拨开落叶", sceneActionsContent.includes("拨开落叶
 check("sceneActions 用直白文案：聆听分流的水声", sceneActionsContent.includes("聆听分流的水声") && !sceneActionsContent.includes("听四河回声"));
 check("sceneActions 含停在两树之间", sceneActionsContent.includes("停在两树之间"));
 check("/world 定义场景可点击热点配置", worldPage.includes("SCENE_FOCUS_HOTSPOTS") && worldPage.includes("SceneFocusHotspot"));
-check("/world 刻名石热点需要点击 5 次", worldPage.includes('id: "naming-stone-center"') && worldPage.includes('sceneActionId: "listen_to_naming_stone"') && worldPage.includes("requiredClicks: 5"));
+check("/world 刻名石热点需要点击 3 次", worldPage.includes('id: "naming-stone-center"') && worldPage.includes('sceneActionId: "listen_to_naming_stone"') && worldPage.includes("requiredClicks: 3"));
+check("/world 刻名石提示文案同步 3 次点亮", worldPage.includes("点击中间的刻名石 3 次"));
+check("/world 小鹿视线热点与小鹿视觉锚点共用坐标", worldPage.includes("DEER_GAZE_ANCHOR") && worldPage.includes("x: DEER_GAZE_ANCHOR.x") && worldPage.includes("left: `${DEER_GAZE_ANCHOR.x}%`"));
+check("/world 小鹿视线热点贴近背景小鹿", worldPage.includes("DEER_GAZE_ANCHOR") && worldPage.includes("x: 34") && worldPage.includes("y: 52"));
 check("/world 四河分流有 4 个顺序水声热点", ["four-river-echo-1", "four-river-echo-2", "four-river-echo-3", "four-river-echo-4"].every((id) => worldPage.includes(`id: "${id}"`)) && [1, 2, 3, 4].every((step) => worldPage.includes(`step: ${step}`)));
 check("/world 场景热点覆盖主要场景道具", [
   "gather_still_leaf",
@@ -285,9 +298,9 @@ check("/world Tab 将心智改为属性", worldPage.includes('["mind", "属性"]
 check("/world 属性面板按当前低语对象显示", worldPage.includes("activeAttributeProfile") && worldPage.includes("buildAttributeProfile"));
 check("/world 蛇是独立 Tab", worldPage.includes('["serpent", "蛇（我）"]') && worldPage.includes('activeTab === "serpent"'));
 check("/world 属性 Tab 未选中 NPC 时提示选择对象", worldPage.includes("请选择一个角色查看属性"));
-check("/world 蛇 Tab 包含词元消耗", worldPage.includes("serpentTokenStats") && worldPage.includes("词元"));
-check("/world 词元面板只显示本轮和总消耗", worldPage.includes("本轮消耗") && worldPage.includes("总消耗") && !worldPage.includes("余下词元") && !worldPage.includes("上次低语") && !worldPage.includes("已用词元"));
-check("/world 词元记录支持无 usage 兜底估算", worldPage.includes("estimateWorldTokenUsage") && worldPage.includes("lastWasEstimated") && !worldPage.includes("SERPENT_TOKEN_RESERVE"));
+check("/world 蛇 Tab 显示行动与限制", worldPage.includes("草叶下的低语") && worldPage.includes("不能触碰果子") && worldPage.includes("行动 {state.actionPoints}/{state.maxActionPoints}"));
+check("/world 蛇 Tab 显示回响 Buff", worldPage.includes("当前回响赋予的Buff") && worldPage.includes("已准备") && worldPage.includes("pendingConsumableEffects"));
+check("/world 第一章不显示旧词元面板", !worldPage.includes("serpentTokenStats") && !worldPage.includes("estimateWorldTokenUsage") && !worldPage.includes("SERPENT_TOKEN_RESERVE"));
 check("CSS 不再保留词元进度条", !css.includes(".eden-token-bar-bg") && !css.includes(".eden-token-bar-fill"));
 check("/world 输入区提供推荐发言", worldPage.includes("eden-input-suggestions") && worldPage.includes("getRecommendedWhispers"));
 check("CSS 第一章浮窗支持自由拉伸", css.includes(".eden-game--world .eden-world-panel") && css.includes("resize: both"));

@@ -21,6 +21,7 @@ import type {
 } from "@/game/world/types";
 import { resolveNpcSlotBehaviors } from "@/game/world/npcScheduleRules";
 import { checkAndUnlockAchievements } from "@/game/world/achievementRules";
+import { grantResonance } from "@/game/world/resonanceRules";
 
 export const AP_COST_WHISPER = 1;
 export const AP_COST_MOVE = 1;
@@ -94,8 +95,8 @@ function restoreActionPoints(state: EdenWorldState): void {
 /**
  * 推进到下一时段。
  * - 若当前已是第 12 时段：触发时间失败（神降临），返回 true 表示失败。
- * - 否则：timeSlot++，重算 day/timeOfDay，恢复 AP，清空 actionsThisSlot，
- *   结算 NPC 时段行为，检查成就。
+ * - 否则：timeSlot++，重算 day/timeOfDay，恢复 AP，
+ *   先按上一时段 actionsThisSlot 结算 NPC 行为，再清空行动记录，检查成就。
  *
  * 返回新触发的 NPC 结算叙事列表（供 API 返回给前端）。
  */
@@ -111,6 +112,15 @@ export function advanceToNextSlot(state: EdenWorldState): {
     return { slotNarrations: ["第十二个时段过去了。园中起了凉风，那是神行走的声音。"], triggeredTimeFailure: true };
   }
 
+  const spentThisSlot = state.maxActionPoints - state.actionPoints;
+  const passiveNarrations: string[] = [];
+  if (spentThisSlot >= 3 && !state.inventory.includes("passive_light_step")) {
+    const granted = grantResonance(state, "passive_light_step", 1);
+    if (granted) {
+      passiveNarrations.push("你在一个时段里穿过多处草叶，园中留下了「轻步印记」。之后每个时段第一次移动不再消耗行动点。");
+    }
+  }
+
   const nextSlot = (state.timeSlot + 1) as TimeSlot;
   state.timeSlot = nextSlot;
   if (nextSlot % 2 === 1) {
@@ -121,13 +131,16 @@ export function advanceToNextSlot(state: EdenWorldState): {
     state.dayIndex = (nextSlot / 2) as DayIndex;
   }
 
-  // 恢复 AP 并清空本时段行动
+  // 恢复 AP，并用上一时段行动记录结算 NPC 行为。
   restoreActionPoints(state);
-  resetSlotActions(state);
-
-  // 结算 NPC 时段行为
   const resolutions = resolveNpcSlotBehaviors(state);
-  const slotNarrations = resolutions.map((r) => r.narration);
+  const slotNarrations = [
+    ...passiveNarrations,
+    ...resolutions.map((r) => r.narration),
+  ];
+
+  // NPC 已根据上一时段行动完成结算，现在清空记录，进入新时段。
+  resetSlotActions(state);
 
   // 检查成就
   checkAndUnlockAchievements(state);

@@ -34,10 +34,15 @@ export default function HomePage() {
           <div className="home-entry-list">
             <Link
               href="/world"
-              className="eden-btn eden-btn--primary"
-              style={{ textDecoration: "none", marginTop: 0, padding: "14px 40px", fontSize: "1.05rem" }}
+              className="eden-btn eden-btn--primary eden-home-entry-btn"
             >
               进入伊甸园
+            </Link>
+            <Link
+              href="/game/duel"
+              className="eden-btn eden-btn--primary eden-home-entry-btn"
+            >
+              双声试炼（娱乐模式）
             </Link>
           </div>
         </section>

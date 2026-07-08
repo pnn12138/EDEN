@@ -1,0 +1,1147 @@
+/* ============================================================
+   EDEN - Chapter 0 双声试炼（Duel Mode）样式
+   ============================================================ */
+
+/* ---- 页面容器 ---- */
+.eden-duel-page {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #0a0e0a;
+}
+
+/* ---- 背景 ---- */
+.eden-duel-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+}
+
+.eden-duel-bg-image {
+  object-fit: cover;
+  object-position: center center;
+  filter: brightness(0.82) saturate(0.98);
+}
+
+.eden-duel-bg-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background:
+    radial-gradient(circle at 51% 32%, rgba(238, 214, 150, 0.12), transparent 26%),
+    linear-gradient(180deg, rgba(6, 10, 7, 0.34) 0%, rgba(6, 10, 7, 0.1) 42%, rgba(6, 10, 7, 0.62) 100%),
+    linear-gradient(90deg, rgba(6, 10, 7, 0.26), transparent 30%, transparent 70%, rgba(6, 10, 7, 0.36));
+}
+
+/* ---- 神明回合光效 ---- */
+.eden-duel--god-turn .eden-duel-bg-overlay {
+  box-shadow: inset 0 0 150px rgba(185, 228, 208, 0.18);
+}
+
+/* ---- 蛇回合光效 ---- */
+.eden-duel--serpent-turn .eden-duel-bg-overlay {
+  box-shadow: inset 0 0 150px rgba(166, 98, 196, 0.2);
+}
+
+/* ---- 双方回合光效 ---- */
+.eden-duel--both-turn .eden-duel-bg-overlay {
+  box-shadow:
+    inset 90px 0 110px rgba(185, 228, 208, 0.12),
+    inset -90px 0 110px rgba(166, 98, 196, 0.14);
+}
+
+.eden-duel-tree {
+  position: absolute;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.eden-duel-tree--life {
+  left: clamp(590px, 39vw, 780px);
+  top: clamp(168px, 28vh, 285px);
+}
+
+.eden-duel-tree--knowledge {
+  right: clamp(560px, 34vw, 700px);
+  top: clamp(168px, 28vh, 285px);
+}
+
+.eden-duel-tree-label {
+  padding: 7px 16px;
+  border: 1px solid rgba(230, 214, 160, 0.32);
+  border-radius: 999px;
+  background: rgba(8, 12, 9, 0.48);
+  color: rgba(246, 233, 188, 0.92);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  backdrop-filter: blur(6px);
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.45);
+}
+
+.eden-duel-fruit {
+  width: clamp(48px, 4.5vw, 76px);
+  height: auto;
+  border-radius: 999px;
+  object-fit: contain;
+}
+
+.eden-duel-fruit--life {
+  filter:
+    hue-rotate(84deg)
+    saturate(1.15)
+    brightness(1.08)
+    drop-shadow(0 0 18px rgba(152, 220, 170, 0.38))
+    drop-shadow(0 0 38px rgba(170, 235, 190, 0.16));
+}
+
+.eden-duel-fruit--knowledge {
+  filter:
+    saturate(1.2)
+    brightness(1.06)
+    drop-shadow(0 0 18px rgba(230, 174, 82, 0.44))
+    drop-shadow(0 0 38px rgba(170, 92, 196, 0.18));
+}
+
+.eden-duel-eve-button {
+  position: absolute;
+  z-index: 4;
+  left: 50%;
+  bottom: clamp(44px, 7vh, 82px);
+  display: block;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  transform: translateX(-50%);
+}
+
+.eden-duel-eve-button:focus-visible {
+  outline: 1px solid rgba(230, 214, 160, 0.72);
+  outline-offset: 8px;
+}
+
+.eden-duel-eve-sprite {
+  display: block;
+  width: auto;
+  height: clamp(440px, 58vh, 640px);
+  max-width: min(30vw, 350px);
+  object-fit: contain;
+  object-position: bottom center;
+  opacity: 0.95;
+  filter:
+    drop-shadow(0 22px 34px rgba(0, 0, 0, 0.42))
+    drop-shadow(0 0 16px rgba(236, 216, 154, 0.12));
+  transition: filter 0.18s ease, transform 0.18s ease;
+}
+
+.eden-duel-eve-button:hover .eden-duel-eve-sprite {
+  transform: translateY(-2px);
+  filter:
+    drop-shadow(0 24px 36px rgba(0, 0, 0, 0.44))
+    drop-shadow(0 0 22px rgba(236, 216, 154, 0.22));
+}
+
+.eden-duel--god-turn .eden-duel-tree--life .eden-duel-fruit,
+.eden-duel--both-turn .eden-duel-tree--life .eden-duel-fruit {
+  filter:
+    hue-rotate(84deg)
+    saturate(1.25)
+    brightness(1.18)
+    drop-shadow(0 0 24px rgba(158, 232, 180, 0.55))
+    drop-shadow(0 0 54px rgba(170, 235, 190, 0.22));
+}
+
+.eden-duel--serpent-turn .eden-duel-tree--knowledge .eden-duel-fruit,
+.eden-duel--both-turn .eden-duel-tree--knowledge .eden-duel-fruit {
+  filter:
+    saturate(1.3)
+    brightness(1.14)
+    drop-shadow(0 0 24px rgba(232, 178, 88, 0.6))
+    drop-shadow(0 0 54px rgba(170, 92, 196, 0.24));
+}
+
+.eden-duel-grass-foreground {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  height: 14%;
+  background: linear-gradient(0deg, rgba(6, 16, 8, 0.54), rgba(6, 16, 8, 0.16) 54%, transparent);
+  pointer-events: none;
+}
+
+/* ---- 顶部 HUD ---- */
+.eden-duel-header {
+  position: relative;
+  z-index: 10;
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) auto minmax(260px, 1fr);
+  align-items: center;
+  gap: 18px;
+  padding: 10px 20px;
+  background: rgba(10, 14, 10, 0.72);
+  border-bottom: 1px solid rgba(200, 168, 110, 0.15);
+  backdrop-filter: blur(10px);
+  flex-shrink: 0;
+}
+
+.eden-duel-header-left {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+  flex-shrink: 0;
+}
+
+.eden-duel-header-mode {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: #c8a86e;
+  letter-spacing: 0.08em;
+}
+
+.eden-duel-header-round,
+.eden-duel-header-turn {
+  font-size: 0.72rem;
+  color: #7a7a6a;
+  letter-spacing: 0.06em;
+}
+
+.eden-duel-header-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  min-width: 360px;
+}
+
+.eden-duel-score-side {
+  min-width: 88px;
+  font-size: 1.2rem;
+  line-height: 1;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-align: center;
+  text-shadow: 0 0 18px rgba(200, 168, 110, 0.25);
+}
+
+.eden-duel-score-side--god {
+  color: #b8d8e8;
+}
+
+.eden-duel-score-side--serpent {
+  color: #d49be2;
+}
+
+.eden-duel-turn-divider {
+  min-width: 112px;
+  padding: 6px 18px;
+  border: 1px solid rgba(214, 187, 120, 0.3);
+  border-radius: 999px;
+  background: rgba(214, 187, 120, 0.12);
+  color: #eadcae;
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-align: center;
+}
+
+.eden-duel-header-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 14px;
+  min-width: 0;
+}
+
+.eden-duel-score-display {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.eden-duel-score-god {
+  color: #a0c8e0;
+}
+
+.eden-duel-score-divider {
+  color: #5a5a4a;
+}
+
+.eden-duel-score-serpent {
+  color: #c080d0;
+}
+
+.eden-duel-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.eden-duel-header-actions .eden-btn--small {
+  font-size: 0.72rem;
+  padding: 5px 12px;
+  background: rgba(10, 14, 10, 0.56);
+  border: 1px solid rgba(200, 168, 110, 0.18);
+  border-radius: 5px;
+  color: #9a9178;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+
+.eden-duel-header-actions .eden-btn--small:hover {
+  background: rgba(30, 40, 30, 0.68);
+  border-color: rgba(200, 168, 110, 0.32);
+  color: #c8a86e;
+}
+
+/* ---- 女人属性条 ---- */
+.eden-duel-belief-bar {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 20px;
+  background: rgba(10, 14, 10, 0.5);
+  border-bottom: 1px solid rgba(200, 168, 110, 0.08);
+  flex-shrink: 0;
+}
+
+.eden-duel-belief-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+}
+
+.eden-duel-belief-label {
+  font-size: 0.7rem;
+  color: #8a8a7a;
+  letter-spacing: 0.06em;
+  flex-shrink: 0;
+  min-width: 28px;
+}
+
+.eden-duel-belief-bar-bg {
+  flex: 1;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.eden-duel-belief-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.6s ease;
+}
+
+.eden-duel-belief-fill--god {
+  background: linear-gradient(90deg, #6080a0, #a0c8e0);
+}
+
+.eden-duel-belief-fill--serpent {
+  background: linear-gradient(90deg, #8040a0, #c080d0);
+}
+
+.eden-duel-belief-fill--self {
+  background: linear-gradient(90deg, #a09040, #d8c850);
+}
+
+.eden-duel-belief-value {
+  font-size: 0.7rem;
+  color: #9a9a8a;
+  flex-shrink: 0;
+  min-width: 22px;
+  text-align: right;
+}
+
+/* ---- 发言方提示 ---- */
+.eden-duel-speaker-hint {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 8px 20px;
+  background: rgba(10, 14, 10, 0.4);
+  flex-shrink: 0;
+}
+
+.eden-duel-speaker-icon {
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  padding: 4px 14px;
+  border-radius: 999px;
+}
+
+.eden-duel-speaker-icon--god_only,
+.eden-duel-speaker-icon--god {
+  color: #a0c8e0;
+  background: rgba(100, 150, 200, 0.15);
+  border: 1px solid rgba(160, 200, 224, 0.2);
+}
+
+.eden-duel-speaker-icon--serpent_only,
+.eden-duel-speaker-icon--serpent {
+  color: #c080d0;
+  background: rgba(160, 100, 200, 0.15);
+  border: 1px solid rgba(192, 128, 208, 0.2);
+}
+
+.eden-duel-speaker-icon--both {
+  color: #c8a86e;
+  background: rgba(200, 168, 110, 0.12);
+  border: 1px solid rgba(200, 168, 110, 0.2);
+}
+
+.eden-duel-speaker-text {
+  font-size: 0.78rem;
+  color: #8a8a7a;
+  letter-spacing: 0.04em;
+}
+
+/* ---- 对话区 ---- */
+.eden-duel-main {
+  position: relative;
+  z-index: 5;
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-start;
+  padding: 20px;
+  pointer-events: none;
+}
+
+.eden-duel-scene-prompt {
+  margin-bottom: 106px;
+  padding: 7px 12px;
+  border: 1px solid rgba(226, 208, 151, 0.16);
+  border-radius: 999px;
+  background: rgba(10, 14, 10, 0.36);
+  color: rgba(232, 224, 196, 0.72);
+  font-size: 0.74rem;
+  letter-spacing: 0.08em;
+  backdrop-filter: blur(8px);
+}
+
+.eden-duel-panel {
+  position: fixed;
+  right: 22px;
+  top: 118px;
+  bottom: 140px;
+  z-index: 20;
+  width: min(390px, calc(100vw - 44px));
+  display: flex;
+  flex-direction: column;
+  background: rgba(11, 16, 12, 0.78);
+  border: 1px solid rgba(214, 187, 120, 0.22);
+  border-radius: 8px;
+  box-shadow: 0 22px 46px rgba(0, 0, 0, 0.36);
+  backdrop-filter: blur(14px);
+  overflow: hidden;
+}
+
+.eden-duel-panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid rgba(214, 187, 120, 0.12);
+}
+
+.eden-duel-panel-title {
+  color: #dfd2aa;
+  font-size: 1rem;
+  letter-spacing: 0.12em;
+  font-weight: 600;
+}
+
+.eden-duel-panel-subtitle {
+  margin-top: 3px;
+  color: rgba(199, 189, 154, 0.62);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+}
+
+.eden-duel-panel-close {
+  width: 28px;
+  height: 28px;
+  border: 1px solid rgba(214, 187, 120, 0.16);
+  border-radius: 50%;
+  background: rgba(8, 12, 9, 0.42);
+  color: rgba(223, 211, 174, 0.72);
+  cursor: pointer;
+  line-height: 1;
+}
+
+.eden-duel-panel-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  padding: 8px;
+  gap: 6px;
+  border-bottom: 1px solid rgba(214, 187, 120, 0.1);
+}
+
+.eden-duel-panel-tab {
+  height: 30px;
+  border: 1px solid rgba(214, 187, 120, 0.12);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.035);
+  color: rgba(216, 207, 172, 0.66);
+  font-family: inherit;
+  font-size: 0.76rem;
+  cursor: pointer;
+}
+
+.eden-duel-panel-tab--active {
+  border-color: rgba(214, 187, 120, 0.36);
+  background: rgba(214, 187, 120, 0.14);
+  color: #eadcae;
+}
+
+.eden-duel-panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 16px 18px;
+}
+
+.eden-duel-dialogue {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.eden-duel-empty-dialogue,
+.eden-duel-sealed-input {
+  padding: 11px 12px;
+  border-radius: 6px;
+  background: rgba(214, 187, 120, 0.07);
+  color: rgba(225, 216, 183, 0.76);
+  font-size: 0.82rem;
+  line-height: 1.7;
+}
+
+.eden-duel-sealed-input {
+  border-left: 2px solid rgba(214, 187, 120, 0.35);
+}
+
+.eden-duel-entry {
+  display: flex;
+  gap: 10px;
+  animation: duelFadeIn 0.4s ease;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(214, 187, 120, 0.07);
+}
+
+@keyframes duelFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.eden-duel-entry-role {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  flex-shrink: 0;
+  min-width: 32px;
+  padding-top: 2px;
+}
+
+.eden-duel-entry--god .eden-duel-entry-role {
+  color: #a0c8e0;
+}
+
+.eden-duel-entry--serpent .eden-duel-entry-role {
+  color: #c080d0;
+}
+
+.eden-duel-entry--eve .eden-duel-entry-role {
+  color: #c8a86e;
+}
+
+.eden-duel-entry--narration .eden-duel-entry-role {
+  color: #7a9a7a;
+}
+
+.eden-duel-entry-text {
+  font-size: 0.86rem;
+  line-height: 1.75;
+  color: #d8d4c8;
+  white-space: pre-line;
+}
+
+.eden-duel-entry--narration .eden-duel-entry-text {
+  color: #8a9a7a;
+  font-style: italic;
+  font-size: 0.84rem;
+}
+
+/* ---- 反馈文本 ---- */
+.eden-duel-feedback {
+  padding: 10px 14px;
+  background: rgba(200, 168, 110, 0.06);
+  border-left: 2px solid rgba(200, 168, 110, 0.2);
+  border-radius: 0 6px 6px 0;
+  font-size: 0.82rem;
+  color: #9a8a6a;
+  line-height: 1.7;
+  white-space: pre-line;
+}
+
+.eden-duel-attributes,
+.eden-duel-attribute-intro,
+.eden-duel-token-note {
+  padding: 12px;
+  border: 1px solid rgba(214, 187, 120, 0.12);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.035);
+  color: rgba(224, 217, 190, 0.78);
+  font-size: 0.82rem;
+  line-height: 1.75;
+}
+
+.eden-duel-attribute-row {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.eden-duel-attribute-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: rgba(225, 216, 183, 0.84);
+  font-size: 0.82rem;
+}
+
+.eden-duel-attribute-label strong {
+  color: #eadcae;
+}
+
+.eden-duel-attribute-track {
+  height: 7px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.eden-duel-attribute-fill {
+  height: 100%;
+  border-radius: inherit;
+  transition: width 0.4s ease;
+}
+
+.eden-duel-attribute-fill--god {
+  background: linear-gradient(90deg, #6080a0, #a0c8e0);
+}
+
+.eden-duel-attribute-fill--serpent {
+  background: linear-gradient(90deg, #8040a0, #c080d0);
+}
+
+.eden-duel-attribute-fill--self {
+  background: linear-gradient(90deg, #9a8f42, #d8c850);
+}
+
+.eden-duel-attribute-state {
+  color: rgba(193, 187, 157, 0.68);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+}
+
+.eden-duel-attribute-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.eden-duel-attribute-flags span {
+  padding: 5px 8px;
+  border: 1px solid rgba(214, 187, 120, 0.12);
+  border-radius: 999px;
+  color: rgba(214, 207, 180, 0.68);
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 0.72rem;
+}
+
+.eden-duel-attribute-flags .eden-duel-flag--active {
+  color: #eadcae;
+  border-color: rgba(214, 187, 120, 0.32);
+  background: rgba(214, 187, 120, 0.1);
+}
+
+.eden-duel-token-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.eden-duel-token-grid div {
+  padding: 11px;
+  border: 1px solid rgba(214, 187, 120, 0.12);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.eden-duel-token-grid span {
+  display: block;
+  color: rgba(193, 187, 157, 0.68);
+  font-size: 0.72rem;
+  margin-bottom: 5px;
+}
+
+.eden-duel-token-grid strong {
+  color: #eadcae;
+  font-size: 1.05rem;
+}
+
+/* ---- 输入区 ---- */
+.eden-duel-input-footer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 25;
+  padding: 12px 20px calc(12px + env(safe-area-inset-bottom, 0px));
+  background: rgba(10, 14, 10, 0.7);
+  border-top: 1px solid rgba(200, 168, 110, 0.12);
+  backdrop-filter: blur(10px);
+}
+
+.eden-duel-input-area {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.eden-duel-input {
+  flex: 1;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(200, 168, 110, 0.15);
+  border-radius: 8px;
+  color: #e8e4d8;
+  font-family: inherit;
+  font-size: 0.92rem;
+  line-height: 1.5;
+  resize: none;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.eden-duel-input:focus {
+  border-color: rgba(200, 168, 110, 0.35);
+}
+
+.eden-duel-input::placeholder {
+  color: #5a5a4a;
+}
+
+.eden-duel-btn-send {
+  padding: 10px 20px;
+  background: rgba(200, 168, 110, 0.12);
+  border: 1px solid rgba(200, 168, 110, 0.25);
+  border-radius: 8px;
+  color: #c8a86e;
+  font-size: 0.88rem;
+  cursor: pointer;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+
+.eden-duel-btn-send:hover:not(:disabled) {
+  background: rgba(200, 168, 110, 0.2);
+}
+
+.eden-duel-btn-send:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ---- 推荐话术 ---- */
+.eden-duel-hints {
+  display: flex;
+  gap: 6px;
+  padding: 8px 0 0;
+  flex-wrap: wrap;
+}
+
+.eden-duel-hints .eden-btn--hint {
+  font-size: 0.74rem;
+  padding: 4px 10px;
+  background: rgba(30, 40, 30, 0.5);
+  border: 1px solid rgba(160, 138, 80, 0.2);
+  border-radius: 4px;
+  color: #b8c8a8;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s;
+}
+
+.eden-duel-hints .eden-btn--hint:hover {
+  background: rgba(40, 50, 38, 0.6);
+}
+
+/* ---- 本轮结算覆盖层 ---- */
+.eden-duel-round-result-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 14, 10, 0.85);
+  animation: duelOverlayIn 0.4s ease;
+}
+
+@keyframes duelOverlayIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.eden-duel-round-result {
+  width: min(480px, 90vw);
+  padding: 28px 24px;
+  background: rgba(16, 22, 18, 0.95);
+  border: 1px solid rgba(200, 168, 110, 0.2);
+  border-radius: 12px;
+  text-align: center;
+  animation: duelResultIn 0.5s ease;
+}
+
+@keyframes duelResultIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.eden-duel-round-result-title {
+  font-size: 1.15rem;
+  color: #c8a86e;
+  letter-spacing: 0.1em;
+  margin: 0 0 16px;
+}
+
+.eden-duel-round-result-text {
+  font-size: 0.86rem;
+  color: #9a8a6a;
+  line-height: 1.8;
+  text-align: left;
+  white-space: pre-line;
+  margin-bottom: 16px;
+  padding: 12px;
+  background: rgba(10, 14, 10, 0.5);
+  border-radius: 8px;
+}
+
+.eden-duel-round-result-scores {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  font-size: 0.92rem;
+  color: #c8a86e;
+  margin-bottom: 20px;
+}
+
+/* ---- 顶部操作按钮 ---- */
+.eden-duel-top-actions {
+  position: fixed;
+  top: 12px;
+  right: 20px;
+  z-index: 50;
+  display: flex;
+  gap: 8px;
+}
+
+.eden-duel-top-actions .eden-btn--small {
+  font-size: 0.72rem;
+  padding: 4px 12px;
+  background: rgba(10, 14, 10, 0.6);
+  border: 1px solid rgba(200, 168, 110, 0.15);
+  border-radius: 4px;
+  color: #8a8a7a;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.2s, color 0.2s;
+}
+
+.eden-duel-top-actions .eden-btn--small:hover {
+  background: rgba(30, 40, 30, 0.6);
+  color: #c8a86e;
+}
+
+/* ============================================================
+   引言阶段
+   ============================================================ */
+.eden-duel--intro {
+  justify-content: center;
+  align-items: center;
+}
+
+.eden-duel-intro-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+}
+
+.eden-duel-intro-bg-shade,
+.eden-duel-round-intro-shade,
+.eden-duel-match-result-shade {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background:
+    radial-gradient(circle at 50% 45%, rgba(234, 213, 156, 0.08), transparent 30%),
+    linear-gradient(180deg, rgba(6, 10, 7, 0.54), rgba(6, 10, 7, 0.28) 45%, rgba(6, 10, 7, 0.78));
+}
+
+.eden-duel-second-eden-sheen {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  background:
+    linear-gradient(115deg, transparent 0%, transparent 42%, rgba(190, 220, 214, 0.1) 46%, transparent 51%, transparent 100%);
+  mix-blend-mode: screen;
+  opacity: 0.55;
+}
+
+.eden-duel-intro-content {
+  position: relative;
+  z-index: 5;
+  text-align: center;
+  max-width: 720px;
+  padding: 40px 24px;
+}
+
+.eden-duel-title {
+  font-size: 2.45rem;
+  color: #c8a86e;
+  letter-spacing: 0.15em;
+  margin: 0 0 8px;
+  text-shadow: 0 0 20px rgba(200, 168, 110, 0.3);
+}
+
+.eden-duel-subtitle {
+  font-size: 0.95rem;
+  color: #7a7a6a;
+  letter-spacing: 0.1em;
+  margin: 0 0 32px;
+}
+
+.eden-duel-intro-text {
+  font-size: 1.16rem;
+  line-height: 2.05;
+  color: #d6ccb0;
+  font-weight: 700;
+  margin-bottom: 32px;
+  white-space: pre-line;
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.55);
+}
+
+.eden-duel-intro-actions {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+}
+
+.eden-duel-intro-actions .eden-btn--lg {
+  font-size: 0.92rem;
+  padding: 10px 28px;
+  border-radius: 8px;
+}
+
+/* ============================================================
+   轮次开始阶段
+   ============================================================ */
+.eden-duel--round-intro {
+  justify-content: center;
+  align-items: center;
+}
+
+.eden-duel-round-intro-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+}
+
+.eden-duel-round-intro-content {
+  position: relative;
+  z-index: 5;
+  text-align: center;
+  max-width: 440px;
+  padding: 40px 24px;
+}
+
+.eden-duel-round-title {
+  font-size: 1.5rem;
+  color: #c8a86e;
+  letter-spacing: 0.12em;
+  margin: 0 0 8px;
+}
+
+.eden-duel-round-subtitle {
+  font-size: 0.82rem;
+  color: #7a7a6a;
+  margin: 0 0 24px;
+}
+
+.eden-duel-round-intro-text {
+  font-size: 0.9rem;
+  line-height: 1.8;
+  color: #9a8a6a;
+  margin-bottom: 32px;
+  white-space: pre-line;
+}
+
+/* ============================================================
+   整场结算阶段
+   ============================================================ */
+.eden-duel--match-result {
+  justify-content: center;
+  align-items: center;
+}
+
+.eden-duel-match-result-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+}
+
+.eden-duel-match-result-content {
+  position: relative;
+  z-index: 5;
+  text-align: center;
+  max-width: 520px;
+  padding: 48px 24px;
+}
+
+.eden-duel-match-title {
+  font-size: 1.6rem;
+  color: #c8a86e;
+  letter-spacing: 0.15em;
+  margin: 0 0 32px;
+}
+
+.eden-duel-match-scores {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  margin-bottom: 32px;
+}
+
+.eden-duel-match-score {
+  text-align: center;
+  padding: 16px 24px;
+  border-radius: 10px;
+  background: rgba(10, 14, 10, 0.5);
+  border: 1px solid rgba(200, 168, 110, 0.1);
+  min-width: 120px;
+}
+
+.eden-duel-match-score--winner {
+  border-color: rgba(200, 168, 110, 0.35);
+  background: rgba(30, 40, 30, 0.5);
+}
+
+.eden-duel-match-score-label {
+  display: block;
+  font-size: 0.78rem;
+  color: #7a7a6a;
+  letter-spacing: 0.08em;
+  margin-bottom: 6px;
+}
+
+.eden-duel-match-score-value {
+  display: block;
+  font-size: 2rem;
+  font-weight: 700;
+  color: #c8a86e;
+}
+
+.eden-duel-match-score-divider {
+  font-size: 1.2rem;
+  color: #5a5a4a;
+  font-weight: 600;
+}
+
+.eden-duel-match-draw {
+  font-size: 1.1rem;
+  color: #c8a86e;
+  letter-spacing: 0.1em;
+  margin-bottom: 20px;
+}
+
+.eden-duel-match-narration {
+  font-size: 0.92rem;
+  line-height: 1.9;
+  color: #9a8a6a;
+  margin-bottom: 32px;
+  white-space: pre-line;
+  text-align: left;
+  padding: 16px;
+  background: rgba(10, 14, 10, 0.5);
+  border-radius: 8px;
+}
+
+.eden-duel-match-actions {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+}
+
+.eden-duel-match-actions .eden-btn--lg {
+  font-size: 0.92rem;
+  padding: 10px 28px;
+  border-radius: 8px;
+}
+
+/* ---- 通用按钮增强 ---- */
+.eden-btn--primary {
+  background: rgba(200, 168, 110, 0.15);
+  border: 1px solid rgba(200, 168, 110, 0.3);
+  color: #c8a86e;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.eden-btn--primary:hover {
+  background: rgba(200, 168, 110, 0.25);
+  border-color: rgba(200, 168, 110, 0.45);
+}
+
+.eden-btn--secondary {
+  background: rgba(10, 14, 10, 0.5);
+  border: 1px solid rgba(200, 168, 110, 0.15);
+  color: #8a8a7a;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.2s, color 0.2s;
+}
+
+.eden-btn--secondary:hover {
+  background: rgba(30, 40, 30, 0.5);
+  color: #c8a86e;
+}

@@ -73,6 +73,26 @@ export const ACHIEVEMENTS: Achievement[] = [
     name: "低声而至",
     desc: "神的注视不高于 1 时进入园子中央。",
   },
+  {
+    id: "first_resonance",
+    name: "初闻回响",
+    desc: "首次获得一段园中回响。园子开始回应你的行动。",
+  },
+  {
+    id: "divine_gift_first",
+    name: "初临献礼",
+    desc: "首次让神的注视满盈，并获得神明献礼。",
+  },
+  {
+    id: "divine_gift_three",
+    name: "三临神恩",
+    desc: "同一局累计获得三次神明献礼。",
+  },
+  {
+    id: "resonance_master",
+    name: "回响大师",
+    desc: "同一局累计使用五次园中回响。",
+  },
 ];
 
 export function getAchievementById(id: string): Achievement | undefined {

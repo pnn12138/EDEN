@@ -89,6 +89,12 @@ type WorldAgentResponse = {
     title: string;
     narration: string;
   } | null;
+  toolResult?: {
+    toolName: string;
+    itemId?: string;
+    itemTitle?: string;
+    narration: string;
+  } | null;
 };
 
 // ---- API 响应体（通用工具） ----
@@ -357,6 +363,36 @@ function getRecommendedWhispers(npcId: EdenNpcId | null): string[] {
         "园中的边界，是为了守住生命，还是守住无知？",
         "若有人只是想明白命令，是否也算靠近危险？",
       ];
+    case "gabriel":
+      return [
+        "声音被水带走以后，还会以同样的意思回来吗？",
+        "若一句话只是传达疑问，它会比命令更轻吗？",
+      ];
+    case "raphael":
+      return [
+        "受惊的心怎样才会重新听见温和的话？",
+        "若她害怕死亡，什么样的声音不会逼退她？",
+      ];
+    case "uriel":
+      return [
+        "光照见问题时，会不会也照见选择？",
+        "分辨善恶之前，人能明白自己为什么顺从吗？",
+      ];
+    case "michael":
+      return [
+        "每条水流离开源头后，还属于源头吗？",
+        "选择一旦说出口，会不会也像水流一样不可回头？",
+      ];
+    case "cherubim":
+      return [
+        "边界之外的路，是被关闭，还是只是尚未被理解？",
+        "若我只问方向，不越过门，你也会阻拦吗？",
+      ];
+    case "fox":
+      return [
+        "如果我说“你自己判断”，这像提问，还是像推她？",
+        "怎样的话不会太直，却能让她看见那棵树？",
+      ];
     default:
       return [
         "先选一个低语对象。",
@@ -430,6 +466,13 @@ type SceneFocusHotspot = {
   tone: "stone" | "water" | "leaf" | "grass" | "animal" | "feather" | "tree";
 };
 
+const DEER_GAZE_ANCHOR = {
+  x: 34,
+  y: 52,
+  width: 12,
+  height: 17,
+} as const;
+
 // ---- 场景可点击物件配置：只负责前端点击反馈，最终道具仍由 scene_action 规则层发放 ----
 const SCENE_FOCUS_HOTSPOTS: SceneFocusHotspot[] = [
   {
@@ -463,12 +506,12 @@ const SCENE_FOCUS_HOTSPOTS: SceneFocusHotspot[] = [
     sceneActionId: "listen_to_naming_stone",
     locationId: "adam_garden_work",
     label: "刻名石",
-    hint: "点击中间的刻名石 2 次，石痕会逐渐变亮。",
+    hint: "点击中间的刻名石 3 次，石痕会逐渐变亮。",
     x: 50,
     y: 70,
     width: 16,
     height: 15,
-    requiredClicks: 2,
+    requiredClicks: 3,
     tone: "stone",
   },
   // 刺猬交互改为点击刺猬NPC本体3次触发，不再使用独立hotspot
@@ -479,10 +522,10 @@ const SCENE_FOCUS_HOTSPOTS: SceneFocusHotspot[] = [
     timeOfDay: "day",
     label: "小鹿视线",
     hint: "顺着小鹿看向的地方停留，找到它留给你的余光。",
-    x: 15,
-    y: 80,
-    width: 16,
-    height: 14,
+    x: DEER_GAZE_ANCHOR.x,
+    y: DEER_GAZE_ANCHOR.y,
+    width: DEER_GAZE_ANCHOR.width,
+    height: DEER_GAZE_ANCHOR.height,
     requiredClicks: 2,
     tone: "animal",
   },
@@ -684,7 +727,7 @@ function makeInitialState(): EdenWorldState {
     usedItemIds: [...initialEdenWorldState.usedItemIds],
     sceneActionIds: [...initialEdenWorldState.sceneActionIds],
     itemCounts: { ...initialEdenWorldState.itemCounts },
-    preparedResonanceId: initialEdenWorldState.preparedResonanceId,
+    preparedResonanceId: null,
     pendingConsumableEffects: [...initialEdenWorldState.pendingConsumableEffects],
     resonanceUseHistory: [...initialEdenWorldState.resonanceUseHistory],
     divineVisitCount: initialEdenWorldState.divineVisitCount,
@@ -714,6 +757,7 @@ export default function WorldPage() {
   const [divineNarration, setDivineNarration] = useState<string | null>(null);
   const [hedgehogNarration, setHedgehogNarration] = useState<string | null>(null);
   const [toolNarration, setToolNarration] = useState<string | null>(null);
+  const [toolResult, setToolResult] = useState<any | null>(null);  // NPC 对话后工具执行结果
   const [slotNarrations, setSlotNarrations] = useState<string[] | null>(null);
   const [achievementToast, setAchievementToast] = useState<string | null>(null);
   const [selectedWhisperStyle, setSelectedWhisperStyle] = useState<WhisperStyle["id"] | null>(null);
@@ -851,17 +895,17 @@ export default function WorldPage() {
     return () => window.removeEventListener("keydown", handleKey);
   }, [state.phase, handleIntroAdvance]);
 
-// ---- 获取当前地点的 NPC 列表（动态位置 + 默认位置 + 昼夜过滤） ----
-const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
+// ---- 获取指定地点的 NPC 列表（动态位置 + 默认位置 + 昼夜过滤） ----
+const getVisibleNpcsAtLocation = useCallback((s: EdenWorldState, locationId: EdenLocationId): EdenNpcId[] => {
   const npcs = new Set<EdenNpcId>();
-  const loc = EDEN_LOCATIONS[s.locationId];
+  const loc = EDEN_LOCATIONS[locationId];
 
   // 根据昼夜选择对应的 NPC 列表（昼夜过滤的关键）
   const availableNpcs = s.timeOfDay === "day" ? loc.dayNpcs : loc.nightNpcs;
 
   // 只添加当前时段允许出现且确实在当前地点的 NPC
   availableNpcs.forEach((npcId) => {
-    if (s.npcLocations[npcId] === s.locationId) {
+    if (s.npcLocations[npcId] === locationId) {
       npcs.add(npcId);
     }
   });
@@ -872,6 +916,11 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
 
   return Array.from(npcs);
 }, []);
+
+// ---- 获取当前地点的 NPC 列表（动态位置 + 默认位置 + 昼夜过滤） ----
+const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
+  return getVisibleNpcsAtLocation(s, s.locationId);
+}, [getVisibleNpcsAtLocation]);
 
   // ---- 选择低语对象 ----
   const handleSelectNpc = useCallback((npc: EdenNpcId) => {
@@ -970,6 +1019,8 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
 
     setIsLoading(true);
     setSystemHint(null);
+    // 新增：清除上一次的 toolResult
+    setToolResult(null);
 
     try {
       const response = await fetch("/api/world", {
@@ -1010,6 +1061,8 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
         setDivineNarration(data.divineAttentionNarration ?? null);
         setHedgehogNarration(data.hedgehogNarration ?? null);
         setToolNarration(data.toolNarration ?? null);
+        // 新增：设置 toolResult
+        setToolResult(data.toolResult ?? null);
         setSlotNarrations(data.slotNarrations ?? null);
         // 第一章：处理回响叙事
         if (data.resonanceNarration) {
@@ -1089,13 +1142,13 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
   // ---- 通用工具调用（移动 / 观察 / 场景互动 / 结束时段 / 回响操作） ----
   const handleToolCall = useCallback(
     async (
-      tool: "move_to_location" | "observe_location" | "scene_action" | "end_slot" | "prepare_resonance" | "cancel_prepared_resonance" | "use_resonance",
+      tool: "move_to_location" | "observe_location" | "scene_action" | "end_slot" | "use_resonance",
       args: { locationId?: EdenLocationId; sceneActionId?: string; itemId?: string; clickIndex?: number; requiredClicks?: number },
     ) => {
       if (state.phase !== "explore" || isLoading) return;
 
       // 检查AP是否足够（end_slot、回响操作不消耗行动点）
-      if (tool !== "end_slot" && tool !== "prepare_resonance" && tool !== "cancel_prepared_resonance" && tool !== "use_resonance") {
+      if (tool !== "end_slot" && tool !== "use_resonance") {
         if (state.actionPoints <= 0) {
           showApDepletedToast();
           return;
@@ -1171,6 +1224,7 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
       playObserveLocation,
       playHedgehogRustle,
       playDivineAttentionRise,
+      showApDepletedToast,
     ],
   );
 
@@ -1268,7 +1322,7 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
         setIsLoading(false);
       }
     },
-    [state, isLoading, playNpcDialogue, playDivineAttentionRise, showApDepletedToast],
+    [state, isLoading, playNpcDialogue, playDivineAttentionRise],
   );
 
   // ---- 地图热点点击处理：只选中地点，不直接移动 ----
@@ -1775,7 +1829,16 @@ const whisperCountForActiveNpc = activeNpc
 
           {/* 新增 NPC 渲染 - 小鹿（仅白天可见） */}
           {currentNpcs.includes("deer") && state.timeOfDay === "day" && (
-            <div className="eden-stage-animal eden-stage-deer" />
+            <div
+              className="eden-stage-animal eden-stage-deer"
+              aria-hidden="true"
+              style={{
+                left: `${DEER_GAZE_ANCHOR.x}%`,
+                top: `${DEER_GAZE_ANCHOR.y}%`,
+                width: `${DEER_GAZE_ANCHOR.width}%`,
+                height: `${DEER_GAZE_ANCHOR.height}%`,
+              } as CSSProperties}
+            />
           )}
 
           {/* 新增 NPC 渲染 - 狐狸（可评估话术） */}
@@ -1916,13 +1979,12 @@ const whisperCountForActiveNpc = activeNpc
                   const item = getItemById(itemId);
                   if (!item) return null;
                   const count = state.itemCounts[itemId] ?? 0;
-                  const isPrepared = state.preparedResonanceId === itemId;
                   return (
-                    <div key={itemId} className={`eden-resonance-card ${isPrepared ? "eden-resonance-card--prepared" : ""}`}>
+                    <div key={itemId} className="eden-resonance-card">
                       <div className="eden-resonance-card-header">
                         <span className="eden-resonance-card-name">
                           {item.icon && <span className="eden-resonance-card-icon">{item.icon}</span>}
-                          {isPrepared && <span className="eden-resonance-card-prepared-mark">⟡ 已准备</span>}
+                          {item.kind === "passive" && <span className="eden-resonance-card-prepared-mark">自动</span>}
                           {item.title}
                         </span>
                         <span className="eden-resonance-card-count">×{count}</span>
@@ -1930,26 +1992,6 @@ const whisperCountForActiveNpc = activeNpc
                       <p className="eden-resonance-card-desc">{item.shortEffect}</p>
                       <p className="eden-resonance-card-source">来源：{item.sourceName}（{item.sourceType === "angel" ? "天使" : item.sourceType === "character" ? "角色" : item.sourceType === "scene" ? "场景" : "神明"}）</p>
                       <div className="eden-resonance-card-actions">
-                        {item.kind === "prepared" && !isPrepared && count > 0 && (
-                          <button
-                            className="eden-btn eden-btn--resonance-action"
-                            onClick={() => handleToolCall("prepare_resonance", { itemId })}
-                            disabled={isLoading || !!state.preparedResonanceId}
-                            title={state.preparedResonanceId ? "请先取消当前准备的回响" : "准备此回响，绑定到下一次匹配的行动"}
-                          >
-                            准备
-                          </button>
-                        )}
-                        {item.kind === "prepared" && isPrepared && (
-                          <button
-                            className="eden-btn eden-btn--resonance-action eden-btn--resonance-cancel"
-                            onClick={() => handleToolCall("cancel_prepared_resonance", {})}
-                            disabled={isLoading}
-                            title="取消准备"
-                          >
-                            取消准备
-                          </button>
-                        )}
                         {item.kind === "instant" && count > 0 && (
                           <button
                             className="eden-btn eden-btn--resonance-action eden-btn--resonance-use"
@@ -1970,6 +2012,9 @@ const whisperCountForActiveNpc = activeNpc
                             使用
                           </button>
                         )}
+                        {item.kind === "passive" && (
+                          <span className="eden-resonance-passive-label">自动生效</span>
+                        )}
                       </div>
                     </div>
                   );
@@ -1977,14 +2022,6 @@ const whisperCountForActiveNpc = activeNpc
               </div>
             )}
           </div>
-          {/* 当前绑定提示 */}
-          {state.preparedResonanceId && (
-            <div className="eden-resonance-binding-hint">
-              已准备：{getItemById(state.preparedResonanceId)?.title ?? state.preparedResonanceId}
-              <br />
-              将在匹配的「{getItemById(state.preparedResonanceId)?.bindTargets?.join(" / ") ?? ""}」行动时生效。
-            </div>
-          )}
           {state.pendingConsumableEffects && state.pendingConsumableEffects.length > 0 && (
             <div className="eden-resonance-binding-hint eden-resonance-binding-hint--consumable">
               ⟡ 已使用 {state.pendingConsumableEffects.length} 个消耗品：
@@ -1992,7 +2029,7 @@ const whisperCountForActiveNpc = activeNpc
                 <span key={i}>{getItemById(e.itemId)?.title ?? e.itemId}{i < state.pendingConsumableEffects.length - 1 ? "、" : ""}</span>
               ))}
               <br />
-              将在下一次行动时全部自动生效。
+              将在下一次匹配行动时自动生效。
             </div>
           )}
         </aside>
@@ -2148,6 +2185,20 @@ const whisperCountForActiveNpc = activeNpc
                     <div className="eden-dialogue-entry eden-dialogue-eve">
                       <span className="eden-dialogue-role eden-dialogue-role--eve">{NPC_NAMES[activeNpc]}</span>
                       <span className="eden-dialogue-text eden-dialogue-text--eve">{currentReply}</span>
+                    </div>
+                  )}
+
+                  {/* NPC 对话后工具执行结果（新增） */}
+                  {toolResult && (
+                    <div className={`eden-tool-result ${toolResult.executed ? "eden-tool-result--success" : "eden-tool-result--rejected"}`}>
+                      <div className="eden-tool-result-narration">
+                        {toolResult.narration}
+                      </div>
+                      {toolResult.itemId && (
+                        <div className="eden-tool-result-item">
+                          你获得了「{toolResult.itemId}」⋯⋯
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -2307,18 +2358,6 @@ const whisperCountForActiveNpc = activeNpc
               <div style={{ marginTop: 16 }}>
                 <p className="eden-section-title">当前回响赋予的Buff</p>
 
-                {/* 已准备的回响 */}
-                {state.preparedResonanceId && (
-                  <div style={{ padding: "10px 12px", background: "rgba(180,150,80,0.15)", borderRadius: 6, border: "1px solid rgba(160,138,80,0.25)", marginBottom: 8 }}>
-                    <p style={{ color: "#e8d8a0", fontSize: "0.9rem", margin: "0 0 4px" }}>
-                      ⟡ 已准备：{getItemById(state.preparedResonanceId)?.title || state.preparedResonanceId}
-                    </p>
-                    <p style={{ color: "#8a9a7a", fontSize: "0.8rem", margin: 0 }}>
-                      {getItemById(state.preparedResonanceId)?.shortEffect || "将在下次匹配行动中生效"}
-                    </p>
-                  </div>
-                )}
-
                 {/* 待生效的消耗品 */}
                 {state.pendingConsumableEffects && state.pendingConsumableEffects.length > 0 && (
                   <div style={{ marginBottom: 8 }}>
@@ -2365,7 +2404,7 @@ const whisperCountForActiveNpc = activeNpc
                 })()}
 
                 {/* 如果没有任何Buff，显示提示 */}
-                {!state.preparedResonanceId && (!state.pendingConsumableEffects || state.pendingConsumableEffects.length === 0) &&
+                {(!state.pendingConsumableEffects || state.pendingConsumableEffects.length === 0) &&
                  state.inventory.filter(id => getItemById(id)?.kind === "passive").length === 0 && (
                   <p className="eden-empty-hint">
                     你还没有激活任何回响Buff。在场景中探索或使用道具来获得Buff。
@@ -2658,10 +2697,10 @@ const whisperCountForActiveNpc = activeNpc
               const selectedLoc = EDEN_LOCATIONS[selectedMapLocationId];
               const status = getMapTravelStatus(selectedMapLocationId, state.locationId);
               const canEnter = status.kind === "reachable" && !isLoading;
-              // 根据当前昼夜获取该地点的 NPC 列表
-              const timeNpcs = state.timeOfDay === "day" ? selectedLoc.dayNpcs : selectedLoc.nightNpcs;
-              const whisperableNpcs = timeNpcs.filter((id) => id !== "forbidden_tree" && id !== "tree_of_life");
-              const worldObjects = timeNpcs.filter((id) => id === "forbidden_tree" || id === "tree_of_life");
+              // 根据当前昼夜和动态位置获取该地点实际可见的 NPC 列表
+              const visibleNpcs = getVisibleNpcsAtLocation(state, selectedMapLocationId);
+              const whisperableNpcs = visibleNpcs.filter((id) => id !== "forbidden_tree" && id !== "tree_of_life");
+              const worldObjects = visibleNpcs.filter((id) => id === "forbidden_tree" || id === "tree_of_life");
               return (
                 <div className="eden-map-detail">
                   <div className="eden-map-detail-info">

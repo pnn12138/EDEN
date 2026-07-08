@@ -227,6 +227,14 @@ function itemName(id: string): string | null {
     "gift_sabbath_dew": "息日露滴",
     "gift_revealing_light": "照见之光",
     "gift_wide_path_seal": "宽行之印",
+    "resonance_river_dew": "河水清露",
+    "resonance_herald_feather": "传令白羽",
+    "moonlight_path_marker": "月光道标",
+    "consumable_first_whisper_free": "首语印记",
+    "consumable_trust_dew": "信任之露",
+    "consumable_gentle_voice": "柔声印记",
+    "passive_light_step": "轻步印记",
+    "passive_soft_whisper": "细语印记",
   };
   return map[id] ?? id;
 }
@@ -259,6 +267,10 @@ function achievementName(id: string): string | null {
     name_falls_on_stone: "名字落石",
     beyond_the_river: "河道之外",
     arrive_quietly: "低声而至",
+    first_resonance: "初闻回响",
+    divine_gift_first: "初临献礼",
+    divine_gift_three: "三临神恩",
+    resonance_master: "回响大师",
   };
   return map[id] ?? null;
 }

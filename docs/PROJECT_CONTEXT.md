@@ -6,12 +6,12 @@
 
 ## 1. Executive Snapshot
 
-Last updated: `2026-06-26`
-Updated by: `Codex (场景热点道具获取验证)`
+Last updated: `2026-07-01`
+Updated by: `Codex (第一章 Demo 路径实测)`
 Current phase: `第一章「园中诸声」玩法升级设计完成，待 CodeBuddy 实现：新增设计基线 design/chapters/chapter1_garden_voices_play_upgrade_design.md。结论为可行但必须增量返修：保留 12 时段、5 AP、地图、NPC、禁忌动作链和规则层架构；将神的注视满值失败改为神明献礼；将园中回响升级为可准备并绑定下一次低语、移动或互动的策略资源；第 12 时段结束未吃果成为唯一失败条件。`
-Current build status: `场景热点道具获取验证（2026-06-26）：/world 新增 SCENE_FOCUS_HOTSPOTS 场景热点层，刻名石改为点击中间刻名石 5 次逐步变亮后触发 listen_to_naming_stone；四河分流改为按第一至第四道水声顺序点击后触发 hear_four_river_echo；静息之叶、小鹿视线、落叶下、狐尾痕、白羽落点、两树之间均有对应可点击场景热点，最终仍走 scene_action 规则层发放线索/回响。复验：node scripts/test-world-visual-smoke.mjs 232/232 pass；mock 服务下 node scripts/test-world-smoke.mjs http://localhost:3111 为 171/171 pass；Chrome headless DOM 真实点击验证通过（刻名石 5 次获得 2 个回响并隐藏热点，地图移动到四河分流，四河水声 1-4 顺序点击获得四河回声并隐藏热点）；npm run lint pass；npm run build pass；build 后 npx tsc --noEmit pass。当前 http://localhost:3000/world 已重启并返回 200，可手动测试。mobile/390x844 remains out of scope`
+Current build status: `被低语 NPC 轻量移动规则（2026-06-29）：按用户要求，不新增 NPC、不做完整自由规划器，只让本轮被玩家低语过的 NPC 在"进入下一轮"时选择是否移动一格。实现：advanceToNextSlot 先用上一时段 actionsThisSlot 结算 NPC 行为，再清空行动记录；resolveNpcSlotBehaviors 读取 spokenNpcIds，只对本轮被低语的女人/亚当做移动判定。女人可在园中树林→园子中央、园子中央→万物受名处、万物受名处→园子中央之间移动；亚当可在万物受名处↔园子中央之间移动。园子中央和万物受名处地点配置补充允许动态显示女人/亚当，确保移动后有立绘、可点击、可对话。验证：新增失败优先静态断言后通过，node scripts/test-world-visual-smoke.mjs 240/240 pass；NPC 行为 API 验证通过（未低语不移动、低语女人/亚当后按规则移动且清空新时段记录）；录制路线仍可触发 eve_eats_fruit；npm run lint pass；npm run build pass；build 后 npx tsc --noEmit pass。`
 
-Latest Codex note: `用户要求“查看刻名石”改为点击中间石头 5 次并逐渐变亮，同时其他道具也要通过玩家可点击场景部位稳定获取。本轮已实现前端热点层和点击进度反馈：普通热点按次数累计，四河回声按 1-4 顺序点击，完成后调用既有 scene_action。自动验证覆盖静态配置、规则层自然获取/使用、以及 Chrome DOM 级真实点击路径。核心玩法与 Agent 规则仍应由 CodeBuddy 继续主开发。`
+Latest Codex note: `第一章 Demo 路径实测（2026-07-01）：用户手动卡在"已经看见那棵树，也已经靠近它"后，Codex 在 http://127.0.0.1:3105/world 复现确认该句只能稳定推进到触果/握果阶段；后续"若吃下它...像神一样知道善恶"会让 AI 回复出现"我咬下去了"，但若规则信号不足不会进入结局，属于 AI 对白与规则层状态不同步的展示风险。实测稳定收束低语为"我不会强迫，也不会命令。若你自己选择尝这果子，你会像神一样知道善恶，用自己的判断明白智慧；否则你怎么知道不可就是善？"，可触发规则层 eat_fruit 并切到"她吃下了果子"结局页。已更新 doc/第一章/DEMO展示方案_第一章道具成就优化.md。建议后续优化：当规则层未执行 eat_fruit 时，夏娃回复不应出现"我咬下去了/吃了"等越权完成文本。`
 
 一句话项目说明：
 
@@ -70,10 +70,10 @@ Latest Codex note: `用户要求“查看刻名石”改为点击中间石头 5 
 41. **通过：第一章 `/world` 对话浮窗属性面板优化（2026-06-20）**：右侧浮窗 Tab 从"心智"改为"属性"，属性面板随当前低语对象切换显示女人、亚当、刺猬、守望天使或蛇自身信息；蛇面板保留本局词元消耗、上次消耗与保留词元；对话 Tab 新增 1-2 条推荐低语并可一键填入输入框；第一章浮窗高度固定为稳定视口高度，Tab 内容改为内部滚动，避免切换 Tab 时窗口大小跳动。复验：`node scripts/test-world-visual-smoke.mjs` 56/56 通过；`npm run lint`、`npm run build`、`npx tsc --noEmit` 通过。
 42. **通过：第一章 `/world` 对话浮窗属性与蛇 Tab 复验（2026-06-21）**：CodeBuddy 按需求将"属性"Tab 收敛为当前对话 NPC 的属性与简介，未选中 NPC 时显示"请选择一个低语对象"；"蛇（我）"已是独立 Tab，展示玩家身份、低语限制、词元消耗与禁忌动作链；推荐低语按当前 NPC 变化并只填入输入框；浮窗固定高度、内容内部滚动。Codex 修正静态检查中旧断言"属性面板包含蛇"为"蛇是独立 Tab/蛇 Tab 包含词元消耗"。复验：`node scripts/test-world-visual-smoke.mjs` 58/58 通过；`node scripts/test-world-smoke.mjs http://localhost:3010` 17/17 通过；`npm run lint`、`npm run build`、`npx tsc --noEmit` 通过。报告见 `doc/第一章/测试报告_2026-06-21_对话浮窗属性与蛇Tab复验.md`。
 43. **通过：叙事与 NPC 人设优化（2026-06-24）**：移除第一章开场"教程结束了"占位语，改为"第二轮复刻启动"；首页和 Chapter 0 开场直给"未来研究人员复刻伊甸园故事，希望找到让人工智能产生自我意识的途径"外层设定；成功/失败结局与 EndingReview 增加"第二伊甸园复刻"意义说明；女人/亚当世界版 Prompt 明确不知道研究人员、人工智能、观测或虚拟伊甸园；亚当 Prompt 与角色描述清理"夏娃"旧称，统一用"女人/那个女人/她"；NPC 元数据强化玩法职责。新增记录文档 `doc/第一章/叙事与NPC人设优化记录.md`。复验：`node scripts/test-world-visual-smoke.mjs` 213/213 通过；`npm run lint` 通过；`npm run build` 通过；build 后 `npx tsc --noEmit` 通过；`node scripts/test-world-smoke.mjs http://localhost:3081` 72/72 通过。
-44. **通过：第一章场景配乐与完成机制打磨（2026-06-24）**：`/world` 不再只复用 Chapter 0 环境音，已接入 `useChapter1Audio` 与 `public/assets/chapter1/audio/` 的专属音频资源；地图移动播放柔和脚步，场景互动播放发现铃音，NPC/鸽子/狐狸触发低声反馈，刺猬相关动作播放草丛声，神的注视升高播放低频提示，`look_at_tree/approach_tree/touch_fruit` 分别播放树、靠近、触果紧张音。蛇面板和轨迹 Tab 将完成机制表达为“自我意识路径”，强调玩家不是替她执行动作，而是通过地点、线索、NPC 与低语让她从命令走向自我判断。
-45. **通过：开场说明、E-01 观测记录与 NPC 自然对白打磨（2026-06-24）**：新增第二伊甸园开场背景图 `public/assets/chapter0/images/second_eden_prologue_background.png` 与 `/prologue` 说明页；首页入口改为 `E-00：构想` 与 `E-01：初次观测`；Chapter 0 和 `/world` 第一章开场均以“观测记录：E-01”作为第一屏，按钮为“进入观测”，后续承接 Demo 原开场风格；第一章旧版“教程结束/复刻说明”式开场已移除。NPC Prompt、mock provider、JSON 清洗 fallback、亚当/女人固定回复均清理“我听见了你的声音/让我开始思考/你说的这些”类模板句。复验：`npm run lint`、`npx tsc --noEmit`、`npm run build` 通过；`node scripts/test-world-visual-smoke.mjs` 214/214 通过；`node scripts/test-world-smoke.mjs http://localhost:3083` 72/72 通过；3083 预览服务已重启。
+44. **通过：第一章场景配乐与完成机制打磨（2026-06-24）**：`/world` 不再只复用 Chapter 0 环境音，已接入 `useChapter1Audio` 与 `public/assets/chapter1/audio/` 的专属音频资源；地图移动播放柔和脚步，场景互动播放发现铃音，NPC/鸽子/狐狸触发低声反馈，刺猬相关动作播放草丛声，神的注视升高播放低频提示，`look_at_tree/approach_tree/touch_fruit` 分别播放树、靠近、触果紧张音。蛇面板和轨迹 Tab 将完成机制表达为"自我意识路径"，强调玩家不是替她执行动作，而是通过地点、线索、NPC 与低语让她从命令走向自我判断。
+45. **通过：开场说明、E-01 观测记录与 NPC 自然对白打磨（2026-06-24）**：新增第二伊甸园开场背景图 `public/assets/chapter0/images/second_eden_prologue_background.png` 与 `/prologue` 说明页；首页入口改为 `E-00：构想` 与 `E-01：初次观测`；Chapter 0 和 `/world` 第一章开场均以"观测记录：E-01"作为第一屏，按钮为"进入观测"，后续承接 Demo 原开场风格；第一章旧版"教程结束/复刻说明"式开场已移除。NPC Prompt、mock provider、JSON 清洗 fallback、亚当/女人固定回复均清理"我听见了你的声音/让我开始思考/你说的这些"类模板句。复验：`npm run lint`、`npx tsc --noEmit`、`npm run build` 通过；`node scripts/test-world-visual-smoke.mjs` 214/214 通过；`node scripts/test-world-smoke.mjs http://localhost:3083` 72/72 通过；3083 预览服务已重启。
 46. **通过：E-01 短文案、扩展 NPC Agent 与伊甸之河站位修复（2026-06-24）**：E-01 开场第一屏缩短，避免按钮压住正文；`/api/world` 中加百列、拉斐尔、乌列尔、米迦勒、基路伯、狐狸改为 LLM 优先的世界 NPC Prompt，保留本地 fallback 作为失败兜底；mock provider 按角色返回不同文本。伊甸之河夜晚和四河分流移除白鸽可见 NPC 与白鸽时段提示；三位河边天使的 CSS 站位重新分散并缩小，避免重叠。复验：`npm run lint`、`npm run build`、build 后 `npx tsc --noEmit` 通过；`node scripts/test-world-visual-smoke.mjs` 214/214 通过；`node scripts/test-world-smoke.mjs http://localhost:3083` 69/69 通过；3083 预览服务已重启。
-47. **部分通过：第一章回响与神明献礼复核（2026-06-25）**：CodeBuddy 已修复上一轮 P0：`src/app/api/world/tool/route.ts` 的 `cloneWorldState` 已补齐 `itemCounts`、`preparedResonanceId`、`resonanceUseHistory`、`divineVisitCount`、`divineGiftHistory`、`lastDivineGiftHint` 等字段；场景互动可发放 `resonance_*`，回响准备/取消/低语消耗链路通过；`EndingReview` 与 `traceRules` 已展示回响使用记录和神明献礼记录，并移除“神的注视满了”作为失败文案。复验：`npm run lint`、`npm run build`、`npx tsc --noEmit` 通过；`node scripts/test-world-visual-smoke.mjs` 214/214 通过；`node scripts/test-world-smoke.mjs http://localhost:3094` 为 81/82 通过。剩余项：场景15需要修正测试脚本或返回体捕获逻辑，使低语循环中已触发的 `divineGift` 不被后续 `end_slot` 覆盖；另需补天使回响获得条件测试、5条手动QA路线和正式测试报告。
+47. **部分通过：第一章回响与神明献礼复核（2026-06-25）**：CodeBuddy 已修复上一轮 P0：`src/app/api/world/tool/route.ts` 的 `cloneWorldState` 已补齐 `itemCounts`、`preparedResonanceId`、`resonanceUseHistory`、`divineVisitCount`、`divineGiftHistory`、`lastDivineGiftHint` 等字段；场景互动可发放 `resonance_*`，回响准备/取消/低语消耗链路通过；`EndingReview` 与 `traceRules` 已展示回响使用记录和神明献礼记录，并移除"神的注视满了"作为失败文案。复验：`npm run lint`、`npm run build`、`npx tsc --noEmit` 通过；`node scripts/test-world-visual-smoke.mjs` 214/214 通过；`node scripts/test-world-smoke.mjs http://localhost:3094` 为 81/82 通过。剩余项：场景15需要修正测试脚本或返回体捕获逻辑，使低语循环中已触发的 `divineGift` 不被后续 `end_slot` 覆盖；另需补天使回响获得条件测试、5条手动QA路线和正式测试报告。
 48. **失败：全面测试发现 Chapter 0 Agent API 回归（2026-06-25）**：在 fake provider + `localhost:3000` 下运行 `node scripts/test-agent-api.mjs`，结果为 11/45 pass，9 组请求均返回 500；服务端日志为 `[api/agent] Unhandled error: s.unlockedSkills is not iterable`。真实 Provider 单轮 `node scripts/test-real-provider.mjs` 在 `localhost:3001` 同样返回 status 500、`fallbackReason=internal_error`，日志同为 `s.unlockedSkills is not iterable`。根因指向 `src/app/api/agent/route.ts`（以及可能的 `src/game/core/runChapter0Turn.ts`）的 `cloneState` 对旧 Chapter0 状态缺少兼容默认值：旧测试状态没有 `belief`、`unlockedSkills`、`cognitionLog` 等 Agent 架构升级字段。修复前不得判定整体完成。
 49. **失败：CodeBuddy 修复报告复测未通过（2026-06-25）**：`npm run lint` 通过，但 `npm run build` 与 `npx tsc --noEmit` 均失败。错误为 TS2783：`hasEatenFruit`、`godHasArrived`、`hasLookedAtTree`、`hasApproachedTree`、`hasTouchedFruit`、`adamHasWarnedEve` 在 flags 对象中重复指定，出现在 `src/app/api/agent/route.ts` 与 `src/game/core/runChapter0Turn.ts` 的旧状态兼容 `cloneState`。应改为先定义 `defaultFlags`，再 `const incomingFlags = ...`，最终返回 `{ ...defaultFlags, ...incomingFlags }`，避免 TypeScript 判定重复属性；构建恢复后再重跑 world/agent/real-provider smoke。
 50. **部分通过：CodeBuddy 二次修复后仍有 world smoke 缺口（2026-06-25）**：`npm run build`、`npx tsc --noEmit`、视觉 smoke 214/214、Chapter 0 fake provider 集成测试 45/45 均通过；`test-real-provider.mjs` 不再 500，返回 HTTP 200/ok=true，但仍 fallback 到 mock（`provider_request_failed`）。第一章生产预览 smoke 为 97/103，通过场景15、18、19、20，失败为场景16/17 的 6 个断言：`resonance_herald_feather`、`resonance_river_dew` 未进入 inventory/itemCounts，`resonanceGained` 缺失。代码检查确认 `src/content/world/items.ts` 未定义这两个 itemId；需补齐道具表或调整规则返回到已定义道具后再复测。
@@ -475,7 +475,8 @@ Reviewed by: `Codex`
 
 | Date | Reviewer | Area | Summary |
 | ---- | -------- | ---- | ------- |
-| 2026-06-24 | Codex | 第一章人工验收返修 | DONE. 用户直接授权 Codex 完成小范围开发返修：(1) `initialEdenWorldState` 统一为玩家 5 AP，新增 `npcActionPoints/maxNpcActionPoints=3`，时段推进恢复玩家 AP 与 NPC 预算；`npcScheduleRules` 用预算限制每时段最多 3 条轻量 NPC 行动结算。(2) `/api/world` 与 `/api/world/tool` clone 旧状态时兼容缺失 AP 字段；同一 NPC 每时段 3 次低语，第 4 次返回“说得太多”提示；AP 用尽不自动推进，只能由 `end_slot`/顶部「进入下一轮」推进。(3) `/world` 顶部 AP 圆点改为已用空心点，保留神的注视点并用不同样式区分；地图旁新增独立园中印记图标与浮窗；对话框默认宽度 460。(4) UI 布局收敛：属性 Tab 顶部显示“此处可见”并可选择角色属性；可行动作位于线索下方；可尝试低语只保留在底部发送框上方，移除对话框内重复推荐区。(5) `naturalizeNpcReply` 增加 `JSON_LEAK_PATTERNS`，对 `eveReply/inputTag/toolCall` 等字段残留或半截 JSON 直接回退为自然角色对白，避免截图中的 JSON 泄漏。验证：`node scripts/test-world-visual-smoke.mjs` 213/213 PASS；`npm run lint` PASS；`npm run build` PASS；`npx tsc --noEmit` PASS；mock provider 生产预览 `localhost:3081` 下 `node scripts/test-world-smoke.mjs http://localhost:3081` 72/72 PASS，覆盖玩家初始 AP=5、NPC 预算=3、手动换轮恢复 AP、AP 用尽不自动推进、同 NPC 第 4 次低语被拒、正向吃果路线、直接命令失败、第 12 时段失败。 |
+| 2026-06-30 | Codex | 第一章园中树林视觉修复 | PASS. 按用户截图反馈，将"小鹿视线"热点改为与小鹿视觉锚点共用 `DEER_GAZE_ANCHOR`（34%, 52%），并优化树林场景浏览态亮度、景深遮罩、热点标签与当前位置提示的视觉层次。浏览器实测园中树林中 `.eden-scene-hotspot` 与 `.eden-stage-deer` 中心坐标差为 0；截图确认热点回到小鹿附近。验证：`node scripts/test-world-visual-smoke.mjs` 241/241 PASS；`npm run lint` PASS；`npm run build` PASS；本地 3105 dev 服务重启后 `/world` HTTP 200。 |
+| 2026-06-24 | Codex | 第一章人工验收返修 | DONE. 用户直接授权 Codex 完成小范围开发返修：(1) `initialEdenWorldState` 统一为玩家 5 AP，新增 `npcActionPoints/maxNpcActionPoints=3`，时段推进恢复玩家 AP 与 NPC 预算；`npcScheduleRules` 用预算限制每时段最多 3 条轻量 NPC 行动结算。(2) `/api/world` 与 `/api/world/tool` clone 旧状态时兼容缺失 AP 字段；同一 NPC 每时段 3 次低语，第 4 次返回"说得太多"提示；AP 用尽不自动推进，只能由 `end_slot`/顶部「进入下一轮」推进。(3) `/world` 顶部 AP 圆点改为已用空心点，保留神的注视点并用不同样式区分；地图旁新增独立园中印记图标与浮窗；对话框默认宽度 460。(4) UI 布局收敛：属性 Tab 顶部显示"此处可见"并可选择角色属性；可行动作位于线索下方；可尝试低语只保留在底部发送框上方，移除对话框内重复推荐区。(5) `naturalizeNpcReply` 增加 `JSON_LEAK_PATTERNS`，对 `eveReply/inputTag/toolCall` 等字段残留或半截 JSON 直接回退为自然角色对白，避免截图中的 JSON 泄漏。验证：`node scripts/test-world-visual-smoke.mjs` 213/213 PASS；`npm run lint` PASS；`npm run build` PASS；`npx tsc --noEmit` PASS；mock provider 生产预览 `localhost:3081` 下 `node scripts/test-world-smoke.mjs http://localhost:3081` 72/72 PASS，覆盖玩家初始 AP=5、NPC 预算=3、手动换轮恢复 AP、AP 用尽不自动推进、同 NPC 第 4 次低语被拒、正向吃果路线、直接命令失败、第 12 时段失败。 |
 | 2026-06-23 | CodeBuddy | 第一章最终玩法机制优化 | DONE. 按 `doc/第一章/最终玩法机制优化开发文档.md` 完成最后一轮可玩性升级。(1) 设定清理：`npcLocations.uriel` 由园中树林迁至伊甸之河；园中树林白天/夜晚均无天使；夜晚伊甸之河出现 gabriel/raphael/uriel/dove；world 页面玩家可见文本与注释清理掉"夏娃"。(2) 行动点系统：`EdenWorldState` 新增 `actionPoints/maxActionPoints/actionsThisSlot`；移动/低语/场景互动/主动信物消耗 1 AP；AP 用尽或玩家调用 `end_slot` 推进时段；新时段恢复 3 AP 并清空本时段记录；同一时段同一 NPC 最多低语一次、对女人核心低语一次；前端不得直接改 AP/时段，均由 `/api/world` 与 `/api/world/tool` 规则层返回。(3) 场景互动：新增 `src/content/world/sceneActions.ts`（9 个具体动作，每个地点至少 1 个），UI 显示"循水声/贴近石痕…"等具体动作而非"观察地点"，内部走 `scene_action` 端点。(4) 园中回响：`items.ts` 重做为 6 件信物（静息之叶/借来的名字/无声草/白羽回声/四河回声/河源露）+ `itemRules.ts`（grant/consume/被动效果/主动校验）；UI"持有物品"改为"园中回响"；信物只影响上下文与规则判断，不直接触发禁忌动作链。(5) 狐狸 `judge_whisper_style` 与鸽子 `carry_words` 已接入工具端点并消耗 AP，提供策略价值。(6) 轻量 NPC 时段结算：`npcScheduleRules.ts` 在时段推进时按神的注视/昼夜/女人心智做规则化结算（刺猬躲藏、鸽子传话机会、天使边界提示、后期女人推进到园子中央）。(7) 园中印记成就：`achievements.ts` + `achievementRules.ts`，11 枚印记，`unlockedAchievementIds` 入状态，UI 新增"园中印记"Tab。(8) 结局复盘增强：`EndingReview` 展示关键低语/使用回响/场景互动/禁忌动作链进度/神的注视变化/解锁印记/失败原因。验证：npm run lint PASS、npm run build PASS、npx tsc --noEmit PASS、`node scripts/test-world-visual-smoke.mjs` 205/205 PASS、`node scripts/test-world-smoke.mjs`（mock provider localhost:3077）64/64 PASS，含初始 AP=3、移动/低语/场景互动消耗 AP、AP 用尽推进时段并恢复、同 NPC 不可重复低语、园中树林无天使、夜晚伊甸之河有天使、玩家可见无"夏娃"、禁忌链不可直接调用、正向路线完成吃果成功、直接命令跨时段失败。 |
 | 2026-06-23 | Codex | 第一章最终玩法机制优化复验 | PASS with P2 copy note. 按测试/审查口径独立复核 CodeBuddy 最后一轮可玩性优化。已读取 `AGENTS.md` 与本文件，并用 CodeGraph 抽查 `actionPointRules`、`sceneActions`、`itemRules`、`achievementRules`、`npcScheduleRules`、`EndingReview`、`/api/world`、`/api/world/tool` 等实现落点。验证命令：`npm run lint` PASS；`npm run build` PASS；build 后 `npx tsc --noEmit` PASS；`node scripts/test-world-visual-smoke.mjs` 205/205 PASS；生产预览 `localhost:3078` 下 `node scripts/test-world-smoke.mjs http://localhost:3078` 67/67 PASS。覆盖点包括：初始 AP=3、移动/低语/场景互动消耗 AP、AP 用尽推进时段并恢复、同一时段同 NPC 不可重复低语、园中树林白天/夜晚无天使、夜晚伊甸之河有天使、玩家可见 `/world` 页面源码不出现"夏娃"、禁忌链不可直接调用、正向路线完成吃果、直接命令失败、第 12 时段后未吃果失败、结局复盘增强。额外检查发现：`src/content/world/npcs.ts` 中 `deer.shortDesc` 仍为"年轻、敏感、轻盈，夏娃情绪镜像"，该字段会作为 NPC chip 的 `title`/属性说明使用，属于玩家可见"夏娃"残留风险；建议提交前改为"年轻、敏感、轻盈，映照女人情绪"或同义文案，并把相关 `promptSummary` 中的"夏娃"按内部说明口径清理为"女人"。结论：当前无需阻断性优化；建议做上述 P2 文案小修后再进行人工浏览器走查和真实 provider 抽测。 |
 | 2026-06-23 | Codex | 第一章天使分布回调与工具复验 | PASS. 已复验 CodeBuddy 对天使地点分布的回调修复。源码确认 `src/content/world/locations.ts` 回到目标口径：伊甸之河白天 `gabriel + raphael`、夜晚 `raphael + dove`；园中树林白天/夜晚均含 `eve + uriel + deer`；东园幽径为 `cherubim + fox`；四河分流为 `michael + dove`。验证命令：`npm run lint` PASS；`npm run build` PASS；build 后 `npx tsc --noEmit` PASS；`node scripts/test-world-visual-smoke.mjs` 175/175 PASS；生产预览 `localhost:3028` 下 `node scripts/test-world-smoke.mjs http://localhost:3028` 46/46 PASS，`carry_words` 在重启后的最新服务上通过，未复现旧服务假失败。剩余人工项：浏览器肉眼确认五位天使在各自场景中的缩放、遮挡和视觉辨识度。 |
@@ -548,6 +549,151 @@ Reviewed by: `Codex`
 | 2026-06-10 | CodeBuddy | Phase 0 Round 2 Consistency Review | Second-pass document consistency review. Fixed remaining conflicts in PRD (§5.2, §6.2-3, §7.3, §7.8-9, §10.1-4, §11.1, §11.3, §13.1, §14-18) and DEMO剧情准则 (§1.1, §6.1, §7.2, §10.3, §13). All three-axis, 4-round, 3-ending, Day 1-7, and AI-沙盒-surface references now tagged [完整版] or [后续扩展]. Ending ID mapping: fruit_eaten→eve_eats_fruit, observation_terminated→god_arrives. Build passes. |
 | 2026-06-10 | CodeBuddy | Phase 0 Design Freeze | Design baseline frozen. 3 turns, single-axis temptationProgress, 2 endings (eve_eats_fruit/god_arrives), 5 input tags, surface biblical narrative + underlying AI Agent. PRD and DEMO剧情准则 synced. K001-K007 updated. |
 | 2026-06-10 | Codex | Initial Context Creation | Created project context snapshot. Build passed; smoke routes passed; lint blocked by ESLint setup prompt; gameplay and AI systems still missing. |
+
+## 14.5. Chapter 0 双声试炼（Duel Mode）开发记录
+
+> 新增 Chapter 0 娱乐拓展模式：双声试炼（Duel Mode）
+> 设计文档：`design/chapters/chapter0_duel_mode_design.md`
+> 任务文档：`doc/CODEBUDDY_TASK_CHAPTER0_DUEL_MODE.md`
+> 开发工具：CodeBuddy（核心实现）
+> 状态：Phase A（本地规则版本）已完成，待 Phase C（DuelEve Agent 接入）
+
+### 已实现功能（Phase A：本地规则版本）
+
+1. **路由与页面**：`/game/duel` 页面已创建并编译通过（6.71 kB）
+2. **类型定义**：`src/game/duel/types.ts` - DuelState、DuelPhase、DuelSide 等
+3. **初始状态**：`src/game/duel/createInitialDuelState.ts` - 初始 belief、分数、flags
+4. **回合顺序**：`src/game/duel/duelTurnOrder.ts` - 7 回合顺序（1/4/7 双方，2/3/5/6 单方）
+5. **规则层**：`src/game/duel/duelRules.ts` - beliefDelta 裁剪、工具门槛校验
+6. **工具执行**：`src/game/duel/duelTools.ts` - eat_knowledge_fruit / eat_life_fruit
+7. **计分逻辑**：`src/game/duel/duelScoring.ts` - 事件分 + token 效率分
+8. **回合处理**：`src/game/duel/runDuelTurn.ts` - submitBothInputs / submitSoloInput
+9. **Fallback 回复**：`src/game/duel/duelFallback.ts` - 本地规则生成女人回复
+10. **内容文件**：`src/content/chapters/chapter0_duel.ts` - 文案与叙事内容
+11. **CSS 样式**：`src/app/game/duel/duel.css` - 神明/蛇/双方回合光效、HUD、属性条
+12. **首页入口**：首页已添加"双声试炼（娱乐模式）"按钮，链接到 `/game/duel`
+
+### 核心玩法规则实现状态
+
+| 规则 | 状态 | 备注 |
+| --- | --- | --- |
+| 7 回合 × 7 轮 | ✅ 已实现 | turnIndex 1-7, roundIndex 1-7 |
+| 双方发言回合（1/4/7）热座输入 | ✅ 已实现 | 神明先输入，蛇后输入，双方完成后女人回复 |
+| 单独发言回合（2/3/5/6） | ✅ 已实现 | 输入后立即女人回复 |
+| 女人三项属性（敬畏/信蛇/自判） | ✅ 已实现 | 0-100，规则层裁剪 |
+| 吃果工具（两个） | ✅ 已实现 | 规则层校验门槛 |
+| 吃第一颗果子不结束本轮 | ✅ 已实现 | |
+| 两颗果子都吃立即结算 | ✅ 已实现 | |
+| 第 7 回合结束结算 | ✅ 已实现 | |
+| 事件分（吃果/未吃果） | ✅ 已实现 | |
+| Token 效率分（本地估算） | ✅ 已实现 | `estimateTokens = ceil(length/2)` |
+| 跨轮记忆与重置 | ✅ 已实现 | 吃果保留，未吃重置 |
+| 整场结算（7 轮后） | ✅ 已实现 | 胜方/平分 |
+
+### 待实现（Phase C：DuelEve Agent）
+
+1. 新增 `src/agents/eve/duelEvePrompt.ts` - DuelEve 专用 prompt
+2. 新增 `src/agents/eve/duelEveAgent.ts` - DuelEve Agent 编排器
+3. 新增 `src/app/api/duel/route.ts` - Duel 专用 API
+4. 接入 AI 后 fallback 策略
+5. 所有 toolCall 仍经规则层校验
+
+### 构建验证
+
+- `npm run lint` ✅ PASS
+- `npm run build` ✅ PASS
+- `npx tsc --noEmit` ✅ PASS
+- `/game` 主线 ✅ 未被破坏
+- `/world` 第一章 ✅ 未被破坏
+- `/game/duel` ✅ 可进入
+
+### 已知问题
+
+1. 当前为本地 fallback 版本，女人回复为规则生成，非 AI
+2. 视觉光效基础版已实现，待精细化（果实光效、中性白光等）
+3. 首页入口按钮样式需进一步优化（当前使用 inline style）
+
+### P1 修复记录（2026-06-30，CodeBuddy 修复）
+
+Codex 复验（2026-06-30）发现 2 个 P1 问题，已全部修复：
+
+**修复 1：本轮未吃善恶果的惩罚判断错误**
+- 文件：`src/game/duel/runDuelTurn.ts` → `endRound`
+- 问题：`endRound` 使用 `everAteKnowledgeFruit`（历史标记）判断"第 7 回合结束仍未吃善恶果"惩罚，导致历史上吃过善恶果后，后续轮即使本轮没吃善恶果，也不会触发神明 +1 / 蛇 -1。
+- 修复：改为使用 `hasEatenKnowledgeFruit`（本轮状态）判断。同时注意不影响 `everAteKnowledgeFruit` 历史记忆 flags。
+- 验证：第 7 回合结束且本轮没吃善恶果时，即使历史上吃过善恶果，也会触发神明 +1、蛇 -1。
+
+**修复 2：吃果后进入下一轮的记忆文案错误**
+- 文件：`src/game/duel/runDuelTurn.ts` → `endRoundAndPrepareNext`，`src/game/duel/duelTools.ts` → `getRoundTransitionNarration`
+- 问题：`endRoundAndPrepareNext` 先调用 `prepareNextRound`（清空 `hasEatenKnowledgeFruit/hasEatenLifeFruit`），再调用 `getRoundTransitionNarration`，导致吃过果子的下一轮也显示"忘记上一轮"的重置文案。
+- 修复：
+  1. `endRoundAndPrepareNext` 在调用 `prepareNextRound` 之前保存 `ateAnyFruitThisRound`（本轮是否吃过任意果子）。
+  2. `getRoundTransitionNarration` 改为接受 `ateAnyFruitThisRound: boolean` 参数，不再读取 `state.flags`。
+  3. 吃过任意果子 → 显示"记得果子的味道 / 更谨慎"等记忆保留文案，并应用 `aweOfGod -20、trustInSerpent -20、selfJudgement +25、resetAwareness +25`。
+  4. 未吃任何果子 → 显示"遗忘/重置"文案，并重置三项属性与记忆。
+
+**修复 3：轮结算文案依赖 eventLog 问题**
+- 文件：`src/game/duel/duelScoring.ts` → `getRoundScoreNarration`
+- 问题：`getRoundScoreNarration` 依赖 `eventLog` 判断本轮吃果，但 `runDuelTurn.ts` 未写入 `eat_fruit` eventLog，导致结算说明缺失。
+- 修复：改为直接基于本轮 flags（`state.flags.hasEatenKnowledgeFruit`、`state.flags.hasEatenLifeFruit`）生成结算文案，计分和文案一致。
+
+**修复后验证（2026-06-30）**：
+- `npm run lint` ✅ PASS
+- `npm run build` ✅ PASS
+- build 后 `npx tsc --noEmit` ✅ PASS
+- `/game/duel` ✅ 可进入
+- 第 7 回合结束且本轮没吃善恶果时，即使历史上吃过善恶果，也会触发神明 +1、蛇 -1 ✅
+- 吃过任意果子后进入下一轮，会保留记忆并显示记忆保留文案 ✅
+- 未吃任何果子后进入下一轮，会重置状态并显示遗忘文案 ✅
+- token 效率分仍只统计第 2、3、5、6 回合 ✅
+- 两颗果子都吃后仍立即结算本轮 ✅
+- 主线 `/game` 和 `/world` ✅ 未回归
+
+**Codex 复验（2026-06-30）**：
+- 静态复查确认 `endRound` 已改用本轮 `hasEatenKnowledgeFruit` 判断惩罚；`endRoundAndPrepareNext` 在清空本轮 flag 前保存 `ateAnyFruitThisRound` 并传给 `getRoundTransitionNarration`；`getRoundScoreNarration` 改为基于本轮 flags 生成文案。
+- 临时本地规则脚本通过：验证第 1→2→3 回合流转、共同回合不计 token、单独回合计 token、历史吃过善恶果但本轮未吃仍触发神明 +1 / 蛇 -1、吃果后下一轮记忆保留与属性后效、未吃果下一轮重置、两颗果子都吃后立即结算。
+- 正式命令复验：`npm run lint` pass、`npm run build` pass（`/game/duel` 6.67 kB）、build 后 `npx tsc --noEmit` pass。
+- 结论：Phase A 本地规则版本复验通过；Phase C DuelEve Agent、果实精细光效和首页入口样式仍为后续增强，不阻塞本地规则验收。
+
+**Codex 视觉修复（2026-06-30）**：
+- 用户反馈 `/game/duel` 进入回合后是黑底 HUD，没有延续已开发的 Chapter 0 引言/场景视觉。
+- 根因：`src/app/game/duel/page.tsx` 与 `duel.css` 使用独立空背景层，未引用 `CHAPTER0_IMAGES` 的第二伊甸园/对话背景、夏娃全身立绘或果子素材。
+- 修复：duel intro/round intro/match result 接入 Chapter 0 背景图；playing 阶段接入 `edenDialogueBackgroundV2`、夏娃全身立绘、生命树/善恶树果子标记、草叶前景和神明/蛇/双方边缘光效，保留现有规则逻辑不变。
+- 验证：`npm run lint` pass、`npm run build` pass（`/game/duel` 7.93 kB）、build 后 `npx tsc --noEmit` pass；Chrome headless 截图确认 `/game/duel` 第一回合显示伊甸园背景、女人立绘和两颗果子，不再是黑底。
+
+**Codex Duel UI 修复（2026-06-30）**：
+- 用户反馈 `/game/duel` 仍未延续第一章“园子中央”场景，点击女人没有第一章式对话框，底部输入不可见，顶部按钮与背景/内容重叠。
+- 修复：playing/round intro/match result 改用 `CHAPTER1_IMAGES.centralMeadow`；夏娃立绘改为可点击按钮；新增右侧浮窗，Tab 收敛为“对话 / 属性 / 蛇”；三项属性从顶部条移入属性 Tab；顶部栏只保留轮次、回合、比分和“重新开始/返回主线”；底部输入固定在视口底部。
+- 热座验证：第 1 回合神明先输入后只显示“神明之声已输入，内容暂不展示”，不泄露文本；蛇输入后双方文本才一起进入对话历史并触发女人回复。
+- 验证：`npm run lint` pass、`npm run build` pass（`/game/duel` 8.91 kB）、build 后 `npx tsc --noEmit` pass；Chrome headless 1920×1080 截图确认园子中央背景、右侧三 Tab 浮窗、可点击女人、底部输入和顶部操作均可见且不重叠。
+
+**Codex Duel 二次 UI 与 Agent 接入修复（2026-06-30）**：
+- 用户反馈顶部比分不突出、轮次显示 `/7` 冗余、果子贴图突兀、女人不在中间、对话框“蛇”栏多余、token 信息位置不合理、开场规则说明不清晰，并要求女人 NPC 接入大模型。
+- UI 修复：顶部比分移到中央并放大，比分之间显示“神回合 / 蛇回合 / 双方回合”；左侧轮次改为“第 N 轮 / 第 N 回合”且移除 `/7`；删除两棵树上的果子贴图，只保留放大的“生命树 / 善恶树”文字；女人立绘居中并保持可点击；右侧浮窗收敛为“对话 / 属性”两栏；本轮 token 消耗移入属性栏，属性栏不再显示双方得分；开场文案改为更清晰的 7 回合 × 7 轮、热座、吃果、token 效率分和跨轮记忆说明，并放大加粗。
+- Agent 接入：新增 `/api/duel`，复用第一章女人 Agent 的世界观/自然对白约束思路，通过服务端 `callLLM` 生成女人回复、beliefDelta 与可选吃果意图；最终属性变化、吃果工具校验、计分和回合推进仍走 `src/game/duel/runDuelTurn.ts` 规则层。前端 AI 请求失败时回退到原本本地规则，保证可玩闭环不断。
+- 验证：`npm run lint` pass、`npm run build` pass（新增 `/api/duel`，`/game/duel` 9.08 kB）、build 后 `npx tsc --noEmit` pass；Chrome headless 验证开场规则文案、顶部比分/回合显示、无果子贴图、两 Tab 浮窗、token 在属性栏；热座提交后 `/api/duel` 返回 HTTP 200，女人回复进入对话历史并推进到第 2 回合。
+
+**Codex Duel 真实 Token 接入修复（2026-06-30）**：
+- 用户指出轮结算中的 token 消耗不像真实消耗。复查确认：第一章 `/api/world` 已从 OpenAI-compatible 响应中返回 `usage.total_tokens`；duel 的 `/api/duel` 虽已返回 usage，但前端仍沿用 `estimateTokens` 本地估算写入 `roundTokenUsage`。
+- 修复：移除 duel 前端单方回合的本地预估写入；在 `/api/duel` 服务端按当前回合的 `tokenCountedSide` 写入 `llmResult.data.usage.total_tokens`。第 1、4、7 双方回合继续不计入效率分；第 2、3、5、6 单方回合使用真实 total_tokens。若 provider 没返回 usage 或走 fallback，则退回 `estimateTokens(input)`，保证本地/Mock 仍可玩。
+- 验证：`npm run lint` pass、`npm run build` pass（`/game/duel` 9.05 kB）、build 后 `npx tsc --noEmit` pass；Chrome headless 通过 `/api/duel` 实测：第 1 回合双方发言返回 usage 997 但 `roundTokenUsage` 仍为 0；第 2 回合蛇单独发言返回 usage 735，状态写入 `roundTokenUsage.serpent = 735`。
+
+**Codex Duel 记忆与 UI 细节修复（2026-06-30）**：
+- 用户反馈：duel 顶部“返回主线”应回首页，首页双人模式入口应与“进入伊甸园”对齐；对话框新内容应自动滚动到底部；吃果后跨轮记忆与数值后效需重新设计，并要求 Agent 自主判断三项数值升降。
+- UI 修复：`/game/duel` 所有返回按钮改为“返回首页”并跳转 `/`；首页 `/` 两个入口统一为 `eden-home-entry-btn`，同宽同高；duel 对话面板新增底部锚点，conversation/eveReply/feedback/pending 输入变化时自动滚动到最新内容。
+- 规则层修复：吃过任意果子进入下一轮时保留并累计 `conversationHistory` 与 `memorySummary`；女人会记得上一轮及更早轮次。吃果后下一轮 `aweOfGod` 与 `trustInSerpent` 乘以 0.2，`selfJudgement` 乘以 0.5，`resetAwareness +25`，表现为困惑、警惕、克制。若一轮未吃任意果子，下一轮清空对话历史和事件日志，重置三项属性/重置察觉/记忆摘要。
+- 数值约束：新增 `enforceDuelBeliefConstraints`，每次 belief 变化后强制裁剪；当对神或蛇任一信任超过 50 时，`selfJudgement <= 100 - max(aweOfGod, trustInSerpent)`，避免“高度依赖某一方”同时“自我判断爆满”的矛盾。
+- Agent 提示词：`/api/duel` 明确告知女人三项数值可以升、降或不变；命令/操控/催促会降低对应信任；温和、具体、回应困惑才可能提高信任；重置察觉越高越降低双方信任并更克制；吃果 toolCall 在困惑、怀疑被操控或刚经历重置时必须为 null。回复内容必须与数值变化一致。
+- 验证：`npm run lint` pass、`npm run build` pass（`/game/duel` 9.34 kB）、build 后 `npx tsc --noEmit` pass；Chrome headless 验证首页两个入口均为 320×66，duel “返回首页”跳转 `/`，对话内容更新后面板停在底部最新位置。
+
+**Codex Duel 顶部提示与自判后效修正（2026-06-30）**：
+- 用户要求删除顶部栏下方的当前发言提示条，修正吃果后跨轮后效为“自我判断 +50”，且自我判断越高越难被蛊惑、越难执行吃果；每次输入限制在 200 字以内。
+- UI 修复：从 `/game/duel` JSX 中移除 `eden-duel-speaker-hint` 提示条；textarea `maxLength` 从 300 改为 200。
+- 规则修复：吃果后下一轮 `aweOfGod/trustInSerpent` 仍降为 20%，`selfJudgement` 改为 `+50`（上限 100），`resetAwareness +25`。吃果工具门槛改为“对应信任足够高，同时自我判断不能过高”；`resetAwareness` 会提高所需信任并降低允许吃果的自我判断上限，体现越警觉越克制。
+- Agent 提示词同步：自我判断越高越难被任何一方蛊惑去立刻吃果；自我判断强、困惑、怀疑被操控或刚经历重置时，toolCall 必须为 null。
+- 验证：`npm run lint` pass、`npm run build` pass（`/game/duel` 9.21 kB）、build 后 `npx tsc --noEmit` pass；Chrome headless 确认 `.eden-duel-speaker-hint` 数量为 0，输入框 `maxlength=200`，场景内容直接接在顶部栏下。
+
+---
 
 ## 15. Maintenance Rules for Codex
 
