@@ -7,6 +7,8 @@
 
 # testing
 /coverage
+/playwright-report/
+/test-results/
 
 # next.js
 /.next/
@@ -37,3 +39,22 @@ next-env.d.ts
 
 # codegraph
 .codegraph
+
+# local Codex test artifacts
+.codex-*.png
+.codex-*.log
+
+# local runtime artifacts
+server_*.log
+server_*_err.txt
+server_*_out.txt
+server_*_pid.txt
+
+# local dev output
+build_output.txt
+fake_provider_err.txt
+fake_provider_out.txt
+
+# local screenshots
+*.jpg
+*.png

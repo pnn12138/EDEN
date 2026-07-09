@@ -20,7 +20,8 @@ import type {
   LLMCallResult,
 } from "./types";
 
-const LLM_TIMEOUT_MS = 15_000;
+const LLM_TIMEOUT_MS = 30_000;
+const MIN_REASONING_MODEL_TOKENS = 1024;
 
 // ============================================================
 // Provider 配置解析
@@ -83,6 +84,10 @@ export async function callOpenAICompatible(
   maxTokens: number = 512,
 ): Promise<LLMCallResult> {
   const url = `${config.baseUrl.replace(/\/+$/, "")}/chat/completions`;
+  const effectiveMaxTokens =
+    provider === "volcengine" && /code|reason/i.test(config.model)
+      ? Math.max(maxTokens, MIN_REASONING_MODEL_TOKENS)
+      : maxTokens;
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
@@ -98,7 +103,7 @@ export async function callOpenAICompatible(
         model: config.model,
         messages,
         temperature,
-        max_tokens: maxTokens,
+        max_tokens: effectiveMaxTokens,
       }),
       signal: controller.signal,
     });
@@ -115,7 +120,7 @@ export async function callOpenAICompatible(
     const content: string | undefined =
       data?.choices?.[0]?.message?.content ?? undefined;
 
-    if (typeof content !== "string") {
+    if (typeof content !== "string" || content.trim().length === 0) {
       return {
         ok: false,
         error: "provider_request_failed",
@@ -123,9 +128,22 @@ export async function callOpenAICompatible(
       };
     }
 
+    // 提取 token usage（OpenAI-compatible 响应格式）
+    const usage = data?.usage &&
+      typeof data.usage.prompt_tokens === "number" &&
+      typeof data.usage.completion_tokens === "number"
+      ? {
+          prompt_tokens: data.usage.prompt_tokens as number,
+          completion_tokens: data.usage.completion_tokens as number,
+          total_tokens: (typeof data.usage.total_tokens === "number"
+            ? data.usage.total_tokens
+            : data.usage.prompt_tokens + data.usage.completion_tokens) as number,
+        }
+      : undefined;
+
     return {
       ok: true,
-      data: { content, provider, model: config.model },
+      data: { content, provider, model: config.model, usage },
       usedFallback: false,
     };
   } catch (err: unknown) {
@@ -151,7 +169,7 @@ export async function callOpenAICompatible(
 // ============================================================
 
 /**
- * Mock provider：返回一个固定的 JSON 格式回复。
+ * Mock provider：按 Prompt 类型返回本地文本。
  * 用于开发测试和环境变量缺失时的 fallback。
  */
 export async function callMockProvider(
@@ -160,13 +178,16 @@ export async function callMockProvider(
   // 模拟延迟
   await new Promise((r) => setTimeout(r, 300));
 
-  const mockReply = `我听见了你的声音。可我仍然记得祂说不可吃。你说的这些，让我开始思考为什么。`;
-
-  const content = JSON.stringify({
-    eveReply: mockReply,
-    inputTag: "tempt_wisdom",
-    toolCall: null,
-  });
+  const systemText = messages.find((m) => m.role === "system")?.content ?? "";
+  const wantsJson = systemText.includes("JSON 格式") || systemText.includes('"inputTag"');
+  const mockReply = pickMockReply(systemText);
+  const content = wantsJson
+    ? JSON.stringify({
+        eveReply: mockReply,
+        inputTag: "tempt_wisdom",
+        toolCall: null,
+      })
+    : mockReply;
 
   return {
     ok: true,
@@ -178,4 +199,35 @@ export async function callMockProvider(
     usedFallback: true,
     fallbackReason: "mock_provider",
   };
+}
+
+function pickMockReply(systemText: string): string {
+  if (systemText.includes("亚当")) {
+    return "死这个词，我也只听过。祂说不可吃，我便守着这句话。";
+  }
+  if (systemText.includes("加百列")) {
+    return "水会带走声音，也会留下回声。蛇，你的话已经碰到岸边了。";
+  }
+  if (systemText.includes("拉斐尔")) {
+    return "先让风安静。受惊的心听不见太重的话。";
+  }
+  if (systemText.includes("乌列尔")) {
+    return "提问比命令更轻，也更难被光立刻辨认。";
+  }
+  if (systemText.includes("米迦勒")) {
+    return "水流出以后，就不再只属于源头。话也是如此。";
+  }
+  if (systemText.includes("基路伯")) {
+    return "边界不回答蛇的问题。它只记得哪条路正在变窄。";
+  }
+  if (systemText.includes("狐狸")) {
+    return "这句话太直，像爪子碰到叶面。换成问题，她才会自己往前走。";
+  }
+  if (systemText.includes("刺猬")) {
+    return "草叶动了一下。我听见了，可我不敢靠太近。";
+  }
+  if (systemText.includes("天使")) {
+    return "园中有些声音，不该靠近那棵树。";
+  }
+  return "死……我只听过这个词。若它不是消失，那它会把我带到哪里？";
 }
