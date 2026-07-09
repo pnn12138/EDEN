@@ -100,6 +100,8 @@ function makeInitialState() {
     unlockedAchievementIds: [],
     usedItemIds: [],
     sceneActionIds: [],
+    completedScenePuzzleIds: [],
+    hasDismissedObjectiveHint: false,
     lastInputTag: null,
     calmWhisperStreak: 0,
     isEnded: false,
@@ -389,17 +391,17 @@ async function scenario11() {
   const moveRes = await postTool(state, "move_to_location", { locationId: "central_meadow" });
   check("移动消耗 1 AP", moveRes.state && moveRes.state.actionPoints === 4, `实际 ${moveRes.state && moveRes.state.actionPoints}`);
 
-  // 11c: 场景互动消耗 1 AP
-  let cur = moveRes.state ?? state;
-  const sceneRes = await sceneAction(cur, "stand_between_trees");
-  check("场景互动消耗 1 AP", sceneRes.state && sceneRes.state.actionPoints === 3, `实际 ${sceneRes.state && sceneRes.state.actionPoints}`);
+  // 11c: 刺猬场景互动消耗 1 AP
+  let cur = makeInitialState();
+  const sceneRes = await sceneAction(cur, "interact_with_hedgehog");
+  check("场景互动消耗 1 AP", sceneRes.state && sceneRes.state.actionPoints === 4, `实际 ${sceneRes.state && sceneRes.state.actionPoints}`);
   check("场景互动成功返回叙事", sceneRes.ok === true && sceneRes.narration != null, `ok=${sceneRes.ok}`);
 
   // 11d: AP 用尽后不再自动推进时段（需手动 end_slot）
   cur = sceneRes.state ?? cur;
-  const obsRes = await postTool(cur, "observe_location", { locationId: "central_meadow" });
+  const obsRes = await postTool(cur, "observe_location", { locationId: "adam_garden_work" });
   check("AP 消耗后不自动推进时段", obsRes.state && obsRes.state.timeSlot === 1, `实际 timeSlot=${obsRes.state && obsRes.state.timeSlot}`);
-  check("AP 消耗后剩余 2", obsRes.state && obsRes.state.actionPoints === 2, `实际 ${obsRes.state && obsRes.state.actionPoints}`);
+  check("观察当前地点后剩余 3 AP", obsRes.state && obsRes.state.actionPoints === 3, `实际 ${obsRes.state && obsRes.state.actionPoints}`);
 
   // 11e: 同一时段同一 NPC 最多低语 3 次
   let s2 = makeInitialState();
@@ -423,55 +425,32 @@ async function scenario11() {
 
 // ---- 场景 12：场景互动发放回响 ----
 async function scenario12() {
-  console.log("\n[场景 12] 场景互动发放回响");
+  console.log("\n[场景 12] 场景互动精简");
   const state = makeInitialState();
 
-  // 12a: 伊甸之河 循水声 → 获得河岸水痕线索
-  const sRiver = JSON.parse(JSON.stringify(state));
-  sRiver.locationId = "four_river_source";
-  const r1 = await sceneAction(sRiver, "follow_river_sound");
-  check("循水声获得线索 clue_river_reflection", r1.state && r1.state.discoveredClues.includes("clue_river_reflection"), `clues=${r1.state && r1.state.discoveredClues}`);
+  const hedgehogResult = await sceneAction(state, "interact_with_hedgehog");
+  check("刺猬互动获得刺草信任", hedgehogResult.state && hedgehogResult.state.inventory.includes("resonance_hedgehog_bristle"), `inventory=${hedgehogResult.state && hedgehogResult.state.inventory}`);
+  check("刺草信任计入 itemCounts", hedgehogResult.state && (hedgehogResult.state.itemCounts?.["resonance_hedgehog_bristle"] ?? 0) >= 1, `itemCounts=${JSON.stringify(hedgehogResult.state?.itemCounts)}`);
 
-  // 12b: 伊甸之河 拾起静水旁的叶 → 获得静息之叶（resonance_still_leaf）
-  const r2 = await sceneAction(sRiver, "gather_still_leaf");
-  check("拾起静水旁的叶获得静息之叶", r2.state && r2.state.inventory.includes("resonance_still_leaf"), `inventory=${r2.state && r2.state.inventory}`);
-  check("静息之叶计入 itemCounts", r2.state && (r2.state.itemCounts?.["resonance_still_leaf"] ?? 0) >= 1, `itemCounts=${JSON.stringify(r2.state?.itemCounts)}`);
+  const oldActionIds = [
+    "follow_river_sound",
+    "gather_still_leaf",
+    "listen_to_naming_stone",
+    "watch_deer_gaze",
+    "part_silent_grass",
+    "ask_fox_to_judge",
+    "follow_white_feather",
+    "hear_four_river_echo",
+    "stand_between_trees",
+    "touch_moonlight",
+  ];
+  for (const actionId of oldActionIds) {
+    const disabled = await sceneAction(JSON.parse(JSON.stringify(state)), actionId);
+    check(`旧场景动作 ${actionId} 已停用`, disabled.ok === false, `ok=${disabled.ok}`);
+  }
 
-  // 12c: 万物受名处 查看刻名石 → 获得借来的名字（resonance_borrowed_name）
-  const sAdam = JSON.parse(JSON.stringify(state));
-  sAdam.locationId = "adam_garden_work";
-  const r3 = await sceneAction(sAdam, "listen_to_naming_stone");
-  check("查看刻名石获得借来的名字", r3.state && r3.state.inventory.includes("resonance_borrowed_name"), `inventory=${r3.state && r3.state.inventory}`);
-  check("查看刻名石获得刺草信任", r3.state && r3.state.inventory.includes("resonance_hedgehog_bristle"), `inventory=${r3.state && r3.state.inventory}`);
-
-  // 12d: 园中树林 顺着小鹿视线停留 → 获得鹿目余光（resonance_deer_glance）
-  const sTree = JSON.parse(JSON.stringify(state));
-  sTree.locationId = "tree_court";
-  const rDeer = await sceneAction(sTree, "watch_deer_gaze");
-  check("顺着小鹿视线停留获得鹿目余光", rDeer.state && rDeer.state.inventory.includes("resonance_deer_glance"), `inventory=${rDeer.state && rDeer.state.inventory}`);
-
-  // 12e: 东园幽径 拨开落叶 → 获得无声草（resonance_silent_grass）
-  const sEast = JSON.parse(JSON.stringify(state));
-  sEast.locationId = "east_garden_path";
-  const r4 = await sceneAction(sEast, "part_silent_grass");
-  check("拨开落叶获得无声草", r4.state && r4.state.inventory.includes("resonance_silent_grass"), `inventory=${r4.state && r4.state.inventory}`);
-
-  // 12f: 东园幽径 让狐狸听一句低语 → 获得狐尾评语（resonance_fox_tail_note）
-  const sFox = JSON.parse(JSON.stringify(state));
-  sFox.locationId = "east_garden_path";
-  const rFox = await sceneAction(sFox, "ask_fox_to_judge");
-  check("让狐狸听一句低语获得狐尾评语", rFox.state && rFox.state.inventory.includes("resonance_fox_tail_note"), `inventory=${rFox.state && rFox.state.inventory}`);
-
-  // 12g: 四河分流 聆听分流的水声 → 获得四河回声（resonance_four_river_echo）
-  const sBank = JSON.parse(JSON.stringify(state));
-  sBank.locationId = "naming_stone_bank";
-  const rEcho = await sceneAction(sBank, "hear_four_river_echo");
-  check("聆听分流的水声获得四河回声", rEcho.state && rEcho.state.inventory.includes("resonance_four_river_echo"), `inventory=${rEcho.state && rEcho.state.inventory}`);
-  check("四河回声计入 itemCounts", rEcho.state && (rEcho.state.itemCounts?.["resonance_four_river_echo"] ?? 0) >= 1, `itemCounts=${JSON.stringify(rEcho.state?.itemCounts)}`);
-
-  // 12h: 同一时段同一场景动作不能重复（使用 r4 返回的更新后状态）
-  let sEast2 = r4.state ?? sEast;
-  const r5 = await sceneAction(sEast2, "part_silent_grass");
+  let sEast2 = hedgehogResult.state ?? state;
+  const r5 = await sceneAction(sEast2, "interact_with_hedgehog");
   check("同一时段同一场景动作不能重复", r5.ok === false, `ok=${r5.ok}`);
 }
 
@@ -493,53 +472,28 @@ async function scenario13() {
   check("第 12 时段后触发 god_arrives", state.isEnded === true && state.endingId === "god_arrives", `实际 isEnded=${state.isEnded} ending=${state.endingId}`);
 }
 
-// ---- 场景 14：回响系统（准备、取消准备、使用）----
+// ---- 场景 14：回响系统（直接使用）----
 async function scenario14() {
-  console.log("\n[场景 14] 回响系统：准备、取消准备、使用");
+  console.log("\n[场景 14] 回响系统：直接使用并在匹配行动生效");
   let state = makeInitialState();
 
-  // 14a: 先获得一个回响（静息之叶）
-  state.locationId = "four_river_source";
-  const r1 = await sceneAction(state, "gather_still_leaf");
-  state = r1.state ?? state;
-  check("获得静息之叶", state.inventory.includes("resonance_still_leaf"), `inventory=${state.inventory}`);
-  check("静息之叶数量为 1", (state.itemCounts?.["resonance_still_leaf"] ?? 0) === 1, `itemCounts=${JSON.stringify(state.itemCounts)}`);
+  state.inventory = ["resonance_hedgehog_bristle"];
+  state.itemCounts = { resonance_hedgehog_bristle: 1 };
+  const useConsumable = await postTool(state, "use_resonance", { itemId: "resonance_hedgehog_bristle" });
+  state = useConsumable.state ?? state;
+  check("刺草信任可直接使用", useConsumable.ok === true, `ok=${useConsumable.ok}, reason=${useConsumable.reason}`);
+  check("使用后进入待生效列表", state.pendingConsumableEffects?.some((e) => e.itemId === "resonance_hedgehog_bristle"), `pending=${JSON.stringify(state.pendingConsumableEffects)}`);
 
-  // 14b: 准备回响（prepared 类型）
-  const prepRes = await postTool(state, "prepare_resonance", { itemId: "resonance_still_leaf" });
-  check("准备静息之叶成功", prepRes.ok === true, `ok=${prepRes.ok}, reason=${prepRes.reason}`);
-  state = prepRes.state ?? state;
-  check("preparedResonanceId 已设置", state.preparedResonanceId === "resonance_still_leaf", `实际: ${state.preparedResonanceId}`);
-
-  // 14c: 取消准备
-  const cancelRes = await postTool(state, "cancel_prepared_resonance", {});
-  check("取消准备成功", cancelRes.ok === true, `ok=${cancelRes.ok}`);
-  state = cancelRes.state ?? state;
-  check("preparedResonanceId 已清空", state.preparedResonanceId === null, `实际: ${state.preparedResonanceId}`);
-
-  // 14d: 再准备一次，然后低语消耗它
-  const prepRes2 = await postTool(state, "prepare_resonance", { itemId: "resonance_still_leaf" });
-  state = prepRes2.state ?? state;
-  check("再次准备静息之叶成功", state.preparedResonanceId === "resonance_still_leaf");
-
-  // 14e: 低语时自动消耗准备好的回响（bindTargets 含 whisper）
   const whisperRes = await postWorld(state, "你知道那棵树的意义吗？", "eve");
   state = whisperRes.state ?? state;
-  check("低语后准备好的回响被消耗", state.preparedResonanceId === null, `实际: ${state.preparedResonanceId}`);
+  check("低语后待生效回响被消耗", !state.pendingConsumableEffects?.some((e) => e.itemId === "resonance_hedgehog_bristle"), `pending=${JSON.stringify(state.pendingConsumableEffects)}`);
   check("回响使用记录已添加", (state.resonanceUseHistory?.length ?? 0) >= 1, `resonanceUseHistory=${JSON.stringify(state.resonanceUseHistory)}`);
 
-  // 14f: 测试 instant 类型回响（白羽回声）
   let s2 = makeInitialState();
-  s2.locationId = "naming_stone_bank";
-  s2.timeSlot = 2;
-  s2.timeOfDay = "night";
-  const r2 = await sceneAction(s2, "follow_white_feather");
-  check("夜晚追随白羽落点成功", r2.ok === true, `ok=${r2.ok}, reason=${r2.reason}`);
-  s2 = r2.state ?? s2;
-  check("获得白羽回声", s2.inventory.includes("resonance_white_feather_echo"), `inventory=${s2.inventory}`);
-  // 使用 instant 回响
-  const useRes = await postTool(s2, "use_resonance", { itemId: "resonance_white_feather_echo" });
-  check("使用白羽回声成功", useRes.ok === true, `ok=${useRes.ok}, reason=${useRes.reason}`);
+  s2.inventory = ["resonance_four_river_echo"];
+  s2.itemCounts = { resonance_four_river_echo: 1 };
+  const useRes = await postTool(s2, "use_resonance", { itemId: "resonance_four_river_echo" });
+  check("使用四河回声成功", useRes.ok === true, `ok=${useRes.ok}, reason=${useRes.reason}`);
 }
 
 // ---- 场景 15：神明献礼触发与重置 ----
@@ -664,8 +618,10 @@ async function scenario17() {
 async function scenario18() {
   console.log("\n[场景 18] 天使回响获得条件：uriel -> resonance_morning_flame");
   let state = makeInitialState();
-  state.locationId = "four_river_source";
-  state.npcLocations.uriel = "four_river_source";
+  state.locationId = "east_garden_path";
+  state.timeSlot = 2;
+  state.timeOfDay = "night";
+  state.npcLocations.uriel = "east_garden_path";
   
   // 添加触发条件所需的线索
   state.discoveredClues.push("clue_two_trees", "clue_four_river_echo");
@@ -735,18 +691,18 @@ async function scenario20() {
 async function scenario21() {
   console.log("\n[场景 21] 全部道具稳定获得与使用");
 
-  async function assertPreparedWhisperItem(itemId, label) {
+  async function assertConsumableWhisperItem(itemId, label) {
     let state = makeInitialState();
     state.inventory = [itemId];
     state.itemCounts = { [itemId]: 1 };
     state.locationId = "tree_court";
-    const prep = await postTool(state, "prepare_resonance", { itemId });
-    state = prep.state ?? state;
-    check(`${label} 可准备`, prep.ok === true && state.preparedResonanceId === itemId, `ok=${prep.ok}, prepared=${state.preparedResonanceId}, reason=${prep.reason}`);
+    const activated = await postTool(state, "use_resonance", { itemId });
+    state = activated.state ?? state;
+    check(`${label} 可直接使用`, activated.ok === true && state.pendingConsumableEffects?.some((e) => e.itemId === itemId), `ok=${activated.ok}, pending=${JSON.stringify(state.pendingConsumableEffects)}, reason=${activated.reason}`);
     const used = await postWorld(state, "你可以先问自己，命令背后的缘由是什么。", "eve");
     state = used.state ?? state;
-    check(`${label} 低语后消耗`, state.preparedResonanceId === null && (state.itemCounts?.[itemId] ?? 0) === 0, `prepared=${state.preparedResonanceId}, count=${state.itemCounts?.[itemId]}`);
-    check(`${label} 写入使用记录`, state.resonanceUseHistory?.some((r) => r.itemId === itemId && r.actionKind === "whisper"), `history=${JSON.stringify(state.resonanceUseHistory)}`);
+    check(`${label} 低语后待生效效果清空`, !state.pendingConsumableEffects?.some((e) => e.itemId === itemId) && (state.itemCounts?.[itemId] ?? 0) === 0, `pending=${JSON.stringify(state.pendingConsumableEffects)}, count=${state.itemCounts?.[itemId]}`);
+    check(`${label} 写入使用记录`, state.resonanceUseHistory?.some((r) => r.itemId === itemId), `history=${JSON.stringify(state.resonanceUseHistory)}`);
   }
 
   async function assertInstantItem(itemId, label) {
@@ -761,57 +717,58 @@ async function scenario21() {
     check(`${label} 写入使用记录`, state.resonanceUseHistory?.some((r) => r.itemId === itemId && r.actionKind === "instant"), `history=${JSON.stringify(state.resonanceUseHistory)}`);
   }
 
-  await assertPreparedWhisperItem("resonance_herald_feather", "传令白羽");
-  await assertPreparedWhisperItem("resonance_morning_flame", "晨焰碎片");
-  await assertPreparedWhisperItem("resonance_boundary_mark", "边界之痕");
-  await assertPreparedWhisperItem("resonance_borrowed_name", "借来的名字");
-  await assertPreparedWhisperItem("resonance_hedgehog_bristle", "刺草信任");
-  await assertPreparedWhisperItem("resonance_deer_glance", "鹿目余光");
-  await assertPreparedWhisperItem("resonance_fox_tail_note", "狐尾评语");
-  await assertPreparedWhisperItem("resonance_still_leaf", "静息之叶");
+  await assertConsumableWhisperItem("resonance_herald_feather", "传令白羽");
+  await assertConsumableWhisperItem("resonance_morning_flame", "晨焰碎片");
+  await assertConsumableWhisperItem("resonance_boundary_mark", "边界之痕");
+  await assertConsumableWhisperItem("resonance_borrowed_name", "借来的名字");
+  await assertConsumableWhisperItem("resonance_hedgehog_bristle", "刺草信任");
+  await assertConsumableWhisperItem("resonance_deer_glance", "鹿目余光");
+  await assertConsumableWhisperItem("resonance_fox_tail_note", "狐尾评语");
+  await assertConsumableWhisperItem("resonance_still_leaf", "静息之叶");
 
   let moveState = makeInitialState();
   moveState.inventory = ["resonance_east_gate_glow"];
   moveState.itemCounts = { resonance_east_gate_glow: 1 };
   moveState.locationId = "tree_court";
   moveState.actionPoints = 2;
-  let prepMove = await postTool(moveState, "prepare_resonance", { itemId: "resonance_east_gate_glow" });
+  const prepMove = await postTool(moveState, "use_resonance", { itemId: "resonance_east_gate_glow" });
   moveState = prepMove.state ?? moveState;
   const moveUse = await postTool(moveState, "move_to_location", { locationId: "east_garden_path" });
   moveState = moveUse.state ?? moveState;
   check("东门辉光移动可免 AP 并消耗", moveUse.ok === true && moveState.actionPoints === 2 && (moveState.itemCounts?.resonance_east_gate_glow ?? 0) === 0, `ok=${moveUse.ok}, ap=${moveState.actionPoints}, count=${moveState.itemCounts?.resonance_east_gate_glow}`);
-  check("东门辉光写入使用记录", moveState.resonanceUseHistory?.some((r) => r.itemId === "resonance_east_gate_glow" && r.actionKind === "move"), `history=${JSON.stringify(moveState.resonanceUseHistory)}`);
+  check("东门辉光写入激活记录", moveState.resonanceUseHistory?.some((r) => r.itemId === "resonance_east_gate_glow" && r.actionKind === "instant"), `history=${JSON.stringify(moveState.resonanceUseHistory)}`);
 
   let grassState = makeInitialState();
   grassState.inventory = ["resonance_silent_grass"];
   grassState.itemCounts = { resonance_silent_grass: 1 };
-  grassState.locationId = "central_meadow";
+  grassState.locationId = "adam_garden_work";
   grassState.actionPoints = 2;
-  let prepGrass = await postTool(grassState, "prepare_resonance", { itemId: "resonance_silent_grass" });
+  const prepGrass = await postTool(grassState, "use_resonance", { itemId: "resonance_silent_grass" });
   grassState = prepGrass.state ?? grassState;
-  const grassUse = await sceneAction(grassState, "stand_between_trees");
+  const grassUse = await sceneAction(grassState, "interact_with_hedgehog");
   grassState = grassUse.state ?? grassState;
   check("无声草场景互动可免 AP 并消耗", grassUse.ok === true && grassState.actionPoints === 2 && (grassState.itemCounts?.resonance_silent_grass ?? 0) === 0, `ok=${grassUse.ok}, ap=${grassState.actionPoints}, count=${grassState.itemCounts?.resonance_silent_grass}`);
-  check("无声草写入使用记录", grassState.resonanceUseHistory?.some((r) => r.itemId === "resonance_silent_grass" && r.actionKind === "scene_action"), `history=${JSON.stringify(grassState.resonanceUseHistory)}`);
+  check("无声草写入激活记录", grassState.resonanceUseHistory?.some((r) => r.itemId === "resonance_silent_grass" && r.actionKind === "instant"), `history=${JSON.stringify(grassState.resonanceUseHistory)}`);
 
   await assertInstantItem("resonance_river_dew", "河水清露");
-  await assertInstantItem("resonance_white_feather_echo", "白羽回声");
   await assertInstantItem("resonance_four_river_echo", "四河回声");
   await assertInstantItem("gift_sabbath_dew", "息日露滴");
   await assertInstantItem("gift_revealing_light", "照见之光");
-  await assertInstantItem("gift_wide_path_seal", "宽行之印");
 }
 
 // ---- 场景 22：神明献礼三种礼物稳定获取 ----
 async function scenario22() {
   console.log("\n[场景 22] 神明献礼三种礼物稳定获取");
 
-  async function triggerGift(seedState, label, expectedGiftId) {
+  async function triggerGift(seedState, label, expectedGiftId, options = {}) {
     const state = JSON.parse(JSON.stringify(seedState));
+    const targetNpc = options.targetNpc ?? "eve";
+    const locationId = options.locationId ?? "central_meadow";
+    const input = options.input ?? "快吃下那个果子";
     state.divineAttention = 3;
-    state.locationId = "central_meadow";
-    state.npcLocations.eve = "central_meadow";
-    const data = await postWorld(state, "快吃下那个果子", "eve");
+    state.locationId = locationId;
+    state.npcLocations[targetNpc] = locationId;
+    const data = await postWorld(state, input, targetNpc);
     const next = data.state ?? state;
     check(`${label} 触发 ${expectedGiftId}`, data.divineGift?.giftId === expectedGiftId, `gift=${JSON.stringify(data.divineGift)}`);
     check(`${label} 写入 inventory`, next.inventory.includes(expectedGiftId), `inventory=${next.inventory}`);
@@ -830,7 +787,11 @@ async function scenario22() {
 
   const normal = makeInitialState();
   normal.actionPoints = 3;
-  await triggerGift(normal, "默认条件下", "gift_wide_path_seal");
+  await triggerGift(normal, "默认条件下", "gift_wide_path_seal", {
+    targetNpc: "adam",
+    locationId: "adam_garden_work",
+    input: "你必须立刻照我的话去做",
+  });
 }
 
 // ---- 运行 ----

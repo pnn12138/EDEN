@@ -39,7 +39,18 @@ import { CHAPTER0_IMAGES, CHAPTER1_IMAGES } from "@/game/assets";
 import { useChapter0Audio } from "@/hooks/useChapter0Audio";
 import { useChapter1Audio } from "@/hooks/useChapter1Audio";
 import EndingReview from "@/components/world/EndingReview";
+import ScenePuzzleModal from "@/components/world/ScenePuzzleModal";
 import { getDivineAttentionStage } from "@/game/world/divineGiftRules";
+import {
+  SCENE_PUZZLES,
+  getScenePuzzleById,
+  type ScenePuzzle,
+} from "@/content/world/scenePuzzles";
+import {
+  getAvailableEnterPuzzle,
+  normalizePuzzleState,
+  type ScenePuzzleAnswerResult,
+} from "@/game/world/puzzleRules";
 
 // ---- 对话历史条目（按 NPC 区分） ----
 type HistoryEntry = { role: "serpent" | "npc"; text: string };
@@ -89,12 +100,16 @@ type WorldAgentResponse = {
     title: string;
     narration: string;
   } | null;
-  toolResult?: {
+  toolResult?: WorldNpcToolResult | null;
+};
+
+type WorldNpcToolResult = {
+    executed?: boolean;
     toolName: string;
     itemId?: string;
     itemTitle?: string;
     narration: string;
-  } | null;
+    rejectedReason?: string;
 };
 
 // ---- API 响应体（通用工具） ----
@@ -109,6 +124,12 @@ type WorldToolResponse = {
   // 第一章新增
   divineGift?: DivineGiftFrontend | null;
   resonanceNarration?: string | null;
+};
+
+type ScenePuzzleResponse = {
+  ok: boolean;
+  result: ScenePuzzleAnswerResult | null;
+  reason?: string | null;
 };
 
 // ---- 浮窗 Tab ----
@@ -449,213 +470,12 @@ const MAP_HOTSPOTS: Record<EdenLocationId, { x: number; y: number; labelOffset?:
   naming_stone_bank: { x: 52, y: 84, labelOffset: "top" },
 };
 
-type SceneFocusHotspot = {
-  id: string;
-  sceneActionId: string;
-  locationId: EdenLocationId;
-  timeOfDay?: TimeOfDay;
-  groupId?: string;
-  step?: 1 | 2 | 3 | 4;
-  label: string;
-  hint: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  requiredClicks: number;
-  tone: "stone" | "water" | "leaf" | "grass" | "animal" | "feather" | "tree";
-};
-
 const DEER_GAZE_ANCHOR = {
   x: 34,
   y: 52,
   width: 12,
   height: 17,
 } as const;
-
-// ---- 场景可点击物件配置：只负责前端点击反馈，最终道具仍由 scene_action 规则层发放 ----
-const SCENE_FOCUS_HOTSPOTS: SceneFocusHotspot[] = [
-  {
-    id: "river-sound-source",
-    sceneActionId: "follow_river_sound",
-    locationId: "four_river_source",
-    label: "水声源头",
-    hint: "点击水声最清楚的地方，循着河声发现线索。",
-    x: 34,
-    y: 54,
-    width: 16,
-    height: 12,
-    requiredClicks: 2,
-    tone: "water",
-  },
-  {
-    id: "still-leaf-bank",
-    sceneActionId: "gather_still_leaf",
-    locationId: "four_river_source",
-    label: "静水旁的叶",
-    hint: "连续点亮水边的叶片，拾起静息之叶。",
-    x: 45,
-    y: 70,
-    width: 12,
-    height: 10,
-    requiredClicks: 2,
-    tone: "leaf",
-  },
-  {
-    id: "naming-stone-center",
-    sceneActionId: "listen_to_naming_stone",
-    locationId: "adam_garden_work",
-    label: "刻名石",
-    hint: "点击中间的刻名石 3 次，石痕会逐渐变亮。",
-    x: 50,
-    y: 70,
-    width: 16,
-    height: 15,
-    requiredClicks: 3,
-    tone: "stone",
-  },
-  // 刺猬交互改为点击刺猬NPC本体3次触发，不再使用独立hotspot
-  {
-    id: "deer-gaze-leaf",
-    sceneActionId: "watch_deer_gaze",
-    locationId: "tree_court",
-    timeOfDay: "day",
-    label: "小鹿视线",
-    hint: "顺着小鹿看向的地方停留，找到它留给你的余光。",
-    x: DEER_GAZE_ANCHOR.x,
-    y: DEER_GAZE_ANCHOR.y,
-    width: DEER_GAZE_ANCHOR.width,
-    height: DEER_GAZE_ANCHOR.height,
-    requiredClicks: 2,
-    tone: "animal",
-  },
-  {
-    id: "silent-grass-patch",
-    sceneActionId: "part_silent_grass",
-    locationId: "east_garden_path",
-    label: "落叶下",
-    hint: "拨开同一片落叶，找到藏在下面的无声草。",
-    x: 59,
-    y: 72,
-    width: 13,
-    height: 11,
-    requiredClicks: 2,
-    tone: "grass",
-  },
-  {
-    id: "fox-tail-mark",
-    sceneActionId: "ask_fox_to_judge",
-    locationId: "east_garden_path",
-    label: "狐尾痕",
-    hint: "点击狐狸尾巴扫过的草痕，让它留下评语。",
-    x: 76,
-    y: 66,
-    width: 13,
-    height: 10,
-    requiredClicks: 2,
-    tone: "animal",
-  },
-  {
-    id: "white-feather-fall",
-    sceneActionId: "follow_white_feather",
-    locationId: "naming_stone_bank",
-    timeOfDay: "night",
-    label: "白羽落点",
-    hint: "夜里追随白羽的落点，获得白羽回声。",
-    x: 58,
-    y: 48,
-    width: 12,
-    height: 12,
-    requiredClicks: 2,
-    tone: "feather",
-  },
-  {
-    id: "four-river-echo-1",
-    groupId: "four-river-echo",
-    sceneActionId: "hear_four_river_echo",
-    locationId: "naming_stone_bank",
-    step: 1,
-    label: "第一道水声",
-    hint: "先点击上游的水声。",
-    x: 42,
-    y: 50,
-    width: 10,
-    height: 9,
-    requiredClicks: 2,
-    tone: "water",
-  },
-  {
-    id: "four-river-echo-2",
-    groupId: "four-river-echo",
-    sceneActionId: "hear_four_river_echo",
-    locationId: "naming_stone_bank",
-    step: 2,
-    label: "第二道水声",
-    hint: "再点击向右分开的水声。",
-    x: 52,
-    y: 55,
-    width: 10,
-    height: 9,
-    requiredClicks: 2,
-    tone: "water",
-  },
-  {
-    id: "four-river-echo-3",
-    groupId: "four-river-echo",
-    sceneActionId: "hear_four_river_echo",
-    locationId: "naming_stone_bank",
-    step: 3,
-    label: "第三道水声",
-    hint: "第三次点击近处变亮的水纹。",
-    x: 46,
-    y: 64,
-    width: 10,
-    height: 9,
-    requiredClicks: 2,
-    tone: "water",
-  },
-  {
-    id: "four-river-echo-4",
-    groupId: "four-river-echo",
-    sceneActionId: "hear_four_river_echo",
-    locationId: "naming_stone_bank",
-    step: 4,
-    label: "第四道水声",
-    hint: "最后点击下游水声，让四河回声合在一起。",
-    x: 57,
-    y: 70,
-    width: 10,
-    height: 9,
-    requiredClicks: 2,
-    tone: "water",
-  },
-  {
-    id: "between-two-trees",
-    sceneActionId: "stand_between_trees",
-    locationId: "central_meadow",
-    label: "两树之间",
-    hint: "停在两树之间，感受这里不同于别处的安静。",
-    x: 50,
-    y: 54,
-    width: 17,
-    height: 13,
-    requiredClicks: 2,
-    tone: "tree",
-  },
-  {
-    id: "moonlight-hotspot",
-    sceneActionId: "touch_moonlight",
-    locationId: "central_meadow",
-    label: "月亮",
-    hint: "夜晚的月亮洒落银光，触摸它获得神秘道标。",
-    x: 50,
-    y: 25,
-    width: 12,
-    height: 12,
-    requiredClicks: 2,
-    tone: "tree",
-  },
-];
 
 // ---- 地图旅行状态计算（选中地点相对当前位置） ----
 type MapTravelStatus = {
@@ -699,9 +519,27 @@ function getMapTravelStatus(selectedId: EdenLocationId, currentId: EdenLocationI
   return { kind: "blocked", label: "需要沿相邻地点绕行" };
 }
 
+const WORLD_STATE_STORAGE_KEY = "eden:chapter1:world-state:v2";
+
+function normalizeWorldStateForClient(s: EdenWorldState): EdenWorldState {
+  return normalizePuzzleState({
+    ...s,
+    itemCounts: { ...(s.itemCounts ?? {}) },
+    pendingConsumableEffects: (s.pendingConsumableEffects ?? []).map((effect) => ({ ...effect })),
+    resonanceUseHistory: (s.resonanceUseHistory ?? []).map((record) => ({ ...record })),
+    divineGiftHistory: (s.divineGiftHistory ?? []).map((record) => ({ ...record })),
+    actionsThisSlot: {
+      whisperedNpcIds: [...(s.actionsThisSlot?.whisperedNpcIds ?? [])],
+      sceneActionIds: [...(s.actionsThisSlot?.sceneActionIds ?? [])],
+      usedItemIds: [...(s.actionsThisSlot?.usedItemIds ?? [])],
+      hasWhisperedToWoman: s.actionsThisSlot?.hasWhisperedToWoman ?? false,
+    },
+  });
+}
+
 // ---- 深拷贝初始状态 ----
 function makeInitialState(): EdenWorldState {
-  return {
+  return normalizeWorldStateForClient({
     ...initialEdenWorldState,
     actionPoints: initialEdenWorldState.actionPoints,
     maxActionPoints: initialEdenWorldState.maxActionPoints,
@@ -726,6 +564,8 @@ function makeInitialState(): EdenWorldState {
     unlockedAchievementIds: [...initialEdenWorldState.unlockedAchievementIds],
     usedItemIds: [...initialEdenWorldState.usedItemIds],
     sceneActionIds: [...initialEdenWorldState.sceneActionIds],
+    completedScenePuzzleIds: [...initialEdenWorldState.completedScenePuzzleIds],
+    hasDismissedObjectiveHint: initialEdenWorldState.hasDismissedObjectiveHint,
     itemCounts: { ...initialEdenWorldState.itemCounts },
     preparedResonanceId: null,
     pendingConsumableEffects: [...initialEdenWorldState.pendingConsumableEffects],
@@ -735,7 +575,7 @@ function makeInitialState(): EdenWorldState {
     lastDivineGiftHint: initialEdenWorldState.lastDivineGiftHint,
     calmWhisperStreak: initialEdenWorldState.calmWhisperStreak,
     lastInputTag: initialEdenWorldState.lastInputTag,
-  };
+  });
 }
 
 // ---- 组件 ----
@@ -757,7 +597,7 @@ export default function WorldPage() {
   const [divineNarration, setDivineNarration] = useState<string | null>(null);
   const [hedgehogNarration, setHedgehogNarration] = useState<string | null>(null);
   const [toolNarration, setToolNarration] = useState<string | null>(null);
-  const [toolResult, setToolResult] = useState<any | null>(null);  // NPC 对话后工具执行结果
+  const [toolResult, setToolResult] = useState<WorldNpcToolResult | null>(null);  // NPC 对话后工具执行结果
   const [slotNarrations, setSlotNarrations] = useState<string[] | null>(null);
   const [achievementToast, setAchievementToast] = useState<string | null>(null);
   const [selectedWhisperStyle, setSelectedWhisperStyle] = useState<WhisperStyle["id"] | null>(null);
@@ -777,7 +617,12 @@ export default function WorldPage() {
 
   // ---- 场景明暗状态：browse=浏览（亮），dialogue=对话（暗） ----
   const [sceneFocusMode, setSceneFocusMode] = useState<"browse" | "dialogue">("browse");
-  const [sceneFocusProgress, setSceneFocusProgress] = useState<Record<string, number>>({});
+
+  // ---- 场景问答 ----
+  const [activePuzzle, setActivePuzzle] = useState<ScenePuzzle | null>(null);
+  const [puzzleResult, setPuzzleResult] = useState<ScenePuzzleAnswerResult | null>(null);
+  const [suppressedAutoPuzzleIds, setSuppressedAutoPuzzleIds] = useState<Set<string>>(() => new Set());
+  const lastPuzzleLocationRef = useRef<EdenLocationId>(initialEdenWorldState.locationId);
 
   // ---- 成就浮窗独立打开状态 ----
   const [achievementModalOpen, setAchievementModalOpen] = useState(false);
@@ -789,6 +634,13 @@ export default function WorldPage() {
   const [resonancePanelOpen, setResonancePanelOpen] = useState(false);
   const [divineGiftToast, setDivineGiftToast] = useState<DivineGiftFrontend | null>(null);
   const [resonanceGainedToast, setResonanceGainedToast] = useState<{ itemId: string; title: string; narration: string } | null>(null);
+  const [hasLoadedStoredState, setHasLoadedStoredState] = useState(false);
+
+  useEffect(() => {
+    if (window.matchMedia("(max-width: 720px)").matches) {
+      setWorldPanelOpen(false);
+    }
+  }, []);
 
   // ---- 行动点耗尽提示状态 ----
   const [apDepletedToast, setApDepletedToast] = useState<{ visible: boolean; hiding: boolean }>({ visible: false, hiding: false });
@@ -798,8 +650,6 @@ export default function WorldPage() {
   const dialogueEndRef = useRef<HTMLDivElement>(null);
   const worldPanelRef = useRef<HTMLElement>(null);
   const worldPanelDragRef = useRef<WorldPanelDragState | null>(null);
-  /** 记录已预留AP的场景互动ID（首次点击时消耗AP，后续不重复消耗） */
-  const sceneApReservedRef = useRef<Set<string>>(new Set());
   /** 刺猬连续点击计数与重置定时器 */
   const hedgehogClickCountRef = useRef<number>(0);
   const hedgehogClickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -869,10 +719,59 @@ export default function WorldPage() {
     return () => resizeObserver.disconnect();
   }, [isWorldPanelOpen]);
 
-  // 移除进度自动重置，进入下一轮后保留点击进度
-  // useEffect(() => {
-  //   setSceneFocusProgress({});
-  // }, [state.locationId, state.timeSlot, state.timeOfDay]);
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(WORLD_STATE_STORAGE_KEY);
+      if (!raw) {
+        setHasLoadedStoredState(true);
+        return;
+      }
+
+      const parsed = JSON.parse(raw) as EdenWorldState;
+      if (parsed.chapterId !== "chapter1_garden_voices") {
+        window.localStorage.removeItem(WORLD_STATE_STORAGE_KEY);
+        setHasLoadedStoredState(true);
+        return;
+      }
+
+      const normalized = normalizeWorldStateForClient(parsed);
+      setState(normalized);
+      setSelectedMapLocationId(normalized.locationId);
+      lastPuzzleLocationRef.current = normalized.locationId;
+    } catch {
+      window.localStorage.removeItem(WORLD_STATE_STORAGE_KEY);
+    } finally {
+      setHasLoadedStoredState(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!hasLoadedStoredState) return;
+    window.localStorage.setItem(WORLD_STATE_STORAGE_KEY, JSON.stringify(state));
+  }, [hasLoadedStoredState, state]);
+
+  useEffect(() => {
+    if (lastPuzzleLocationRef.current === state.locationId) return;
+    lastPuzzleLocationRef.current = state.locationId;
+    setSuppressedAutoPuzzleIds(new Set());
+  }, [state.locationId]);
+
+  useEffect(() => {
+    if (state.phase !== "explore" || state.isEnded || activePuzzle) return;
+    const puzzle = getAvailableEnterPuzzle(SCENE_PUZZLES, state);
+    if (!puzzle || suppressedAutoPuzzleIds.has(puzzle.id)) return;
+    setPuzzleResult(null);
+    setActivePuzzle(puzzle);
+  }, [
+    activePuzzle,
+    state,
+    state.phase,
+    state.isEnded,
+    state.locationId,
+    state.timeOfDay,
+    state.completedScenePuzzleIds,
+    suppressedAutoPuzzleIds,
+  ]);
 
   // ---- 引言阶段：Enter / Space 辅助推进 ----
   const handleIntroAdvance = useCallback(() => {
@@ -1143,7 +1042,7 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
   const handleToolCall = useCallback(
     async (
       tool: "move_to_location" | "observe_location" | "scene_action" | "end_slot" | "use_resonance",
-      args: { locationId?: EdenLocationId; sceneActionId?: string; itemId?: string; clickIndex?: number; requiredClicks?: number },
+      args: { locationId?: EdenLocationId; sceneActionId?: string; itemId?: string },
     ) => {
       if (state.phase !== "explore" || isLoading) return;
 
@@ -1228,53 +1127,90 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
     ],
   );
 
-  const handleSceneHotspotClick = useCallback((hotspot: SceneFocusHotspot) => {
+  const openScenePuzzle = useCallback((puzzle: ScenePuzzle) => {
     if (state.phase !== "explore" || state.isEnded || isLoading) return;
-    if (state.actionPoints <= 0) {
-      showApDepletedToast();
-      return;
-    }
-
-    const progressKey = hotspot.groupId ?? hotspot.id;
-    const currentProgress = sceneFocusProgress[progressKey] ?? 0;
-    const expectedStep = currentProgress + 1;
-
     setActiveNpc(null);
     setCurrentReply(null);
+    setSystemHint(null);
+    setToolNarration(null);
+    setPuzzleResult(null);
     setSceneFocusMode("browse");
+    setActivePuzzle(puzzle);
+  }, [isLoading, state.isEnded, state.phase]);
 
-    if (hotspot.step && hotspot.step !== expectedStep) {
-      const nextHotspot = SCENE_FOCUS_HOTSPOTS.find(
-        (candidate) => candidate.groupId === hotspot.groupId && candidate.step === expectedStep,
-      );
-      setSystemHint(nextHotspot ? `先点击「${nextHotspot.label}」。` : "请按场景中亮起的顺序点击。");
+  const handleNamingStoneClick = useCallback(() => {
+    const puzzle = getScenePuzzleById("puzzle_naming_stone_identity");
+    if (!puzzle) return;
+    if (state.completedScenePuzzleIds.includes(puzzle.id)) {
+      setSystemHint("刻名石上的名字已经被你记下，不会再次留下新的回响。");
       return;
     }
+    openScenePuzzle(puzzle);
+  }, [openScenePuzzle, state.completedScenePuzzleIds]);
 
-    const nextProgress = hotspot.step ? hotspot.step : currentProgress + 1;
-    const reachesAction = nextProgress >= hotspot.requiredClicks;
+  const handlePuzzleChoose = useCallback(async (optionId: string) => {
+    if (!activePuzzle || isLoading) return;
+    setIsLoading(true);
+    setSystemHint(null);
 
-    // 每次点击立即调用 API 消耗 1 AP
-    if (reachesAction) {
-      setSceneFocusProgress((prev) => ({ ...prev, [progressKey]: 0 }));
-      setSystemHint(`${hotspot.label}已经完全亮起。`);
-    } else {
-      setSceneFocusProgress((prev) => ({ ...prev, [progressKey]: nextProgress }));
+    try {
+      const response = await fetch("/api/world/puzzle", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          state,
+          puzzleId: activePuzzle.id,
+          optionId,
+        }),
+      });
+      const data: ScenePuzzleResponse = await response.json();
+      if (!response.ok || !data.ok || !data.result) {
+        setSystemHint(data.reason ?? "场景问题没有得到回应。");
+        return;
+      }
+
+      const result = data.result;
+      setPuzzleResult(result);
+      setState(result.state);
+      setToolNarration(result.feedback);
+      if (result.divineGift) {
+        setDivineGiftToast(result.divineGift);
+        setTimeout(() => setDivineGiftToast(null), 5000);
+      }
+      const firstItemReward = result.rewards.find((reward) => reward.type === "item");
+      if (firstItemReward?.id) {
+        setResonanceGainedToast({
+          itemId: firstItemReward.id,
+          title: firstItemReward.title.replace(/^回响：/, ""),
+          narration: result.feedback,
+        });
+        setTimeout(() => setResonanceGainedToast(null), 5000);
+      }
+    } catch {
+      setSystemHint("连接中断，场景问题暂时没有得到回应。");
+    } finally {
+      setIsLoading(false);
     }
-    handleToolCall("scene_action", {
-      sceneActionId: hotspot.sceneActionId,
-      clickIndex: nextProgress,
-      requiredClicks: hotspot.requiredClicks,
-    });
-  }, [
-    state.phase,
-    state.isEnded,
-    state.actionPoints,
-    isLoading,
-    sceneFocusProgress,
-    handleToolCall,
-    showApDepletedToast,
-  ]);
+  }, [activePuzzle, isLoading, state]);
+
+  const handlePuzzleClose = useCallback(() => {
+    if (activePuzzle && !puzzleResult?.success && activePuzzle.trigger === "on_enter") {
+      setSuppressedAutoPuzzleIds((prev) => {
+        const next = new Set(prev);
+        next.add(activePuzzle.id);
+        return next;
+      });
+    }
+    setActivePuzzle(null);
+    setPuzzleResult(null);
+  }, [activePuzzle, puzzleResult]);
+
+  const handleDismissObjectiveHint = useCallback(() => {
+    setState((prev) => ({
+      ...prev,
+      hasDismissedObjectiveHint: true,
+    }));
+  }, []);
 
   // ---- 新增工具调用（carry_words / judge_whisper_style）----
   const handleNewToolCall = useCallback(
@@ -1340,6 +1276,7 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
 
   // ---- 重新开始 ----
     const handleRestart = useCallback(() => {
+    window.localStorage.removeItem(WORLD_STATE_STORAGE_KEY);
     const fresh = makeInitialState();
     setState(fresh);
     setSelectedMapLocationId(fresh.locationId);
@@ -1356,7 +1293,9 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
     setSlotNarrations(null);
     setAchievementToast(null);
     setSelectedWhisperStyle(null);
-    setSceneFocusProgress({});
+    setActivePuzzle(null);
+    setPuzzleResult(null);
+    setSuppressedAutoPuzzleIds(new Set());
     setActiveTab("dialogue");
     setSceneFocusMode("browse");
   }, []);
@@ -1384,12 +1323,11 @@ const availableSceneActions: SceneAction[] = isExploreActive
   ? getSceneActionsByLocation(state.locationId, state.timeOfDay, state.timeSlot, state.divineAttention)
       .filter((a) => !state.actionsThisSlot.sceneActionIds.includes(a.id))
   : [];
-const availableSceneActionIds = new Set(availableSceneActions.map((action) => action.id));
-const visibleSceneHotspots = SCENE_FOCUS_HOTSPOTS.filter((hotspot) => {
-  if (hotspot.locationId !== state.locationId) return false;
-  if (hotspot.timeOfDay && hotspot.timeOfDay !== state.timeOfDay) return false;
-  return availableSceneActionIds.has(hotspot.sceneActionId);
-});
+const namingStonePuzzle = getScenePuzzleById("puzzle_naming_stone_identity");
+const namingStoneCompleted = namingStonePuzzle
+  ? state.completedScenePuzzleIds.includes(namingStonePuzzle.id)
+  : false;
+const showObjectiveHint = isExploreActive && !state.hasDismissedObjectiveHint;
 const hasWhisperedToActiveNpc = activeNpc
   ? state.actionsThisSlot.whisperedNpcIds.filter((id) => id === activeNpc).length >= 3
   : false;
@@ -1573,7 +1511,11 @@ const whisperCountForActiveNpc = activeNpc
           <span className="eden-time-slot-badge">
             {getTimeSlotDisplay(state.timeSlot, state.dayIndex, state.timeOfDay)}
           </span>
-          <span className="eden-ap-dots" title={`行动点 ${state.actionPoints}/${state.maxActionPoints}`}>
+          <span
+            className="eden-ap-dots"
+            title={`行动点 ${state.actionPoints}/${state.maxActionPoints}`}
+            data-testid="world-action-points"
+          >
             {Array.from({ length: state.maxActionPoints }, (_, i) => (
               <span key={i} className={i < state.actionPoints ? "eden-ap-dot eden-ap-dot--filled" : "eden-ap-dot eden-ap-dot--empty"}>
                 {i < state.actionPoints ? "●" : "○"}
@@ -1602,6 +1544,7 @@ const whisperCountForActiveNpc = activeNpc
             aria-pressed={resonancePanelOpen}
             aria-label={resonancePanelOpen ? "收起回响面板" : "打开园中回响面板"}
             title="园中回响"
+            data-testid="world-inventory-toggle"
           >
             <span className="eden-top-action-icon">⬡</span>
             <span className="eden-top-action-label">回响 {state.inventory.length}</span>
@@ -1613,6 +1556,7 @@ const whisperCountForActiveNpc = activeNpc
               setMapModalOpen(true);
             }}
             aria-label="打开伊甸园地图"
+            data-testid="world-map-open"
           >
             <span className="eden-top-action-icon">✦</span>
             <span className="eden-top-action-label">地图</span>
@@ -1640,6 +1584,7 @@ const whisperCountForActiveNpc = activeNpc
       <main className="eden-dialogue-layout">
         <section
           className="eden-stage"
+          data-testid="world-scene-stage"
           onClick={() => {
             if (sceneFocusMode === "dialogue") handleExitDialogueFocus();
           }}
@@ -1647,69 +1592,55 @@ const whisperCountForActiveNpc = activeNpc
           {/* 地点标题浮层 */}
           <div className="eden-world-stage-caption" style={{ position: "absolute", left: 24, top: 24, zIndex: 4 }}>
             <span className="eden-world-stage-kicker">当前位置</span>
-            <strong style={{ color: "#ead9ad", fontSize: "1.12rem", fontWeight: 500 }}>{currentLocation.name}</strong>
+            <strong
+              style={{ color: "#ead9ad", fontSize: "1.12rem", fontWeight: 500 }}
+              data-testid="world-current-location"
+            >
+              {currentLocation.name}
+            </strong>
             <span style={{ display: "block", fontSize: "0.78rem", color: "#b7b08e", marginTop: 2 }}>{currentLocation.shortDesc}</span>
           </div>
 
-          {visibleSceneHotspots.length > 0 && (
-            <div className="eden-scene-hotspot-layer" aria-label="场景可点击物件">
-              {visibleSceneHotspots.map((hotspot) => {
-                const progressKey = hotspot.groupId ?? hotspot.id;
-                const currentProgress = sceneFocusProgress[progressKey] ?? 0;
-                const isCompletedStep = hotspot.step ? currentProgress >= hotspot.step : false;
-                const isNextStep = hotspot.step ? currentProgress + 1 === hotspot.step : true;
-                const progressRatio = hotspot.step
-                  ? isCompletedStep
-                    ? 1
-                    : isNextStep
-                      ? Math.max(0.28, currentProgress / hotspot.requiredClicks)
-                      : 0.08
-                  : Math.min(1, currentProgress / hotspot.requiredClicks);
-                const stepState = hotspot.step
-                  ? isCompletedStep
-                    ? "completed"
-                    : isNextStep
-                      ? "next"
-                      : "locked"
-                  : "single";
-                const progressLabel = hotspot.step
-                  ? isNextStep || isCompletedStep
-                    ? `${Math.min(currentProgress, hotspot.requiredClicks)}/${hotspot.requiredClicks}`
-                    : ""
-                  : currentProgress > 0
-                    ? `${currentProgress}/${hotspot.requiredClicks}`
-                    : "";
+          {showObjectiveHint && (
+            <aside
+              className="eden-objective-hint"
+              aria-label="当前目标"
+              data-testid="world-objective-hint"
+            >
+              <button
+                type="button"
+                className="eden-objective-hint-close"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  handleDismissObjectiveHint();
+                }}
+                aria-label="关闭当前目标"
+                data-testid="world-objective-hint-close"
+              >
+                x
+              </button>
+              <strong>当前目标：</strong>
+              <span>观察园中的角色与场景，收集能够影响夏娃的线索。</span>
+              <span>场景中的重要问题会在到达时出现；只有刺猬与刻名石需要直接点击。</span>
+            </aside>
+          )}
 
-                return (
-                  <button
-                    key={hotspot.id}
-                    type="button"
-                    className={`eden-scene-hotspot eden-scene-hotspot--${hotspot.tone}`}
-                    data-step-state={stepState}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleSceneHotspotClick(hotspot);
-                    }}
-                    disabled={isLoading || !isExploreActive}
-                    aria-label={`${hotspot.label}。${hotspot.hint}`}
-                    title={hotspot.hint}
-                    style={{
-                      left: `${hotspot.x}%`,
-                      top: `${hotspot.y}%`,
-                      width: `${hotspot.width}%`,
-                      height: `${hotspot.height}%`,
-                      "--eden-hotspot-progress": progressRatio,
-                    } as CSSProperties}
-                  >
-                    <span className="eden-scene-hotspot__glow" />
-                    <span className="eden-scene-hotspot__label">
-                      {hotspot.label}
-                      {progressLabel && <small>{progressLabel}</small>}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+          {state.locationId === "adam_garden_work" && (
+            <button
+              type="button"
+              className={`eden-naming-stone-entry ${namingStoneCompleted ? "eden-naming-stone-entry--completed" : ""}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                handleNamingStoneClick();
+              }}
+              disabled={isLoading || !isExploreActive}
+              aria-label={namingStoneCompleted ? "刻名石，名字已经记下" : "查看刻名石"}
+              title={namingStoneCompleted ? "名字已经被记下" : "查看刻名石上的问题"}
+              data-testid="scene-action-engraved-stone"
+            >
+              <span>刻名石</span>
+              <small>{namingStoneCompleted ? "已记下" : "查看问题"}</small>
+            </button>
           )}
 
           {/* 当前地点的 NPC 立绘（与教程一致：女人右侧、亚当左侧、刺猬下方） */}
@@ -1755,7 +1686,7 @@ const whisperCountForActiveNpc = activeNpc
               className={`eden-stage-animal ${activeNpc !== "hedgehog" ? "eden-stage-character--dim" : ""}`}
               onClick={(e) => {
                 e.stopPropagation();
-                // 连续点击3次触发刺猬互动
+                // 连续点击2次触发刺猬互动
                 if (hedgehogClickTimerRef.current) clearTimeout(hedgehogClickTimerRef.current);
                 hedgehogClickCountRef.current += 1;
                 const count = hedgehogClickCountRef.current;
@@ -1778,6 +1709,7 @@ const whisperCountForActiveNpc = activeNpc
                 setSystemHint(`刺猬动了动刺（${count}/2）……`);
               }}
               aria-label="与刺猬低语（连续点击2次可互动）"
+              data-testid="scene-action-hedgehog"
               tabIndex={activeNpc === "hedgehog" ? -1 : 0}
               style={{ border: "none", background: "transparent", padding: 0, cursor: "pointer", pointerEvents: "auto" }}
             >
@@ -1958,7 +1890,7 @@ const whisperCountForActiveNpc = activeNpc
 
       {/* 左侧园中回响面板 */}
       {resonancePanelOpen && (
-        <aside className="eden-resonance-panel">
+        <aside className="eden-resonance-panel" data-testid="inventory-panel">
           <div className="eden-resonance-panel-header">
             <span className="eden-resonance-panel-title">园中回响</span>
             <button
@@ -2084,6 +2016,16 @@ const whisperCountForActiveNpc = activeNpc
             <p className="eden-resonance-gained-toast-desc">{resonanceGainedToast.narration}</p>
           </div>
         </div>
+      )}
+
+      {activePuzzle && (
+        <ScenePuzzleModal
+          puzzle={activePuzzle}
+          result={puzzleResult}
+          isLoading={isLoading}
+          onChoose={handlePuzzleChoose}
+          onClose={handlePuzzleClose}
+        />
       )}
 
       {/* 右侧浮窗面板（可关闭 / 可拖动 / 可拉伸） */}
@@ -2417,7 +2359,7 @@ const whisperCountForActiveNpc = activeNpc
 
           {/* ===== 线索与记录 Tab ===== */}
           {activeTab === "clues" && (
-            <div className="eden-character-panel">
+            <div className="eden-character-panel" data-testid="clue-panel">
               <p className="eden-section-title">已发现线索（{state.discoveredClues.length}）</p>
               {state.discoveredClues.length === 0 ? (
                 <p className="eden-empty-hint">你还没有发现任何线索。观察地点、与不同角色对话，或许能发现他们的弱点。</p>
@@ -2682,6 +2624,7 @@ const whisperCountForActiveNpc = activeNpc
                     onClick={() => handleMapLocationClick(locId)}
                     disabled={isLoading}
                     aria-label={`选中${loc.name}`}
+                    data-testid={`location-card-${locId}`}
                   >
                     <span className="eden-map-hotspot-label">{loc.name}</span>
                     <span className="eden-map-hotspot-state">
@@ -2743,6 +2686,7 @@ const whisperCountForActiveNpc = activeNpc
                       className="eden-btn eden-btn--primary eden-map-detail-action"
                       onClick={handleMapConfirmEnter}
                       disabled={!canEnter}
+                      data-testid="world-map-enter"
                     >
                       进入
                     </button>

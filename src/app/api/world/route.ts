@@ -177,6 +177,8 @@ function cloneWorldState(s: EdenWorldState): EdenWorldState {
     unlockedAchievementIds: [...s.unlockedAchievementIds],
     usedItemIds: [...s.usedItemIds],
     sceneActionIds: [...s.sceneActionIds],
+    completedScenePuzzleIds: [...(s.completedScenePuzzleIds ?? [])],
+    hasDismissedObjectiveHint: s.hasDismissedObjectiveHint ?? false,
     lastInputTag: s.lastInputTag ?? null,
     calmWhisperStreak: s.calmWhisperStreak,
     // 新字段深拷贝

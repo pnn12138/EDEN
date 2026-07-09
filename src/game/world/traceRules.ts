@@ -241,15 +241,7 @@ function itemName(id: string): string | null {
 
 function sceneActionName(id: string): string | null {
   const map: Record<string, string> = {
-    follow_river_sound: "循水声",
-    gather_still_leaf: "拾起静水旁的叶",
-    listen_to_naming_stone: "贴近石痕",
-    watch_deer_gaze: "顺着小鹿视线停留",
-    part_silent_grass: "拨开落叶",
-    ask_fox_to_judge: "让狐狸听一句低语",
-    follow_white_feather: "追随白羽落点",
-    hear_four_river_echo: "听四河回声",
-    stand_between_trees: "停在两树之间",
+    interact_with_hedgehog: "观察刺猬",
   };
   return map[id] ?? null;
 }

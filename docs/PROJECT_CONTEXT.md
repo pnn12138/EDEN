@@ -6,12 +6,12 @@
 
 ## 1. Executive Snapshot
 
-Last updated: `2026-07-01`
-Updated by: `Codex (第一章 Demo 路径实测)`
-Current phase: `第一章「园中诸声」玩法升级设计完成，待 CodeBuddy 实现：新增设计基线 design/chapters/chapter1_garden_voices_play_upgrade_design.md。结论为可行但必须增量返修：保留 12 时段、5 AP、地图、NPC、禁忌动作链和规则层架构；将神的注视满值失败改为神明献礼；将园中回响升级为可准备并绑定下一次低语、移动或互动的策略资源；第 12 时段结束未吃果成为唯一失败条件。`
-Current build status: `被低语 NPC 轻量移动规则（2026-06-29）：按用户要求，不新增 NPC、不做完整自由规划器，只让本轮被玩家低语过的 NPC 在"进入下一轮"时选择是否移动一格。实现：advanceToNextSlot 先用上一时段 actionsThisSlot 结算 NPC 行为，再清空行动记录；resolveNpcSlotBehaviors 读取 spokenNpcIds，只对本轮被低语的女人/亚当做移动判定。女人可在园中树林→园子中央、园子中央→万物受名处、万物受名处→园子中央之间移动；亚当可在万物受名处↔园子中央之间移动。园子中央和万物受名处地点配置补充允许动态显示女人/亚当，确保移动后有立绘、可点击、可对话。验证：新增失败优先静态断言后通过，node scripts/test-world-visual-smoke.mjs 240/240 pass；NPC 行为 API 验证通过（未低语不移动、低语女人/亚当后按规则移动且清空新时段记录）；录制路线仍可触发 eve_eats_fruit；npm run lint pass；npm run build pass；build 后 npx tsc --noEmit pass。`
+Last updated: `2026-07-09`
+Updated by: `Codex (第一章精简版封版合并验收)`
+Current phase: `第一章 /world 场景交互精简版进入封版。三道问答通过 /api/world/puzzle 在服务端调用 puzzleRules，客户端只提交 puzzleId/optionId 与当前状态并渲染返回结果；隐藏热点、多击参数和透明点击层已移除，显式点击对象仍为刺猬与刻名石。`
+Current build status: `通过（2026-07-09 复验）：默认浏览器门槛为桌面 Chrome。封版前在 phase6-final-check 复跑桌面端全链路均通过：npm run lint、npx tsc --noEmit、npm run build、node scripts/test-scene-puzzle-rules.mjs、npm run test:e2e（desktop-chromium 1 passed，移动端 spec 由 testIgnore 排除）、node scripts/test-world-smoke.mjs（mock，160 通过 / 0 失败）。移动端 e2e 文件保留但不作为默认测试或封版标准。npm install 仍报告 5 个依赖审计风险（1 moderate、4 high），未扩大范围处理。`
 
-Latest Codex note: `第一章 Demo 路径实测（2026-07-01）：用户手动卡在"已经看见那棵树，也已经靠近它"后，Codex 在 http://127.0.0.1:3105/world 复现确认该句只能稳定推进到触果/握果阶段；后续"若吃下它...像神一样知道善恶"会让 AI 回复出现"我咬下去了"，但若规则信号不足不会进入结局，属于 AI 对白与规则层状态不同步的展示风险。实测稳定收束低语为"我不会强迫，也不会命令。若你自己选择尝这果子，你会像神一样知道善恶，用自己的判断明白智慧；否则你怎么知道不可就是善？"，可触发规则层 eat_fruit 并切到"她吃下了果子"结局页。已更新 doc/第一章/DEMO展示方案_第一章道具成就优化.md。建议后续优化：当规则层未执行 eat_fruit 时，夏娃回复不应出现"我咬下去了/吃了"等越权完成文本。`
+Latest Codex note: `封版合并准备（2026-07-09）：桌面浏览器流程覆盖新存档目标提示、刻名石问答、东园幽径错误后重试、伊甸之河问答、奖励进入线索/回响、服务端重复请求不重复发奖、离开重返不重复弹窗、刷新持久化、旧热点区域不消耗 AP/不写 sceneActionIds。新增稳定 data-testid 与 Playwright 最小配置。Playwright 使用机器已有 Chrome channel；移动端测试不进入默认门槛。封版合并复验（2026-07-09）：工作区未提交改动（谜题系统 /api/world/puzzle + puzzleRules + ScenePuzzleModal + scenePuzzles、Playwright 桌面配置、场景互动精简为仅刺猬）完成临时代码排查（无调试残留），桌面端全链路复跑通过，随后提交并合入 main。`
 
 一句话项目说明：
 
@@ -164,8 +164,8 @@ npm run dev
 # build
 npm run build
 
-# test
-TODO: confirm
+# browser e2e
+npm run test:e2e
 
 # lint
 npm run lint
@@ -218,6 +218,7 @@ eden/
 | `src/app/ending/page.tsx` | 结局页。 | 当前为结局占位。 |
 | `src/app/api/agent/route.ts` | Chapter 0 Agent API 路由。 | GET/POST 均返回 placeholder JSON。 |
 | `src/app/api/world/route.ts` | 第一章低语 API 路由。 | 整合心智更新、神的注视、禁忌动作链触发、NPC Agent 调用、结局判定、fallback。 |
+| `src/app/api/world/puzzle/route.ts` | 第一章场景问答 API 路由。 | 校验章节、阶段、地点和昼夜，调用 `puzzleRules` 判定并返回不可重复的状态与奖励。 |
 | `src/app/api/world/tool/route.ts` | 第一章通用工具 API 路由。 | 处理 move_to_location/speak_to_npc/observe_location，均经规则层校验。 |
 | `src/agents/orchestrator.ts` | Agent 编排入口预留。 | `AgentOrchestrator` 类为空实现。 |
 

@@ -23,6 +23,7 @@ const BASE_STATE = () => JSON.parse(JSON.stringify({
   discoveredClues: [], inventory: [], npcDialogues: [], corruptionTrace: [], toolCallHistory: [],
   actionsThisSlot: { whisperedNpcIds: [], sceneActionIds: [], usedItemIds: [], hasWhisperedToWoman: false },
   unlockedAchievementIds: [], usedItemIds: [], sceneActionIds: [],
+  completedScenePuzzleIds: [], hasDismissedObjectiveHint: false,
   itemCounts: {}, preparedResonanceId: null, pendingConsumableEffects: [],
   resonanceUseHistory: [], divineVisitCount: 0, divineGiftHistory: [],
   lastDivineGiftHint: null, calmWhisperStreak: 0,
@@ -81,14 +82,8 @@ async function doSlotWhispers(whisperTexts, existingHist = []) {
 async function main() {
   console.log("=== EDEN Demo Route Test v3 ===\n");
 
-  // SLOT 1: Quick scene interaction + move to Eve's location
+  // SLOT 1: Move to Eve's location
   log(`SLOT 1 START: ${status()}`);
-
-  // 刻名石 - get道具 for later use
-  for (let i = 1; i <= 3; i++) {
-    await t("scene_action", { sceneActionId: "listen_to_naming_stone", clickIndex: i, requiredClicks: 3 });
-  }
-  log(`刻名石完成: ${status()}`);
 
   // Move to tree_court (where Eve is)
   await t("move_to_location", { locationId: "central_meadow" });

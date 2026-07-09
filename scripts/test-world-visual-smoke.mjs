@@ -245,28 +245,30 @@ check("NPC 回复清洗识别 JSON 泄漏字段", naturalizeContent.includes("JS
 // ---- sceneActions.ts 内容文件存在 ----
 check("sceneActions.ts 文件存在", exists("src/content/world/sceneActions.ts"));
 const sceneActionsContent = read("src/content/world/sceneActions.ts");
-check("sceneActions 含循水声", sceneActionsContent.includes("循水声"));
-check("sceneActions 用直白文案：查看刻名石", sceneActionsContent.includes("查看刻名石") && !sceneActionsContent.includes("贴近石痕"));
-check("sceneActions 含顺着小鹿视线停留", sceneActionsContent.includes("顺着小鹿视线停留"));
-check("sceneActions 含拨开落叶", sceneActionsContent.includes("拨开落叶"));
-check("sceneActions 用直白文案：聆听分流的水声", sceneActionsContent.includes("聆听分流的水声") && !sceneActionsContent.includes("听四河回声"));
-check("sceneActions 含停在两树之间", sceneActionsContent.includes("停在两树之间"));
-check("/world 定义场景可点击热点配置", worldPage.includes("SCENE_FOCUS_HOTSPOTS") && worldPage.includes("SceneFocusHotspot"));
-check("/world 刻名石热点需要点击 3 次", worldPage.includes('id: "naming-stone-center"') && worldPage.includes('sceneActionId: "listen_to_naming_stone"') && worldPage.includes("requiredClicks: 3"));
-check("/world 刻名石提示文案同步 3 次点亮", worldPage.includes("点击中间的刻名石 3 次"));
-check("/world 小鹿视线热点与小鹿视觉锚点共用坐标", worldPage.includes("DEER_GAZE_ANCHOR") && worldPage.includes("x: DEER_GAZE_ANCHOR.x") && worldPage.includes("left: `${DEER_GAZE_ANCHOR.x}%`"));
-check("/world 小鹿视线热点贴近背景小鹿", worldPage.includes("DEER_GAZE_ANCHOR") && worldPage.includes("x: 34") && worldPage.includes("y: 52"));
-check("/world 四河分流有 4 个顺序水声热点", ["four-river-echo-1", "four-river-echo-2", "four-river-echo-3", "four-river-echo-4"].every((id) => worldPage.includes(`id: "${id}"`)) && [1, 2, 3, 4].every((step) => worldPage.includes(`step: ${step}`)));
-check("/world 场景热点覆盖主要场景道具", [
+const worldToolRoute = read("src/app/api/world/tool/route.ts");
+check("sceneActions 只保留刺猬 scene_action", sceneActionsContent.includes("interact_with_hedgehog") && !sceneActionsContent.includes("follow_river_sound"));
+check("sceneActions 不再包含旧隐藏热点动作", [
   "gather_still_leaf",
   "watch_deer_gaze",
   "part_silent_grass",
   "ask_fox_to_judge",
   "follow_white_feather",
   "hear_four_river_echo",
-].every((id) => worldPage.includes(`sceneActionId: "${id}"`)));
-check("/world 场景热点点击会触发 scene_action", worldPage.includes("handleSceneHotspotClick") && worldPage.includes('handleToolCall("scene_action"'));
-check("CSS 定义场景热点亮度反馈", css.includes(".eden-scene-hotspot") && css.includes("--eden-hotspot-progress") && css.includes(".eden-scene-hotspot--stone"));
+  "stand_between_trees",
+  "touch_moonlight",
+  "listen_to_naming_stone",
+].every((id) => !sceneActionsContent.includes(id)));
+check("scene_action 端点不再保留旧热点多击参数", !worldToolRoute.includes("requiredClicks") && !worldToolRoute.includes("clickIndex"));
+check("scenePuzzles.ts 文件存在", exists("src/content/world/scenePuzzles.ts"));
+check("puzzleRules.ts 文件存在", exists("src/game/world/puzzleRules.ts"));
+const scenePuzzlesContent = read("src/content/world/scenePuzzles.ts");
+check("scenePuzzles 配置三个问答", ["puzzle_naming_stone_identity", "puzzle_east_path_cautious_presence", "puzzle_river_words_belonging"].every((id) => scenePuzzlesContent.includes(id)));
+check("/world 不再定义旧场景热点配置", !worldPage.includes("SCENE_FOCUS_HOTSPOTS") && !worldPage.includes("SceneFocusHotspot"));
+check("/world 有刻名石显式问答入口", worldPage.includes("eden-naming-stone-entry") && worldPage.includes("handleNamingStoneClick"));
+check("/world 刻名石不再依赖多次点击", !worldPage.includes("naming-stone-center") && !worldPage.includes("点击中间的刻名石 3 次"));
+check("/world 有场景问答弹窗", worldPage.includes("ScenePuzzleModal") && worldPage.includes("activePuzzle"));
+check("/world 有当前目标提示", worldPage.includes("当前目标") && worldPage.includes("只有刺猬与刻名石需要直接点击"));
+check("CSS 定义场景问答弹窗", css.includes(".eden-scene-puzzle-modal") && css.includes(".eden-scene-puzzle-option"));
 
 // ---- 成就文件存在 ----
 check("achievements.ts 文件存在", exists("src/content/world/achievements.ts"));
@@ -299,7 +301,7 @@ check("/world 属性面板按当前低语对象显示", worldPage.includes("acti
 check("/world 蛇是独立 Tab", worldPage.includes('["serpent", "蛇（我）"]') && worldPage.includes('activeTab === "serpent"'));
 check("/world 属性 Tab 未选中 NPC 时提示选择对象", worldPage.includes("请选择一个角色查看属性"));
 check("/world 蛇 Tab 显示行动与限制", worldPage.includes("草叶下的低语") && worldPage.includes("不能触碰果子") && worldPage.includes("行动 {state.actionPoints}/{state.maxActionPoints}"));
-check("/world 蛇 Tab 显示回响 Buff", worldPage.includes("当前回响赋予的Buff") && worldPage.includes("已准备") && worldPage.includes("pendingConsumableEffects"));
+check("/world 蛇 Tab 显示回响 Buff", worldPage.includes("当前回响赋予的Buff") && worldPage.includes("将在下次行动中生效") && worldPage.includes("pendingConsumableEffects"));
 check("/world 第一章不显示旧词元面板", !worldPage.includes("serpentTokenStats") && !worldPage.includes("estimateWorldTokenUsage") && !worldPage.includes("SERPENT_TOKEN_RESERVE"));
 check("CSS 不再保留词元进度条", !css.includes(".eden-token-bar-bg") && !css.includes(".eden-token-bar-fill"));
 check("/world 输入区提供推荐发言", worldPage.includes("eden-input-suggestions") && worldPage.includes("getRecommendedWhispers"));

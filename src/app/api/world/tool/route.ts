@@ -4,7 +4,7 @@
 // 处理玩家通过 UI 主动触发的动作：
 // - move_to_location：玩家（蛇）移动到相邻地点
 // - observe_location：观察当前地点
-// - scene_action：场景互动（循水声 / 贴近石痕 …）
+// - scene_action：显式场景互动
 // - carry_words：鸽子传话
 // - judge_whisper_style：狐狸评价话术
 // - end_slot：主动结束时段（推进到下一时段）
@@ -66,10 +66,6 @@ type ToolRequestBody = {
     sceneActionId?: string;
     /** 回响 ID（用于使用） */
     itemId?: string;
-    /** 渐进点击序号（1-based），用于多击场景互动 */
-    clickIndex?: number;
-    /** 渐进点击所需总次数 */
-    requiredClicks?: number;
   };
 };
 
@@ -120,6 +116,8 @@ function cloneWorldState(s: EdenWorldState): EdenWorldState {
     unlockedAchievementIds: [...(s.unlockedAchievementIds ?? [])],
     usedItemIds: [...(s.usedItemIds ?? [])],
     sceneActionIds: [...(s.sceneActionIds ?? [])],
+    completedScenePuzzleIds: [...(s.completedScenePuzzleIds ?? [])],
+    hasDismissedObjectiveHint: s.hasDismissedObjectiveHint ?? false,
     lastInputTag: s.lastInputTag ?? null,
     calmWhisperStreak: s.calmWhisperStreak ?? 0,
     // Chapter 1 新增字段（兼容旧状态）
@@ -269,8 +267,7 @@ export async function POST(request: NextRequest) {
     }
 
     // ============================================================
-    // scene_action：场景互动（循水声 / 贴近石痕 …）
-    // 支持渐进式点击：每次点击消耗 1 AP，达到 requiredClicks 后才发放奖励
+    // scene_action：显式场景互动
     // ============================================================
     if (tool === "scene_action") {
       const actionId = args.sceneActionId;
@@ -309,27 +306,13 @@ export async function POST(request: NextRequest) {
         } satisfies ToolResponseBody);
       }
 
-      // 渐进式点击：每次点击消耗 1 AP
-      const requiredClicks: number = typeof args.clickIndex === "number" ? (args.requiredClicks as number ?? 1) : 1;
-      const clickIndex: number = typeof args.clickIndex === "number" ? (args.clickIndex as number) : 1;
-      const isFinalClick = clickIndex >= requiredClicks;
-
       const sceneResonanceEffect = applyPendingConsumableToSceneAction(state);
       const sceneCost = sceneResonanceEffect.freeApCost ? 0 : AP_COST_SCENE_ACTION;
 
-      // 消耗 AP（每次点击都消耗）
+      // UI 内部完成显式对象反馈后，只向规则层提交一次完整互动。
       consumeActionPoints(state, sceneCost);
 
-      // 中间点击：只消耗 AP，返回进度提示
-      if (!isFinalClick) {
-        const resp = buildResponse(
-          state,
-          `${sceneResonanceEffect.narrations.join(" ")} ${action.label}亮起了一些（${clickIndex}/${requiredClicks}）。`.trim(),
-        );
-        return NextResponse.json({ ...resp, resonanceNarration: sceneResonanceEffect.narrations.join(" ") || undefined } satisfies ToolResponseBody);
-      }
-
-      // 最终点击：记录完成，发放奖励
+      // 记录完成，发放奖励
       recordSceneActionThisSlot(state, actionId);
 
       const newlyDiscoveredTitles: string[] = [];

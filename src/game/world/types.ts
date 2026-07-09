@@ -373,6 +373,12 @@ export type EdenWorldState = {
   /** 本局执行过的场景互动 ID（用于复盘） */
   sceneActionIds: string[];
 
+  /** 本局已完成的场景问答 ID（核心奖励只领取一次） */
+  completedScenePuzzleIds: string[];
+
+  /** 本局是否已关闭第一章目标提示 */
+  hasDismissedObjectiveHint: boolean;
+
   /** 上一轮输入标签（用于刺猬环境反馈） */
   lastInputTag?: string | null;
 
@@ -466,6 +472,8 @@ export const initialEdenWorldState: EdenWorldState = {
   unlockedAchievementIds: [],
   usedItemIds: [],
   sceneActionIds: [],
+  completedScenePuzzleIds: [],
+  hasDismissedObjectiveHint: false,
   lastInputTag: null,
   calmWhisperStreak: 0,
   isEnded: false,
