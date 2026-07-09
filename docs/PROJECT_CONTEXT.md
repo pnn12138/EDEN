@@ -11,7 +11,7 @@ Updated by: `Codex (第一章精简版封版合并验收)`
 Current phase: `第一章 /world 场景交互精简版进入封版。三道问答通过 /api/world/puzzle 在服务端调用 puzzleRules，客户端只提交 puzzleId/optionId 与当前状态并渲染返回结果；隐藏热点、多击参数和透明点击层已移除，显式点击对象仍为刺猬与刻名石。`
 Current build status: `通过（2026-07-09 复验）：默认浏览器门槛为桌面 Chrome。封版前在 phase6-final-check 复跑桌面端全链路均通过：npm run lint、npx tsc --noEmit、npm run build、node scripts/test-scene-puzzle-rules.mjs、npm run test:e2e（desktop-chromium 1 passed，移动端 spec 由 testIgnore 排除）、node scripts/test-world-smoke.mjs（mock，160 通过 / 0 失败）。移动端 e2e 文件保留但不作为默认测试或封版标准。npm install 仍报告 5 个依赖审计风险（1 moderate、4 high），未扩大范围处理。`
 
-Latest Codex note: `封版合并准备（2026-07-09）：桌面浏览器流程覆盖新存档目标提示、刻名石问答、东园幽径错误后重试、伊甸之河问答、奖励进入线索/回响、服务端重复请求不重复发奖、离开重返不重复弹窗、刷新持久化、旧热点区域不消耗 AP/不写 sceneActionIds。新增稳定 data-testid 与 Playwright 最小配置。Playwright 使用机器已有 Chrome channel；移动端测试不进入默认门槛。封版合并复验（2026-07-09）：工作区未提交改动（谜题系统 /api/world/puzzle + puzzleRules + ScenePuzzleModal + scenePuzzles、Playwright 桌面配置、场景互动精简为仅刺猬）完成临时代码排查（无调试残留），桌面端全链路复跑通过，随后提交并合入 main。`
+Latest Codex note: `封版合并准备（2026-07-09）：桌面浏览器流程覆盖新存档目标提示、刻名石问答、东园幽径错误后重试、伊甸之河问答、奖励进入线索/回响、服务端重复请求不重复发奖、离开重返不重复弹窗、刷新持久化、旧热点区域不消耗 AP/不写 sceneActionIds。新增稳定 data-testid 与 Playwright 最小配置。Playwright 使用机器已有 Chrome channel；移动端测试不进入默认门槛。封版合并复验（2026-07-09）：工作区未提交改动（谜题系统 /api/world/puzzle + puzzleRules + ScenePuzzleModal + scenePuzzles、Playwright 桌面配置、场景互动精简为仅刺猬）完成临时代码排查（无调试残留），桌面端全链路复跑通过，随后提交并合入 main。main 合并（01759bf, --no-ff）后重跑桌面端验收通过：lint / tsc --noEmit / build / 谜题单元 / e2e(desktop-chromium 1 passed, 移动端 spec 由 testIgnore 排除) / world-smoke(mock 160 通过 0 失败)。移动端不作为默认门槛，未做移动端优化。`
 
 一句话项目说明：
 
