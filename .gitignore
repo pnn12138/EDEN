@@ -58,3 +58,5 @@ fake_provider_out.txt
 # local screenshots
 *.jpg
 *.png
+# 但保留游戏素材图片（成就图标、场景图等），避免部署 404
+!public/assets/**/*.png
