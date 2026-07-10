@@ -22,6 +22,7 @@ import type {
   WorldToolName,
   WorldToolCall,
 } from "@/game/world/types";
+import { withNpcWorldDefaults } from "@/game/world/types";
 import { validateWorldToolCall } from "@/game/world/toolRules";
 import { executeWorldTool } from "@/game/world/worldActions";
 import { EDEN_LOCATIONS } from "@/content/world/locations";
@@ -161,7 +162,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as ToolRequestBody;
     const { tool, args } = body;
-    const state = cloneWorldState(body.state);
+    const state = withNpcWorldDefaults(cloneWorldState(body.state));
 
     // 已结束状态拒绝一切工具
     if (state.isEnded) {

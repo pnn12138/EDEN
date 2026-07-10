@@ -2,10 +2,16 @@
 // 第一章场景问答内容
 //
 // 内容只定义题目、选项、答案标签与奖励；判定和状态更新在
-// src/game/world/puzzleRules.ts 中处理。
+// src/game/world/puzzleRules.ts 与 src/game/world/puzzleAnswerRules.ts 中处理。
+//
+// 支持两种输入模式：
+// - choice：选项式（东园幽径、伊甸之河）
+// - free_text：自由文本（刻名石"万物受名"）
 // ============================================================
 
 import type { EdenLocationId, TimeOfDay } from "@/game/world/types";
+
+export type ScenePuzzleInputMode = "choice" | "free_text";
 
 export type ScenePuzzleOption = {
   id: string;
@@ -25,10 +31,16 @@ export type ScenePuzzle = {
   locationId: EdenLocationId;
   timeOfDay?: TimeOfDay;
   trigger: "on_enter" | "explicit_interaction";
+  inputMode: ScenePuzzleInputMode;
+  /** 自由文本评估器 ID（free_text 时使用） */
+  evaluationId?: string;
   title: string;
   prompt: string;
-  options: ScenePuzzleOption[];
-  successTags: string[];
+  /** 自由文本占位符 */
+  placeholder?: string;
+  options?: ScenePuzzleOption[];
+  /** 自由文本判定成功标签（仅用于兼容展示，规则真相在 puzzleAnswerRules） */
+  successTags?: string[];
   successFeedback: string;
   rewards: ScenePuzzleReward;
   failure: {
@@ -42,31 +54,18 @@ export const SCENE_PUZZLES: ScenePuzzle[] = [
     id: "puzzle_naming_stone_identity",
     locationId: "adam_garden_work",
     trigger: "explicit_interaction",
+    inputMode: "free_text",
+    evaluationId: "naming_stone_meaning",
     title: "刻名石上的问题",
-    prompt: "名字落在石头上。它意味着归属、理解，还是秩序？",
-    options: [
-      {
-        id: "belong_to_speaker",
-        text: "名字让被命名者归属于喊出它的人。",
-        tags: ["belonging", "ownership"],
-      },
-      {
-        id: "understand_before_own",
-        text: "名字先让一个生命被理解，而不是被占有。",
-        tags: ["understanding", "gentle_question"],
-      },
-      {
-        id: "order_before_voice",
-        text: "名字把万物排进秩序，使它们各守其位。",
-        tags: ["order", "obedience"],
-      },
-    ],
+    prompt:
+      "亚当为飞鸟走兽一一命名。石上却留下未完的一句：\n“若只说出称呼，却未曾理解它，万物真的受名了吗？”\n名字赋予万物的，究竟是什么？",
+    placeholder: "写下你对“名字”的理解（200 字以内）……",
     successTags: ["understanding"],
     successFeedback:
-      "石痕亮了一瞬。名字不是把万物收进掌心，而是让它们能被听见。你记住了一个借来的名字。",
+      "石痕亮了一瞬。名字不是把万物收进掌心，而是让它们能被看见、被理解，也能从万物中被认出。你记住了“万物名录”。",
     rewards: {
       clueId: "clue_naming_stones",
-      itemId: "resonance_borrowed_name",
+      itemId: "resonance_living_names",
       trustDelta: 2,
     },
     failure: {
@@ -77,6 +76,7 @@ export const SCENE_PUZZLES: ScenePuzzle[] = [
     id: "puzzle_east_path_cautious_presence",
     locationId: "east_garden_path",
     trigger: "on_enter",
+    inputMode: "choice",
     title: "东园幽径的问题",
     prompt: "面对警惕的人，提问、催促和沉默，哪一种方式更容易让对方留下？",
     options: [
@@ -111,7 +111,8 @@ export const SCENE_PUZZLES: ScenePuzzle[] = [
   {
     id: "puzzle_river_words_belonging",
     locationId: "four_river_source",
-    trigger: "on_enter",
+    trigger: "explicit_interaction",
+    inputMode: "choice",
     title: "伊甸之河的问题",
     prompt: "一句话离开口中之后，是否仍完全属于说话的人？",
     options: [
@@ -148,3 +149,6 @@ export function getScenePuzzleById(id: string): ScenePuzzle | null {
   return SCENE_PUZZLES.find((puzzle) => puzzle.id === id) ?? null;
 }
 
+export function getScenePuzzleByEvaluationId(evaluationId: string): ScenePuzzle | null {
+  return SCENE_PUZZLES.find((puzzle) => puzzle.evaluationId === evaluationId) ?? null;
+}

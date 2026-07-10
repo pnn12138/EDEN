@@ -1,11 +1,18 @@
+import { useState } from "react";
 import type { ScenePuzzle } from "@/content/world/scenePuzzles";
 import type { ScenePuzzleAnswerResult } from "@/game/world/puzzleRules";
+
+type ScenePuzzleChoicePayload = { optionId: string };
+type ScenePuzzleFreeTextPayload = { answerText: string };
+export type ScenePuzzleChoosePayload =
+  | ScenePuzzleChoicePayload
+  | ScenePuzzleFreeTextPayload;
 
 type ScenePuzzleModalProps = {
   puzzle: ScenePuzzle;
   result: ScenePuzzleAnswerResult | null;
   isLoading?: boolean;
-  onChoose: (optionId: string) => void;
+  onChoose: (payload: ScenePuzzleChoosePayload) => void;
   onClose: () => void;
 };
 
@@ -17,6 +24,8 @@ export default function ScenePuzzleModal({
   onClose,
 }: ScenePuzzleModalProps) {
   const hasSucceeded = result?.success === true;
+  const isFreeText = puzzle.inputMode === "free_text";
+  const [freeText, setFreeText] = useState("");
 
   return (
     <div className="eden-scene-puzzle-backdrop" role="presentation">
@@ -45,28 +54,55 @@ export default function ScenePuzzleModal({
         >
           {puzzle.title}
         </h2>
-        <p className="eden-scene-puzzle-prompt" data-testid="scene-puzzle-prompt">
+        <p
+          className="eden-scene-puzzle-prompt"
+          data-testid="scene-puzzle-prompt"
+          style={{ whiteSpace: "pre-line" }}
+        >
           {puzzle.prompt}
         </p>
 
-        <div className="eden-scene-puzzle-options" aria-label="回答选项">
-          {puzzle.options.map((option) => {
-            const selected = result?.selectedOptionId === option.id;
-            return (
-              <button
-                key={option.id}
-                type="button"
-                className={`eden-scene-puzzle-option ${selected ? "eden-scene-puzzle-option--selected" : ""}`}
-                disabled={isLoading || hasSucceeded}
-                onClick={() => onChoose(option.id)}
-                data-testid="scene-puzzle-option"
-                data-option-id={option.id}
-              >
-                {option.text}
-              </button>
-            );
-          })}
-        </div>
+        {isFreeText ? (
+          <div className="eden-scene-puzzle-freetext" aria-label="自由回答">
+            <textarea
+              className="eden-scene-puzzle-textarea"
+              value={freeText}
+              placeholder={puzzle.placeholder ?? "写下你的回答……"}
+              disabled={isLoading || hasSucceeded}
+              onChange={(event) => setFreeText(event.target.value)}
+              data-testid="scene-puzzle-textarea"
+              rows={5}
+            />
+            <button
+              type="button"
+              className="eden-btn eden-btn--primary eden-scene-puzzle-submit"
+              disabled={isLoading || hasSucceeded || freeText.trim().length === 0}
+              onClick={() => onChoose({ answerText: freeText.trim() })}
+              data-testid="scene-puzzle-submit"
+            >
+              {isLoading ? "正在回应……" : "刻下名字"}
+            </button>
+          </div>
+        ) : (
+          <div className="eden-scene-puzzle-options" aria-label="回答选项">
+            {(puzzle.options ?? []).map((option) => {
+              const selected = result?.selectedOptionId === option.id;
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  className={`eden-scene-puzzle-option ${selected ? "eden-scene-puzzle-option--selected" : ""}`}
+                  disabled={isLoading || hasSucceeded}
+                  onClick={() => onChoose({ optionId: option.id })}
+                  data-testid="scene-puzzle-option"
+                  data-option-id={option.id}
+                >
+                  {option.text}
+                </button>
+              );
+            })}
+          </div>
+        )}
 
         {result && (
           <div

@@ -180,3 +180,99 @@
 - 夜景素材服务于完整第一章 12 时段结构：周一至周六，每天白天 / 夜晚各一段。
 - 五位天使中，基路伯来自《创世记》3:24 的伊甸东边守卫意象；加百列、拉斐尔、乌列尔、米迦勒为游戏扩展角色，不应在玩家图鉴中写成《创世记》伊甸段落直接出场人物。
 - 概念组图主要用于开发参考或图鉴展示；游戏内运行立绘已单独生成 IMG217-IMG221，不应再直接使用概念组图或复用守望天使立绘。
+
+## 第一章「园中诸声」28 个园中印记图标（2026-07-10）
+
+本轮 Phase 0 Task 0.3 由 CodeBuddy 使用内置生图工具生成 28 个园中印记（成就）图标。
+
+### 1. 生成工具与规格
+- 工具：CodeBuddy 内置生图工具（image_gen）
+- 规格：512×512 PNG，透明背景（提示词含 `transparent background, no text, no watermark`），统一水彩 / 手绘神话伊甸园风格，自然元素 + 园内物品
+- 显示尺寸：前端以 64×64 CSS 像素展示（内置工具最小输出分辨率为 512×512，运行时按 CSS 缩放显示，不引入新依赖、不做本地重采样）
+- 生成日期：2026-07-10
+- 约束：未新增任何依赖；未在前端硬编码密钥；未修改 `doc/` 原有内容（本段为末尾追加）
+
+### 2. Prompt 摘要（按 4 分类记录）
+**探索类（7）**
+- `mark_river_step`：流水波纹，柔蓝绿水线绕曲叶
+- `mark_all_resonance`：多枚共鸣玻璃碎片汇聚成发光簇
+- `mark_name_stone`：刻有单一名字的古老石版
+- `mark_moonlight`：银白月光铺成的蜿蜒园径
+- `mark_gift_3`：三枚叠加的神圣光印呈三角
+- `mark_echo_collector`：环绕小耳形叶的同心回声波纹
+- `mark_hidden_scene`（隐藏）：模糊神秘暗影 + 隐约问号，不暴露内容
+
+**交互类（9）**
+- `mark_all_npc_friend`：园中众灵小动物围成一圈
+- `mark_her_trust`：女性侧影 + 身侧信任之光
+- `mark_adam_friend`：一枚光滑河石（友谊）
+- `mark_michael_approve`：水纹盾 + 守护微光
+- `mark_gabriel_tip`：传令天使纯白羽毛
+- `mark_lucifer_trust`：晨星 + 微小光点
+- `mark_hedgehog_friend`：小刺猬 + 细密柔刺
+- `mark_question_10`：从小小口唇散开的低语涟漪
+- `mark_hidden_dialog`（隐藏）：模糊神秘问号，不暴露内容
+
+**玩法类（7）**
+- `mark_no_attention`：风吹过草叶无痕
+- `mark_fast_pass`：黎明叶上晨露一滴
+- `mark_one_whisper`：一句低语化成的单一回声涟漪
+- `mark_no_resonance`：空空张开的手印，未持一物
+- `mark_peace_pass`：一小枝橄榄 + 安宁叶
+- `mark_hard_mode`：逆向而行的足迹
+- `mark_hidden_operation`（隐藏）：模糊神秘水纹 + 隐约问号，不暴露内容
+
+**结局类（5）**
+- `mark_success_ending`：敞开的逐出之门，门外柔光
+- `mark_fail_ending`：园中渐近的神圣脚步
+- `mark_life_fruit`：枝头发光的永生之果
+- `mark_all_ending`：多条园径交汇于一点
+- `mark_hidden_ending`（隐藏）：模糊神秘缸影 + 隐约问号，不暴露内容
+
+### 3. 用途说明
+- 全部 28 个图标用于第一章「园中诸声」园中印记（成就）图鉴系统（Phase 2 Task 2.3 接入），按探索 / 交互 / 玩法 / 结局四分类展示。
+- 4 个隐藏印记图标（`mark_hidden_scene` / `mark_hidden_dialog` / `mark_hidden_operation` / `mark_hidden_ending`）采用问号 / 模糊处理，未解锁时在图鉴中显示为灰色问号，不暴露获取条件。
+- 文件保存路径：`public/assets/chapter1/images/achievements/mark_*.png`，文件名与印记 ID 一一对应。
+
+---
+
+## Phase 3 提交版「AI 创作说明」总览（2026-07-10）
+
+> 本段为提交前 consolidated 说明，按赛题「AI 创作环节」四分类（世界观剧情 / NPC 智能对话 / 视觉素材 / 叙事文案）汇总全部 AI 生成内容、生成 prompt 摘要与用途。原有各段（图片/音频素材表、第一章素材）继续有效，本段为总览与补充，未修改既有内容。
+
+### ① 世界观与剧情（AI 生成）
+
+- **世界观设定（`design/01_world_bible.md`）**：由 CodeBuddy 基于《创世记》伊甸园禁果段落进行哲学再解释，产出"第二伊甸园 / AI 沙盒隐喻"双层叙事；表层为圣经寓言，底层解读为"神=研究员、夏娃=智能体、蛇=异常输入源、禁果=越权认知协议"。
+  - 生成 prompt 摘要：以"用 AI 重塑经典情节、保持克制神话寓言气质、不戏仿宗教、不把夏娃写成被欺骗者"为约束，迭代生成世界观条目与角色关系。
+  - 用途：作为 Chapter 0（蛇诱夏娃）与第一章「园中诸声」的叙事总纲；底层 AI 沙盒隐喻仅用于路演/架构说明，不进入玩家可见文本。
+- **剧情脚本（`design/02_second_eden_narrative.md`、`design/chapters/`）**：AI 辅助生成章节节拍（Beat）、禁忌动作链（`look_at_tree→approach_tree→touch_fruit→eat_fruit`）、结局文案（`eve_eats_fruit` / `god_arrives`）。
+  - 用途：驱动核心闭环与结局复盘文案；文案经规则层与本地叙事池落地，AI 仅产出草稿，最终玩家可见文案以代码内 `worldNarrations` 等本地化文本为准。
+
+### ② NPC 智能对话（Agent Prompt 设计 + AI 生成逻辑）
+
+- **统一 LLM 接入层（`src/services/llm/`）**：抽象多 Provider（volcengine / deepseek / mock），所有 NPC 对话经同一入口，密钥仅服务端读取，前端不暴露。
+- **EveAgent / AdamAgent（`src/agents/world/worldAgentPrompts.ts`）**：基于角色人设、当前心智数值、对话历史与玩家输入，由 LLM 实时生成符合人设的回应；夏娃"被打动时说我想知道而非蛇说得对"，亚当"稳重、回避冲突、只用自己方式透露夏娃习惯"。
+  - Prompt 摘要：角色目标 + 世界观 + 当前状态变量 + 历史摘要 + 玩家最新输入 + 可调用工具 + 输出协议 + 禁止事项（不自称模型、不替玩家决定、不输出工程词）。
+  - AI 生成逻辑：LLM 输出对白/意图 → 规则层校验（工具白名单、状态门槛、输出协议）→ 通过才改变状态或执行工具；AI 失败/超时/空输出/禁用词均降级到本地文案池（fallback），游戏可继续。
+- **天使 Agent（`src/agents/world/buildAngelPrompt.ts` 等）**：加百列/拉斐尔/乌列尔/米迦勒/基路伯五位天使，各有专属人设与"言语分裂"多语言惩罚机制；好感满 100 开启主动试炼、答对发放专属回响。
+  - Prompt 摘要：庄重克制、不被蛇说服、不给通关建议；受罚后强制只用专属语言回复。
+- **意图识别（`analyzePlayerInput`）**：AI 辅助把玩家自由输入归类为 `tempt_wisdom` / `weaken_fear` / `build_trust` / `direct_command` / `irrelevant`，辅助规则层判断心智变化与神的注视风险。
+- **自然化输出（`naturalizeNpcReply`）**：去除工程词、状态播报，按角色限长，保证玩家可见文本不出现 AI/Agent/NPC/模型/程序/系统 等词。
+
+### ③ 视觉素材（AI 生成 prompt、用途）
+
+- **28 个园中印记图标（Phase 2，2026-07-10）**：CodeBuddy 内置生图工具生成，512×512 透明 PNG，统一水彩/手绘神话伊甸园风格；按 探索(7)/交互(9)/玩法(7)/结局(5) 四分类，其中 4 个隐藏印记用问号/模糊处理不暴露条件。
+  - 路径：`public/assets/chapter1/images/achievements/mark_*.png`
+  - 用途：第一章「园中诸声」园中印记（成就）图鉴系统，按四分类展示、跨局解锁追踪。
+  - 分类 prompt 摘要见上方"第一章 28 个园中印记图标"段（如 `mark_river_step` 流水波纹、`mark_eve_trust` 女性侧影信任之光、`mark_lucifer_trust` 晨星+光点、`mark_success_ending` 敞开的逐出之门）。
+- **场景背景与立绘（Chapter 0 + 第一章）**：AI 生成伊甸园背景、夏娃/亚当立绘、善恶果、结局过场图（v2 去水印写实电影感）、第一章正式地图与 5 地点 v3 WebP 运行版、五位天使独立透明立绘、刺猬/守望天使透明立绘。
+  - 提示词摘要：半写实电影感、暗金绿调、神话寓言、无现代物体、无文字/水印；立绘用纯色背景生成后本地 Node 绿幕 chroma-key 抠图。
+  - 用途：首页/对话场景/结局页/第一章 `/world` 地图与地点背景/图鉴。
+- **音频素材**：环境氛围、提交反馈、进度变化、结局音效来自 Freesound（免费素材库），非 AI 生成，仅作素材来源记录于本文件音频表。
+
+### ④ 叙事文案（游戏内提示文本 / 剧情 AI 生成说明）
+
+- **系统提示与状态反馈文案**：回响面板分类提示、神注视等级叙事、低语后状态变化叙事、空输入/行动点耗尽/语言不通等兜底提示，均由本地叙事池（`worldNarrations` 等）提供，AI 不直出数值与标签，保证"无数值、无标签、纯叙事"。
+- **NPC 对话后工具叙事**：关系赠礼、天使试炼发放、言语分裂惩罚等叙事由规则层结合 Agent 输出生成。
+- **AI 生成边界**：所有玩家可见文案以本地化文本为最终准；LLM 仅产出 NPC 对白草稿与意图，最终对白经 `naturalizeNpcReply` 清洗；结局/提示/复盘文案由代码内叙事池与规则层决定，AI 不直改游戏状态或文案数值。
+- **fallback 文案池**：夏娃/亚当/天使/刺猬/狐狸各有本地文案池，覆盖 LLM 失败、超时、空输出、禁用词等场景，确保无密钥/无网络时游戏仍可完整游玩。

@@ -9,7 +9,8 @@ import type { EdenWorldState } from "@/game/world/types";
 type PuzzleRequestBody = {
   state: EdenWorldState;
   puzzleId: string;
-  optionId: string;
+  optionId?: string;
+  answerText?: string;
 };
 
 export async function POST(request: NextRequest) {
@@ -23,8 +24,17 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { state, puzzleId, optionId } = body;
-  if (!state || typeof puzzleId !== "string" || typeof optionId !== "string") {
+  const { state, puzzleId, optionId, answerText } = body;
+  if (!state || typeof puzzleId !== "string") {
+    return NextResponse.json(
+      { ok: false, result: null, reason: "问答请求缺少必要信息。" },
+      { status: 400 },
+    );
+  }
+
+  const puzzle = getScenePuzzleById(puzzleId);
+  const isFreeText = puzzle?.inputMode === "free_text";
+  if (!isFreeText && typeof optionId !== "string") {
     return NextResponse.json(
       { ok: false, result: null, reason: "问答请求缺少必要信息。" },
       { status: 400 },
@@ -42,7 +52,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const puzzle = getScenePuzzleById(puzzleId);
   if (!puzzle) {
     return NextResponse.json(
       { ok: false, result: null, reason: "未知的场景问题。" },
@@ -64,6 +73,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const result = applyScenePuzzleAnswer(state, puzzle, optionId);
+  const result = applyScenePuzzleAnswer(state, puzzle, optionId ?? "", answerText);
   return NextResponse.json({ ok: true, result, reason: null });
 }

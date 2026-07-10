@@ -26,6 +26,7 @@ import type {
 import { WORLD_AGENT_TOOL_PERMISSIONS } from "@/game/world/types";
 import { EDEN_LOCATIONS } from "@/content/world/locations";
 import { getItemById } from "@/content/world/items";
+import { canNpcsUnderstandEachOther } from "@/game/world/npcLanguageRules";
 
 // ---- 工具白名单 ----
 export const WORLD_TOOL_WHITELIST: ReadonlySet<WorldToolName> = new Set<WorldToolName>([
@@ -172,6 +173,11 @@ export function canSpeakToNpc(
 
   if (!sameLocation && !angelAdjacent) {
     return { allowed: false, reason: "他们不在同一个地方" };
+  }
+
+  // 言语分裂后语言不通：受罚天使与中文 NPC、或不同专属语言的受罚天使之间无法交流
+  if (!canNpcsUnderstandEachOther(state, caller, targetNpc)) {
+    return { allowed: false, reason: "他们说着彼此无法辨认的语言" };
   }
 
   return { allowed: true };

@@ -111,6 +111,9 @@ export type UseChapter0AudioParams = {
   endingId: string | null;
   /** 当前游戏阶段 */
   phase: GamePhase;
+  /** 是否允许在 dialogue 阶段启动 Chapter 0 环境音，默认 true。
+   *  WorldPage（第一章探索）应传 false，避免与 useChapter1Audio 的环境音重叠。 */
+  enableDialogueAmbient?: boolean;
 };
 
 // ---- Hook 返回 ----
@@ -135,6 +138,7 @@ export function useChapter0Audio({
   temptationProgress,
   endingId,
   phase,
+  enableDialogueAmbient = true,
 }: UseChapter0AudioParams): UseChapter0AudioReturn {
   const [soundEnabled, setSoundEnabled] = useState(true);
 
@@ -214,11 +218,11 @@ export function useChapter0Audio({
 
     if (!soundEnabled) return;
 
-    // intro → dialogue：淡出 intro BGM，启动 ambient
+    // intro → dialogue：淡出 intro BGM，启动 ambient（仅当允许）
     if (prevPhase === "intro" && (phase === "dialogue" || phase === "tool_resolution")) {
       fadeOutAudio(introBgmRef.current, 1000);
       introBgmActuallyPlayingRef.current = false;
-      if (!ambientActuallyPlayingRef.current) {
+      if (enableDialogueAmbient && !ambientActuallyPlayingRef.current) {
         safePlay(ambientRef.current).then((ok) => {
           if (ok) ambientActuallyPlayingRef.current = true;
         });
@@ -234,13 +238,17 @@ export function useChapter0Audio({
       return;
     }
 
-    // dialogue 阶段，播放 ambient
-    if ((phase === "dialogue" || phase === "tool_resolution") && !ambientActuallyPlayingRef.current) {
+    // dialogue 阶段，播放 ambient（仅当允许）
+    if (
+      enableDialogueAmbient &&
+      (phase === "dialogue" || phase === "tool_resolution") &&
+      !ambientActuallyPlayingRef.current
+    ) {
       safePlay(ambientRef.current).then((ok) => {
         if (ok) ambientActuallyPlayingRef.current = true;
       });
     }
-  }, [phase, soundEnabled]);
+  }, [phase, soundEnabled, enableDialogueAmbient]);
 
   // ---- 声音开关 ----
   useEffect(() => {
@@ -251,14 +259,18 @@ export function useChapter0Audio({
           if (ok) introBgmActuallyPlayingRef.current = true;
         });
       }
-      if ((phase === "dialogue" || phase === "tool_resolution") && ambientActuallyPlayingRef.current) {
+      if (
+        enableDialogueAmbient &&
+        (phase === "dialogue" || phase === "tool_resolution") &&
+        ambientActuallyPlayingRef.current
+      ) {
         safePlay(ambientRef.current);
       }
     } else {
       safePause(introBgmRef.current);
       safePause(ambientRef.current);
     }
-  }, [soundEnabled, phase]);
+  }, [soundEnabled, phase, enableDialogueAmbient]);
 
   // ---- 进度音效：temptationProgress 增加时 ----
   useEffect(() => {

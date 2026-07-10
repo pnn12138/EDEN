@@ -22,10 +22,14 @@
 import type { EdenWorldState, EdenNpcId } from "@/game/world/types";
 import { getItemById } from "@/content/world/items";
 import { grantResonance, executeInstantResonance } from "./resonanceRules";
+import { checkAndUnlockAchievements } from "./achievementRules";
 
 /** 发放信物（兼容旧接口，内部调用 grantResonance） */
 export function grantWorldItem(state: EdenWorldState, itemId: string): boolean {
-  return grantResonance(state, itemId, 1);
+  const ok = grantResonance(state, itemId, 1);
+  // 发放回响后立即检查探索类印记（只读，不修改发放逻辑本身）
+  if (ok) checkAndUnlockAchievements(state);
+  return ok;
 }
 
 /** 消耗信物（兼容旧接口，内部使用 itemCounts） */

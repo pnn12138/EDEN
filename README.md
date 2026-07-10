@@ -152,4 +152,28 @@ eden/
 - 请勿删除、重命名或移动 `doc/` 目录下的任何文件
 - 游戏设计文档统一放在 `design/` 文件夹中
 - 代码统一放在 `src/` 文件夹中
-- 游戏运行素材仅引用 `public/assets/chapter0/` 下的文件
+- 游戏运行素材仅引用 `public/assets/chapter0/` 与 `public/assets/chapter1/` 下的文件
+
+## 部署（EdgeOne Pages / CNB）
+
+> ⚠️ 本项目含 `/api/*` 服务端路由（用于在**服务端**隐藏 LLM Key、执行规则层校验），
+> 因此必须部署在 **Serverless / Node 运行时** 模式，**严禁静态导出**（`next.config.js` 不得写 `output:'export'`）。
+
+### EdgeOne Pages（推荐）
+
+1. 控制台「导入仓库」→ 构建设置：
+   - 构建命令：`npm run build`
+   - 输出目录：`.next`
+   - 运行时：**Node / Serverless**
+   - Node 版本：20
+2. 「环境变量」中配置 `LLM_PROVIDER`（建议 `volcengine`）及对应密钥（仅服务端读取，不暴露前端）。
+3. 部署后获得 `*.edgeone.app` 公网 URL（国内可直连）。
+
+仓库已附 `edgeone.config.js`（声明 Serverless 模式与需注入的环境变量名称，**值不入库**）。
+
+### CNB（云原生构建）
+
+CNB 负责构建，产物发布至 EdgeOne Pages（同 Serverless 模式）。仓库已附 `cnb.config.js`。
+
+> 完整提交材料（在线链接、Demo 分镜脚本、PPT、对话记录、偏差说明、提交清单、社媒文案）
+> 见 `doc/submit/` 目录；AI 创作说明见 `doc/AI_ASSET_RECORD.md`。

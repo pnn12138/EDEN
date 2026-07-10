@@ -11,6 +11,7 @@ import type {
   CorruptionTrace,
 } from "@/game/world/types";
 import type { WorldInputTag, WorldToolName } from "@/game/world/types";
+import { getAchievementById } from "@/content/world/achievements";
 
 /** 记录一条堕落轨迹 */
 export function recordCorruptionTrace(
@@ -264,7 +265,9 @@ function achievementName(id: string): string | null {
     divine_gift_three: "三临神恩",
     resonance_master: "回响大师",
   };
-  return map[id] ?? null;
+  // 旧 ID 优先走字面表，新 28 印记走数据表（含 mark_* 名称）
+  if (map[id]) return map[id];
+  return getAchievementById(id)?.name ?? null;
 }
 
 function npcName(npc: EdenNpcId): string {

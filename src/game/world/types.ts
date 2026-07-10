@@ -278,7 +278,40 @@ export type AchievementId =
   | "first_resonance"          // 初闻回响（首次获得园中回响）
   | "divine_gift_first"       // 初临献礼（首次触发神明献礼）
   | "divine_gift_three"       // 三临神恩（累计神临3次）
-  | "resonance_master";        // 回响大师（累计使用5次回响）
+  | "resonance_master"         // 回响大师（累计使用5次回响）
+  // ---- Phase 2：园中印记全量集（与 public/assets/chapter1/images/achievements 图标一一对应） ----
+  // 探索类（7）
+  | "mark_river_step"          // 河声入耳（走遍园内所有地点）
+  | "mark_all_resonance"       // 回响满囊（收齐全部可获取回响）
+  | "mark_name_stone"          // 名刻石痕（获得万物名录）
+  | "mark_moonlight"           // 月光道标（获得月光道标回响）
+  | "mark_gift_3"              // 神恩三顾（单局神献礼 3 次）
+  | "mark_echo_collector"      // 回声收藏家（跨局累计 30 种回响）
+  | "mark_hidden_scene"        // 幽径密影（隐藏：东园幽径隐藏互动）
+  // 交互类（9）
+  | "mark_all_npc_friend"      // 园中旧识（所有已见 NPC 好感 ≥80）
+  | "mark_her_trust"           // 她的信任（夏娃信任满 / 获得她自己的声音）
+  | "mark_adam_friend"         // 亚当的认可（亚当好感满 / 获得静契之石）
+  | "mark_michael_approve"     // 米迦勒的默许（米迦勒好感满）
+  | "mark_gabriel_tip"         // 加百列的提示（加百列好感满）
+  | "mark_lucifer_trust"       // 晨星的共鸣（路西法好感满）
+  | "mark_hedgehog_friend"     // 刺猬的亲近（刺猬好感满）
+  | "mark_question_10"         // 百句低语（单局低语 ≥50 次）
+  | "mark_hidden_dialog"       // 未闻之语（隐藏：路西法隐藏对话链）
+  // 玩法类（7）
+  | "mark_no_attention"        // 风过无痕（注视全程 ≤1 通关）
+  | "mark_fast_pass"           // 晨露未干（≤5 时段通关）
+  | "mark_one_whisper"         // 一语中的（仅一次低语通关）
+  | "mark_no_resonance"        // 空手而归（未用回响通关）
+  | "mark_peace_pass"          // 和平路径（NPC 好感未跌破 30 通关）
+  | "mark_hard_mode"           // 逆道而行（未与天使对话通关）
+  | "mark_hidden_operation"    // 划水之人（隐藏：路西法划水互动）
+  // 结局类（5）
+  | "mark_success_ending"      // 逐入尘世（成功结局）
+  | "mark_fail_ending"         // 神临园中（失败结局）
+  | "mark_life_fruit"          // 永生之味（吃生命果并 12 时段结束）
+  | "mark_all_ending"          // 诸路皆通（跨局集齐 3 种普通结局）
+  | "mark_hidden_ending";      // 缸中之醒（隐藏：路西法隐藏结局）
 
 // ---- 第一章完整世界状态 ----
 // 注意：本状态由规则层/API 唯一修改，前端不得直接改 actionPoints、timeSlot 或 endingId。
@@ -385,6 +418,17 @@ export type EdenWorldState = {
   /** 连续未提高神注视的低语次数（用于"风未惊鹿"印记） */
   calmWhisperStreak: number;
 
+  /** 通用 NPC 好感（规则层权威，UI 不直接修改） */
+  npcRelations: NpcRelations;
+  /** 天使主动试炼状态 */
+  npcChallenges: NpcChallenges;
+  /** 天使语言与言语分裂状态 */
+  npcLanguageStates: NpcLanguageStates;
+  /** 玩家已遇见的 NPC（属性页情报解锁只展示已见角色） */
+  encounteredNpcIds: EdenNpcId[];
+  /** 已展示过的一次性主动引导 ID（每局只展示一次） */
+  shownNpcGuideIds: string[];
+
   isEnded: boolean;
   endingId: WorldEndingId;
 };
@@ -476,9 +520,84 @@ export const initialEdenWorldState: EdenWorldState = {
   hasDismissedObjectiveHint: false,
   lastInputTag: null,
   calmWhisperStreak: 0,
+  npcRelations: {},
+  npcChallenges: {},
+  npcLanguageStates: {},
+  encounteredNpcIds: [],
+  shownNpcGuideIds: [],
   isEnded: false,
   endingId: null,
 };
+
+// ---- 旧存档兼容：补全第一章新增字段的默认值并深拷贝 ----
+export function withNpcWorldDefaults(
+  state: Partial<EdenWorldState> | null | undefined,
+): EdenWorldState {
+  const base: EdenWorldState = {
+    ...initialEdenWorldState,
+    ...(state ?? {}),
+  } as EdenWorldState;
+
+  // 深拷贝 / 默认值补全（防止旧存档缺失数组或 Record 导致崩溃）
+  base.npcRelations = { ...(base.npcRelations ?? {}) };
+  base.npcChallenges = { ...(base.npcChallenges ?? {}) };
+  base.npcLanguageStates = { ...(base.npcLanguageStates ?? {}) };
+  base.encounteredNpcIds = [...(base.encounteredNpcIds ?? [])];
+  base.shownNpcGuideIds = [...(base.shownNpcGuideIds ?? [])];
+  base.completedScenePuzzleIds = [...(base.completedScenePuzzleIds ?? [])];
+  base.inventory = [...(base.inventory ?? [])];
+  base.itemCounts = { ...(base.itemCounts ?? {}) };
+
+  // 旧存档已完成刻名石谜题但未获得"万物名录"：补发一次（永久能力，不重复）
+  if (
+    base.completedScenePuzzleIds.includes("puzzle_naming_stone_identity") &&
+    !base.inventory.includes("resonance_living_names")
+  ) {
+    base.inventory.push("resonance_living_names");
+    base.itemCounts["resonance_living_names"] = 1;
+  }
+
+  // 旧存档已持有天使回响：保留 rewardClaimed=true，避免刷新时静默触发惩罚
+  const ANGEL_CHALLENGE_ID: Record<AngelNpcId, string> = {
+    gabriel: "challenge_gabriel_word_ownership",
+    raphael: "challenge_raphael_safe_first",
+    uriel: "challenge_uriel_seeing_choices",
+    michael: "challenge_michael_boundary_meaning",
+    cherubim: "challenge_cherubim_return_path",
+    watching_angel: "challenge_watching_angel_watch",
+  };
+  const ANGEL_CHALLENGE_REWARD_ITEM: Partial<Record<AngelNpcId, string>> = {
+    gabriel: "resonance_herald_feather",
+    raphael: "resonance_river_dew",
+    uriel: "resonance_morning_flame",
+    michael: "resonance_boundary_mark",
+    cherubim: "resonance_east_gate_glow",
+  };
+  for (const angelId of ["gabriel", "raphael", "uriel", "michael", "cherubim"] as AngelNpcId[]) {
+    const itemId = ANGEL_CHALLENGE_REWARD_ITEM[angelId];
+    if (itemId && base.inventory.includes(itemId)) {
+      const challenge = base.npcChallenges[angelId];
+      if (!challenge || challenge.status !== "passed") {
+        base.npcChallenges[angelId] = {
+          challengeId: ANGEL_CHALLENGE_ID[angelId],
+          status: "passed",
+          attempts: challenge?.attempts ?? 1,
+        };
+      }
+      const rel = base.npcRelations[angelId];
+      base.npcRelations[angelId] = {
+        affinity: rel?.affinity ?? 100,
+        rewardEligible: true,
+        rewardClaimed: true,
+        lastAffinitySignature: rel?.lastAffinitySignature ?? null,
+      };
+      // 已持有回响但从未播放过言语分裂：保留 punishmentTriggered=false；
+      // 当该天使关系后来达到 100 且再次对话时由规则层补演，但不重复发奖。
+    }
+  }
+
+  return base;
+}
 
 // ---- 输入标签（复用 Chapter 0 五标签系统） ----
 export type WorldInputTag =
@@ -487,6 +606,58 @@ export type WorldInputTag =
   | "build_trust"
   | "direct_command"
   | "irrelevant";
+
+// ---- 天使 NPC ----
+export type AngelNpcId =
+  | "gabriel"
+  | "raphael"
+  | "uriel"
+  | "michael"
+  | "cherubim"
+  | "watching_angel";
+
+// ---- 通用 NPC 好感 ----
+export type NpcRelationState = {
+  /** 0-100 */
+  affinity: number;
+  /** 好感达到 100 后，等待天使主动试炼/赠礼 */
+  rewardEligible: boolean;
+  /** 赠礼（或一次性回响）是否已发放，杜绝重复领取 */
+  rewardClaimed: boolean;
+  /** 规则层归一化后的语义签名，用于重复话术衰减 */
+  lastAffinitySignature: string | null;
+};
+
+export type NpcRelations = Partial<Record<EdenNpcId, NpcRelationState>>;
+
+// ---- NPC 挑战（天使主动试炼） ----
+export type NpcChallengeStatus = "locked" | "asked" | "passed";
+
+export type NpcChallengeState = {
+  challengeId: string;
+  status: NpcChallengeStatus;
+  attempts: number;
+};
+
+export type NpcChallenges = Partial<Record<EdenNpcId, NpcChallengeState>>;
+
+// ---- 天使语言与言语分裂 ----
+export type AngelLanguageId =
+  | "zh-CN"
+  | "en"
+  | "fr"
+  | "he"
+  | "la"
+  | "el"
+  | "ar";
+
+export type NpcLanguageState = {
+  languageId: AngelLanguageId;
+  punishmentTriggered: boolean;
+  firstMismatchHintShown: boolean;
+};
+
+export type NpcLanguageStates = Partial<Record<EdenNpcId, NpcLanguageState>>;
 
 // ---- 神的注视叙事化表现 ----
 export const DIVINE_ATTENTION_NARRATIONS: Record<DivineAttentionLevel, string> = {

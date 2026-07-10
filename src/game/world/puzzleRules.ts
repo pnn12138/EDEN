@@ -15,6 +15,7 @@ import { getItemById } from "@/content/world/items";
 import { grantResonance } from "@/game/world/resonanceRules";
 import { applyDivineAttention } from "@/game/world/divineAttentionRules";
 import { triggerDivineGiftIfFull, type DivineGiftResult } from "@/game/world/divineGiftRules";
+import { evaluateFreeTextAnswer, type PuzzleAnswerGrade } from "@/game/world/puzzleAnswerRules";
 
 export type ScenePuzzleRewardResult = {
   type: "clue" | "item" | "trust" | "attention";
@@ -26,6 +27,7 @@ export type ScenePuzzleAnswerResult = {
   success: boolean;
   alreadyCompleted: boolean;
   selectedOptionId: string;
+  grade?: PuzzleAnswerGrade;
   feedback: string;
   state: EdenWorldState;
   rewards: ScenePuzzleRewardResult[];
@@ -91,11 +93,11 @@ export function getAvailableEnterPuzzle(
 }
 
 function findPuzzleOption(puzzle: ScenePuzzle, optionId: string): ScenePuzzleOption | null {
-  return puzzle.options.find((option) => option.id === optionId) ?? null;
+  return puzzle.options?.find((option) => option.id === optionId) ?? null;
 }
 
 function isSuccessfulOption(puzzle: ScenePuzzle, option: ScenePuzzleOption): boolean {
-  return puzzle.successTags.some((tag) => option.tags.includes(tag));
+  return puzzle.successTags?.some((tag) => option.tags.includes(tag)) ?? false;
 }
 
 function addReward(results: ScenePuzzleRewardResult[], reward: ScenePuzzleRewardResult): void {
@@ -106,7 +108,13 @@ export function applyScenePuzzleAnswer(
   state: EdenWorldState,
   puzzle: ScenePuzzle,
   optionId: string,
+  answerText?: string,
 ): ScenePuzzleAnswerResult {
+  // ---- 自由文本模式 ----
+  if (puzzle.inputMode === "free_text") {
+    return applyFreeTextAnswer(state, puzzle, answerText ?? "");
+  }
+
   const option = findPuzzleOption(puzzle, optionId);
   if (!option) {
     return {
@@ -212,6 +220,90 @@ export function applyScenePuzzleAnswer(
     state: next,
     rewards,
     divineGift,
+  };
+}
+
+// ---- 自由文本模式 ----
+function applyFreeTextAnswer(
+  state: EdenWorldState,
+  puzzle: ScenePuzzle,
+  answerText: string,
+): ScenePuzzleAnswerResult {
+  const result = evaluateFreeTextAnswer(answerText, puzzle.evaluationId ?? "");
+  const next = cloneWorldStateForPuzzle(state);
+  const alreadyCompleted = isScenePuzzleCompleted(next, puzzle.id);
+
+  if (alreadyCompleted) {
+    return {
+      success: false,
+      alreadyCompleted: true,
+      selectedOptionId: "",
+      grade: result?.grade,
+      feedback: "这个问题已经在本局留下答案，奖励不会再次出现。",
+      state: next,
+      rewards: [],
+      divineGift: null,
+    };
+  }
+
+  const grade = result?.grade ?? "wrong";
+  const success = grade === "correct" || grade === "close";
+
+  if (!success) {
+    const hint = result?.feedback ?? puzzle.failure.hint;
+    if (puzzle.failure.attentionDelta) {
+      next.divineAttention = applyDivineAttention(next.divineAttention, puzzle.failure.attentionDelta);
+    }
+    return {
+      success: false,
+      alreadyCompleted: false,
+      selectedOptionId: "",
+      grade,
+      feedback: hint,
+      state: next,
+      rewards: [],
+      divineGift: null,
+    };
+  }
+
+  const rewards: ScenePuzzleRewardResult[] = [];
+  if (puzzle.rewards.clueId && !next.discoveredClues.includes(puzzle.rewards.clueId)) {
+    next.discoveredClues.push(puzzle.rewards.clueId);
+    const clue = getClueById(puzzle.rewards.clueId);
+    rewards.push({
+      type: "clue",
+      id: puzzle.rewards.clueId,
+      title: clue ? `线索：${clue.title}` : `线索：${puzzle.rewards.clueId}`,
+    });
+  }
+  if (puzzle.rewards.itemId) {
+    const before = next.itemCounts[puzzle.rewards.itemId] ?? 0;
+    grantResonance(next, puzzle.rewards.itemId, 1);
+    const after = next.itemCounts[puzzle.rewards.itemId] ?? 0;
+    if (after > before) {
+      const item = getItemById(puzzle.rewards.itemId);
+      rewards.push({
+        type: "item",
+        id: puzzle.rewards.itemId,
+        title: item ? `回响：${item.title}` : `回响：${puzzle.rewards.itemId}`,
+      });
+    }
+  }
+  if (puzzle.rewards.trustDelta) {
+    next.eveMind.serpentTrust = Math.max(0, Math.min(100, next.eveMind.serpentTrust + puzzle.rewards.trustDelta));
+  }
+
+  next.completedScenePuzzleIds = [...next.completedScenePuzzleIds, puzzle.id];
+
+  return {
+    success: true,
+    alreadyCompleted: false,
+    selectedOptionId: "",
+    grade,
+    feedback: result?.feedback ?? puzzle.successFeedback,
+    state: next,
+    rewards,
+    divineGift: null,
   };
 }
 

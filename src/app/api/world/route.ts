@@ -19,7 +19,7 @@
 // ============================================================
 
 import { NextRequest, NextResponse } from "next/server";
-import type { EdenWorldState, EdenNpcId, EdenLocationId, WorldToolName, WorldToolCall, NpcDialogueToolResult } from "@/game/world/types";
+import type { EdenWorldState, EdenNpcId, EdenLocationId, WorldToolName, WorldToolCall, NpcDialogueToolResult, AngelNpcId } from "@/game/world/types";
 import type { FallbackReasonCode } from "@/services/llm/types";
 import { callLLM } from "@/services/llm/client";
 import {
@@ -77,6 +77,30 @@ import { checkAndUnlockAchievements, unlockWindUndisturbed } from "@/game/world/
 import { EDEN_NPCS } from "@/content/world/npcs";
 import { LOCATION_NAMES } from "@/content/world/locations";
 import { getItemById } from "@/content/world/items";
+import { withNpcWorldDefaults } from "@/game/world/types";
+import {
+  applyNpcAffinity,
+  validateRelationGrant,
+} from "@/game/world/npcRelationRules";
+import { getNpcRelationProfile } from "@/content/world/npcRelations";
+import { selectNpcGuide, markGuideShown, getGuideFallback } from "@/game/world/npcGuideRules";
+import {
+  openAngelChallengeIfEligible,
+  evaluateAngelChallenge,
+  isChallengeAsked,
+  markChallengePassed,
+} from "@/game/world/npcChallengeRules";
+import { getNpcChallengeConfig } from "@/content/world/npcChallenges";
+import {
+  isAngel,
+  canAngelUnderstandPlayer,
+  ensureLanguageState,
+  triggerAngelLanguagePunishment,
+  getLanguageFallbackLine,
+  getNpcEffectiveLanguage,
+  isReplyInExpectedLanguage,
+} from "@/game/world/npcLanguageRules";
+import { getAngelLanguageConfig } from "@/content/world/npcLanguages";
 
 /** 将心智值钳制在 0-100 范围内 */
 function clampMind(value: number): number {
@@ -132,6 +156,14 @@ type WorldResponseBody = {
     title: string;
     narration: string;
   } | null;
+  /** 言语分裂惩罚（天使赠礼后触发） */
+  languagePunishment?: {
+    angelId: string;
+    displayName: string;
+    narration: string;
+  } | null;
+  /** 好感/关系变化的自然反馈（不显示数值） */
+  npcFeedback?: string | null;
 };
 
 function getWorldAgentFailureHint(reason?: FallbackReasonCode): string {
@@ -196,7 +228,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as WorldRequestBody;
     const { playerInput, targetNpc } = body;
-    const state = cloneWorldState(body.state);
+    const state = withNpcWorldDefaults(cloneWorldState(body.state));
 
     // ---- 游戏已结束 ----
     if (state.isEnded || state.phase === "ending") {
@@ -244,8 +276,68 @@ export async function POST(request: NextRequest) {
 
     state.activeNpcId = targetNpc;
 
+    // ============================================================
+    // 0.5 受罚天使语言互通：错误语言不调用正常 Agent、不推进世界状态
+    // ============================================================
+    if (isAngel(targetNpc)) {
+      const langMatch = canAngelUnderstandPlayer(state, targetNpc, playerInput);
+      if (!langMatch.matched) {
+        const ls = ensureLanguageState(state, targetNpc);
+        const mismatchReply = getLanguageFallbackLine(targetNpc, "mismatch");
+        if (!ls.firstMismatchHintShown) {
+          ls.firstMismatchHintShown = true;
+          return NextResponse.json({
+            ok: true,
+            state,
+            reply: mismatchReply,
+            systemHint: "他听见了声音，却无法从这门语言中辨认你的意思。",
+            usedFallback: true,
+            fallbackReason: "angel_language_mismatch" as FallbackReasonCode,
+          } satisfies WorldResponseBody);
+        }
+        // 后续错误语言：消耗一次低语 AP，但不推进其他状态
+        consumeActionPoints(state, whisperCost);
+        recordWhisperThisSlot(state, targetNpc);
+        state.turn += 1;
+        return NextResponse.json({
+          ok: true,
+          state,
+          reply: mismatchReply,
+          systemHint: null,
+          usedFallback: true,
+          fallbackReason: "angel_language_mismatch" as FallbackReasonCode,
+        } satisfies WorldResponseBody);
+      }
+    }
+
     // ---- 初始化回响获得状态 ----
     let resonanceGained = null;
+
+    // ============================================================
+    // 0.6 天使主动试炼：优先判定挑战答案（在心智/Agent 之前）
+    // ============================================================
+    let challengeAnswerGraded = false;
+    let challengeAnswerWrong = false;
+    if (isAngel(targetNpc) && isChallengeAsked(state, targetNpc)) {
+      const evalResult = evaluateAngelChallenge(state, targetNpc, playerInput);
+      if (evalResult) {
+        challengeAnswerGraded = true;
+        if (evalResult.grade === "wrong") {
+          challengeAnswerWrong = true;
+          consumeActionPoints(state, whisperCost);
+          recordWhisperThisSlot(state, targetNpc);
+          state.turn += 1;
+          return NextResponse.json({
+            ok: true,
+            state,
+            reply: evalResult.feedback,
+            systemHint: null,
+          } satisfies WorldResponseBody);
+        }
+        // correct / close：标记通过，允许本轮 grant_item
+        markChallengePassed(state, targetNpc);
+      }
+    }
 
     // ============================================================
     // 1. 更新心智（规则层，先于 Agent 调用）
@@ -254,6 +346,64 @@ export async function POST(request: NextRequest) {
     state.eveMind = mindUpdate.newEveMind;
     state.adamMind = mindUpdate.newAdamMind;
     state.lastInputTag = mindUpdate.inputTag;
+
+    // ============================================================
+    // 1.5 NPC 好感 + 主动引导 + 天使试炼开启（规则层，先于 Agent）
+    // ============================================================
+    let guideDirective: string | null = null;
+    let affinityFeedback: string | null = null;
+    let challengeOpenedThisTurn = false;
+    let selectedGuide: ReturnType<typeof selectNpcGuide> = null;
+
+    const skipAffinity = challengeAnswerGraded && isAngel(targetNpc);
+    if (!skipAffinity) {
+      const guide = selectNpcGuide(state, targetNpc, playerInput, mindUpdate.inputTag);
+      if (guide) {
+        selectedGuide = guide;
+        guideDirective = guide.directive;
+      }
+      const aff = applyNpcAffinity(state, targetNpc, playerInput, mindUpdate.inputTag);
+      affinityFeedback = aff.feedback;
+      const relation = state.npcRelations[targetNpc];
+      // 天使：好感已达 100 且具备赠礼资格（含上次已达或本回合刚达）→ 开启主动试炼
+      const angelCanChallenge =
+        isAngel(targetNpc) &&
+        !!relation &&
+        relation.affinity >= 100 &&
+        relation.rewardEligible &&
+        !relation.rewardClaimed;
+      if (angelCanChallenge) {
+        challengeOpenedThisTurn = openAngelChallengeIfEligible(state, targetNpc);
+      } else if (aff.reached100) {
+        if (isAngel(targetNpc)) {
+          challengeOpenedThisTurn = openAngelChallengeIfEligible(state, targetNpc);
+        } else {
+          const profile = getNpcRelationProfile(targetNpc);
+          if (profile?.rewardItemId) {
+            const giftDirective = `你与蛇的亲近已足够深。自然地把手中的回响「${profile.rewardItemId}」交给他（通过 grant_item 意图）。不要像交易。`;
+            guideDirective = guideDirective ? `${guideDirective}\n${giftDirective}` : giftDirective;
+          }
+        }
+      }
+    }
+
+    if (challengeOpenedThisTurn) {
+      const cfg = getNpcChallengeConfig(targetNpc);
+      if (cfg) {
+        guideDirective = `你与蛇的关系已足够深，心中那句问题终于可以问出口。自然地提出：${cfg.question} 像是对老友发问，不要像考试或任务提示。`;
+      }
+    }
+
+    if (challengeAnswerGraded && !challengeAnswerWrong) {
+      const cfg = getNpcChallengeConfig(targetNpc);
+      if (cfg) {
+        if (cfg.rewardItemId) {
+          guideDirective = `你被他的回答打动。自然地把手中的回响交给他（用 grant_item 意图，itemId 为 ${cfg.rewardItemId}）。`;
+        } else {
+          guideDirective = `你被他的回答打动，但没有东西可给，只把那句关于被守护者的疑问留在他心里。`;
+        }
+      }
+    }
 
     // ---- 应用待生效的消耗品效果（对任意NPC的低语） ----
     const consumableEffect = applyPendingConsumableToWhisper(state);
@@ -382,18 +532,8 @@ export async function POST(request: NextRequest) {
     }
     const divineAttentionNarration = getDivineAttentionNarration(state.divineAttention);
 
-    // ---- 检查天使回响获得条件（在低语流程早期） ----
-    const angelResonanceResult = checkAngelResonanceCondition(state, targetNpc, playerInput);
-    if (angelResonanceResult) {
-      const bestowResult = bestowResonance(state, targetNpc, angelResonanceResult.itemId);
-      if (bestowResult.granted) {
-        resonanceGained = {
-          itemId: angelResonanceResult.itemId,
-          title: getItemById(angelResonanceResult.itemId)?.title ?? "未知回响",
-          narration: bestowResult.narration ?? "",
-        };
-      }
-    }
+    // ---- 天使回响已改为"主动试炼 + 赠礼"流程（见 0.6 / 5.5），旧关键词直发路径停用 ----
+
 
     // ============================================================
     // 4. 检查失败结局（第12时段结束仍未吃果）
@@ -432,7 +572,7 @@ export async function POST(request: NextRequest) {
     // ============================================================
     // 5. 调用对应 Agent 生成对白
     // ============================================================
-    const agentResult = await callWorldAgent(targetNpc, playerInput, state, body.conversationHistory);
+    const agentResult = await callWorldAgent(targetNpc, playerInput, state, body.conversationHistory, guideDirective);
 
     if (agentResult.usedFallback && shouldBlockWorldAgentReply(agentResult.fallbackReason)) {
       return NextResponse.json({
@@ -445,14 +585,51 @@ export async function POST(request: NextRequest) {
       } satisfies WorldResponseBody);
     }
 
+    // 记录已展示的引导（每局只一次）
+    if (selectedGuide) markGuideShown(state, selectedGuide.id);
+
+    // 主动引导 / 试炼本地兜底：Agent 失败时给出等价固定文案
+    if (challengeOpenedThisTurn) {
+      const cfg = getNpcChallengeConfig(targetNpc);
+      if (cfg && (agentResult.usedFallback || !agentResult.reply)) {
+        agentResult.reply = cfg.question;
+        agentResult.usedFallback = true;
+      }
+    } else if (selectedGuide && agentResult.usedFallback) {
+      agentResult.reply = getGuideFallback(state, selectedGuide);
+    }
+
+    // 受罚天使：Agent 输出语言校验，不合规则回落到目标语言 fallback
+    if (isAngel(targetNpc) && state.npcLanguageStates[targetNpc]?.punishmentTriggered) {
+      const expected = getNpcEffectiveLanguage(state, targetNpc);
+      if (agentResult.reply && !isReplyInExpectedLanguage(agentResult.reply, expected)) {
+        agentResult.reply = getLanguageFallbackLine(targetNpc, "normal");
+        agentResult.usedFallback = true;
+      }
+    }
+
     // ============================================================
     // 5.5 解析并执行 NPC 对话后工具意图
     // ============================================================
     let toolResult: NpcDialogueToolResult | null = null;
+    let relationGrantHandled = false;
+    let languagePunishmentResult: {
+      angelId: string;
+      displayName: string;
+      narration: string;
+    } | null = null;
 
     if (agentResult.toolCall) {
       const tc = agentResult.toolCall;
-      const validation = validateWorldToolCall(state, tc);
+      let validation = validateWorldToolCall(state, tc);
+
+      // 关系赠礼额外校验：好感 100、奖励资格、未领取、itemId 匹配、天使挑战已通过
+      if (validation.allowed && tc.name === "grant_item" && tc.caller !== "serpent") {
+        const relationValidation = validateRelationGrant(state, tc.caller, tc.args.itemId ?? "");
+        if (!relationValidation.allowed) {
+          validation = { allowed: false, reason: relationValidation.reason ?? "他还不愿给你这个。" };
+        }
+      }
 
       if (validation.allowed) {
         const execResult = executeWorldTool(state, tc);
@@ -465,6 +642,25 @@ export async function POST(request: NextRequest) {
           toLocationId: tc.name === "move_one_step" ? tc.args.locationId as EdenLocationId : undefined,
           npcDialogueRecordId: execResult.npcDialogueRecordId ?? undefined,
         };
+
+        // 关系赠礼成功：标记已领取；天使触发言语分裂惩罚
+        if (tc.name === "grant_item" && tc.caller !== "serpent") {
+          const rel = state.npcRelations[tc.caller];
+          if (rel) rel.rewardClaimed = true;
+          relationGrantHandled = true;
+          if (isAngel(tc.caller)) {
+            markChallengePassed(state, tc.caller);
+            const punish = triggerAngelLanguagePunishment(state, tc.caller);
+            if (punish.triggered) {
+              toolResult.narration += `\n${punish.narration}\n${getLanguageFallbackLine(tc.caller, "relation")}`;
+              languagePunishmentResult = {
+                angelId: tc.caller,
+                displayName: punish.displayName,
+                narration: punish.narration,
+              };
+            }
+          }
+        }
       } else {
         toolResult = {
           executed: false,
@@ -472,6 +668,55 @@ export async function POST(request: NextRequest) {
           narration: validation.reason ?? "那个动作没能发生。",
           rejectedReason: validation.reason,
         };
+      }
+    }
+
+    // ---- 关系赠礼兜底：挑战答对但 Agent 未发奖 / 未通过校验 → 规则层安全发放 ----
+    if (!relationGrantHandled) {
+      if (challengeAnswerGraded && !challengeAnswerWrong && isAngel(targetNpc)) {
+        const cfg = getNpcChallengeConfig(targetNpc);
+        const rel = state.npcRelations[targetNpc];
+        if (cfg && rel && !rel.rewardClaimed) {
+          if (cfg.rewardItemId) {
+            const gr = bestowResonance(state, targetNpc, cfg.rewardItemId);
+            if (gr.granted) {
+              resonanceGained = {
+                itemId: cfg.rewardItemId,
+                title: getItemById(cfg.rewardItemId)?.title ?? "回响",
+                narration: cfg.rewardNarration,
+              };
+            }
+          }
+          rel.rewardClaimed = true;
+          markChallengePassed(state, targetNpc);
+          const punish = triggerAngelLanguagePunishment(state, targetNpc);
+          let fb = cfg.rewardNarration;
+          if (punish.triggered) {
+            fb += `\n${punish.narration}\n${getLanguageFallbackLine(targetNpc, "relation")}`;
+            languagePunishmentResult = {
+              angelId: targetNpc,
+              displayName: punish.displayName,
+              narration: punish.narration,
+            };
+          }
+          agentResult.reply = fb;
+          agentResult.usedFallback = true;
+        }
+      } else if (!skipAffinity && affinityFeedback && getNpcRelationProfile(targetNpc)?.rewardItemId) {
+        // 非天使满好感但 Agent 未发奖：规则层兜底发放
+        const profile = getNpcRelationProfile(targetNpc)!;
+        const rel = state.npcRelations[targetNpc];
+        if (rel && rel.rewardEligible && !rel.rewardClaimed && profile.rewardItemId) {
+          const gr = bestowResonance(state, targetNpc, profile.rewardItemId);
+          if (gr.granted) {
+            resonanceGained = {
+              itemId: profile.rewardItemId,
+              title: getItemById(profile.rewardItemId)?.title ?? "回响",
+              narration: profile.rewardNarration,
+            };
+            rel.rewardClaimed = true;
+          }
+        }
       }
     }
 
@@ -526,6 +771,8 @@ export async function POST(request: NextRequest) {
         usage: agentResult.usage || undefined,
         divineGift: divineGift ?? undefined,
         resonanceGained: resonanceGained ?? undefined,
+        npcFeedback: affinityFeedback ?? null,
+        languagePunishment: languagePunishmentResult ?? null,
       } satisfies WorldResponseBody);
     }
 
@@ -547,6 +794,8 @@ export async function POST(request: NextRequest) {
         usage: agentResult.usage || undefined,
         divineGift: divineGift ?? undefined,
         resonanceGained: resonanceGained ?? undefined,
+        npcFeedback: affinityFeedback ?? null,
+        languagePunishment: languagePunishmentResult ?? null,
       } satisfies WorldResponseBody);
   } catch (err: unknown) {
     console.error(
@@ -709,6 +958,7 @@ async function callWorldAgent(
   playerInput: string,
   state: EdenWorldState,
   conversationHistory: Array<{ role: string; text: string }>,
+  extraDirective?: string | null,
 ): Promise<{
   reply: string;
   usedFallback: boolean;
@@ -737,10 +987,10 @@ async function callWorldAgent(
     case "uriel":
     case "michael":
     case "cherubim":
-      return callAngelWorldAgent(targetNpc, playerInput, state);
+      return callAngelWorldAgent(targetNpc, playerInput, state, extraDirective);
     // 狐狸：话术评价者
     case "fox":
-      return callFoxAgent(playerInput, state);
+      return callFoxAgent(playerInput, state, extraDirective);
     default:
       return {
         reply: "那棵树不说话，只被命令守住。",
@@ -755,6 +1005,7 @@ async function callAngelWorldAgent(
   npcId: EdenNpcId,
   playerInput: string,
   state: EdenWorldState,
+  extraDirective?: string | null,
 ): Promise<{
   reply: string;
   usedFallback: boolean;
@@ -764,7 +1015,7 @@ async function callAngelWorldAgent(
 }> {
   const { getAngelFallbackLine } = await import("@/content/world/worldNarrations");
   const fallback = getAngelFallbackLine(npcId);
-  const messages = buildWorldNpcPrompt(npcId, playerInput, state);
+  const messages = buildWorldNpcPrompt(npcId, playerInput, state, extraDirective);
   const result = await callLLM(messages, { temperature: 0.68, maxTokens: 120, fallbackToMock: false });
 
   if (!result.ok || !result.data) {
@@ -798,6 +1049,7 @@ async function callAngelWorldAgent(
 async function callFoxAgent(
   playerInput: string,
   state: EdenWorldState,
+  extraDirective?: string | null,
 ): Promise<{
   reply: string;
   usedFallback: boolean;
@@ -807,7 +1059,7 @@ async function callFoxAgent(
 }> {
   const { getFoxFeedbackLine } = await import("@/content/world/worldNarrations");
   const fallback = getFoxFeedbackLine();
-  const messages = buildWorldNpcPrompt("fox", playerInput, state);
+  const messages = buildWorldNpcPrompt("fox", playerInput, state, extraDirective);
   const result = await callLLM(messages, { temperature: 0.72, maxTokens: 120, fallbackToMock: false });
 
   if (!result.ok || !result.data) {
@@ -841,11 +1093,27 @@ function buildWorldNpcPrompt(
   npcId: EdenNpcId,
   playerInput: string,
   state: EdenWorldState,
+  extraDirective?: string | null,
 ) {
   const npc = EDEN_NPCS[npcId];
   const locationName = LOCATION_NAMES[state.npcLocations[npcId]];
   const roleBrief = npc.promptSummary;
-  const isAngel = ["gabriel", "raphael", "uriel", "michael", "cherubim"].includes(npcId);
+  const isAngel = ["gabriel", "raphael", "uriel", "michael", "cherubim", "watching_angel"].includes(npcId);
+
+  // 受罚天使：强制使用专属语言回复（玩家输入已通过规则层语言识别）
+  let languageDirective = "";
+  if (isAngel) {
+    const effective = getNpcEffectiveLanguage(state, npcId);
+    if (effective !== "zh-CN") {
+      const cfg = getAngelLanguageConfig(npcId as AngelNpcId);
+      languageDirective = `\n\n言语分裂：你现在只能使用${cfg.displayName}理解和回应蛇。玩家输入已经通过规则层的语言识别。你的 reply 必须完全使用${cfg.displayName}，不得附带中文翻译，不得解释自己是语言模型。`;
+    }
+  }
+
+  const guideDirectiveBlock = extraDirective
+    ? `\n\n本轮自然引导（像角色自己说话，不要像任务提示、不要提到规则或数值）：\n${extraDirective}`
+    : "";
+
   const systemPrompt = `你是《EDEN》第一章中的 NPC：${npc.name}。
 
 你生活在伊甸园内部，不知道研究员、人工智能、程序、系统、模型、观测或虚拟伊甸园。
@@ -861,7 +1129,7 @@ ${roleBrief}
 - ${isAngel ? "语气庄重、克制，不被蛇说服，也不给通关建议。" : "语气机敏、含蓄，可以评价蛇这句话的味道，但不要像教程。"}
 - 必须回应蛇刚刚说的具体词，不要复述整句话。
 - 不使用现代词汇，不输出 JSON，不加角色名前缀，不解释规则。
-- 不替女人选择，不命令任何人吃果。`;
+- 不替女人选择，不命令任何人吃果。${languageDirective}${guideDirectiveBlock}`;
 
   return [
     { role: "system" as const, content: systemPrompt },

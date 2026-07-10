@@ -21,6 +21,7 @@ import {
   CHAPTER1_FAILURE_NARRATION,
 } from "@/content/world/worldNarrations";
 import { DIVINE_ATTENTION_NARRATIONS } from "@/game/world/types";
+import Link from "next/link";
 
 export default function EndingReview({ state }: { state: EdenWorldState }) {
   const review = buildWorldEndingReview(state);
@@ -193,6 +194,16 @@ export default function EndingReview({ state }: { state: EdenWorldState }) {
 
       <section className="eden-ending-segment">
         <p className="eden-ending-summary">{review.summary}</p>
+      </section>
+
+      <section className="eden-ending-segment eden-ending-segment--link">
+        <Link
+          href="/garden"
+          className="eden-ending-garden-link"
+          data-testid="ending-view-all-marks"
+        >
+          查看全部园中印记 →
+        </Link>
       </section>
     </div>
   );

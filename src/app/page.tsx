@@ -3,6 +3,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { CHAPTER0_IMAGES } from "@/game/assets";
+import LoginPanel from "@/components/world/LoginPanel";
 
 export default function HomePage() {
   return (
@@ -19,6 +20,10 @@ export default function HomePage() {
         <div className="eden-bg-overlay eden-bg-overlay--home" />
         <div className="eden-second-eden-sheen" />
         <div className="eden-boundary-glimmer" />
+      </div>
+
+      <div className="eden-home-login">
+        <LoginPanel />
       </div>
 
       <main style={{ position: "relative", zIndex: 5 }}>
@@ -43,6 +48,13 @@ export default function HomePage() {
               className="eden-btn eden-btn--primary eden-home-entry-btn"
             >
               双声试炼（娱乐模式）
+            </Link>
+            <Link
+              href="/garden"
+              className="eden-btn eden-btn--ghost eden-home-entry-btn"
+              data-testid="home-garden-entry"
+            >
+              园中印记
             </Link>
           </div>
         </section>

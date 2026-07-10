@@ -260,6 +260,47 @@ export const EDEN_ITEMS: WorldItem[] = [
     icon: "🌊",
   },
 
+  // ---- 永久情报回响（刻名石自由文本谜题奖励，passive 永久解锁属性页情报） ----
+  {
+    id: "resonance_living_names",
+    title: "万物名录",
+    description: "石痕没有替你列出答案，只让你开始看见每个生命不同的性情。",
+    obtainLocation: "adam_garden_work",
+    kind: "passive",
+    repeatable: false,
+    sourceType: "scene",
+    sourceName: "刻名石",
+    shortEffect: "在属性页解锁已见角色的精确数值、性格和相处提示。",
+    icon: "◫",
+  },
+
+  // ---- 非天使 NPC 满好感赠礼 ----
+  {
+    id: "resonance_adam_quiet_bond",
+    title: "静契之石",
+    description: "亚当刻着两人名字的石子。它不命令，只提醒你们之间有过安静的约定。",
+    obtainLocation: "adam_garden_work",
+    kind: "consumable",
+    bindTargets: ["any_npc"],
+    repeatable: false,
+    sourceType: "character",
+    sourceName: "亚当",
+    shortEffect: "使用后消耗，下一次对任意NPC的低语将更温和、更被信任。",
+    icon: "🪨",
+  },
+  {
+    id: "resonance_eve_own_voice",
+    title: "她自己的声音",
+    description: "夏娃第一次主动向你说起她真正的疑问。那声音不属于命令，只属于她自己。",
+    obtainLocation: "tree_court",
+    kind: "passive",
+    repeatable: false,
+    sourceType: "character",
+    sourceName: "夏娃",
+    shortEffect: "永久被动：夏娃开始主动暴露她最困惑的词，更容易走向自我判断。",
+    icon: "🗣️",
+  },
+
   // ---- 神明献礼（instant 类型） ----
   {
     id: "gift_sabbath_dew",

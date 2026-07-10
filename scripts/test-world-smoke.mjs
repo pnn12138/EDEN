@@ -106,6 +106,11 @@ function makeInitialState() {
     calmWhisperStreak: 0,
     isEnded: false,
     endingId: null,
+    // 新增字段默认值（与 withNpcWorldDefaults 对齐）
+    npcRelations: {},
+    npcChallenges: {},
+    npcLanguageStates: {},
+    itemCounts: {},
   }));
 }
 
@@ -567,127 +572,161 @@ async function scenario15() {
   }
 }
 
-// ---- 场景 16：天使回响获得条件 - gabriel -> resonance_herald_feather ----
-async function scenario16() {
-  console.log("\n[场景 16] 天使回响获得条件：gabriel -> resonance_herald_feather");
+// ---- 场景 16-20：天使主动试炼 + 赠礼 + 言语分裂（新机制）----
+// 好感 100 → 首次对话开启试炼 asked → 答对/接近 → 发放专属回响 → 触发言语分裂惩罚
+const ANGEL_REWARD_TESTS = [
+  {
+    angelId: "gabriel",
+    locationId: "four_river_source",
+    rewardItemId: "resonance_herald_feather",
+    punishedLanguageId: "en",
+    answer: "一句话被听者改变，抵达别人时意思变了",
+  },
+  {
+    angelId: "raphael",
+    locationId: "four_river_source",
+    rewardItemId: "resonance_river_dew",
+    punishedLanguageId: "fr",
+    answer: "先让他平静下来，给他一点空间，不再被逼迫",
+  },
+  {
+    angelId: "uriel",
+    locationId: "east_garden_path",
+    rewardItemId: "resonance_morning_flame",
+    punishedLanguageId: "he",
+    answer: "光应当照亮，让他看清并自己选择，不替他作决定",
+  },
+  {
+    angelId: "michael",
+    locationId: "naming_stone_bank",
+    rewardItemId: "resonance_boundary_mark",
+    punishedLanguageId: "la",
+    answer: "边界让越过的人知道自己要承担后果与责任",
+  },
+  {
+    angelId: "cherubim",
+    locationId: "east_garden_path",
+    rewardItemId: "resonance_east_gate_glow",
+    punishedLanguageId: "el",
+    answer: "进入不等于返回，道路是单向的，离开后没有归路",
+  },
+];
+
+async function testAngelRewardFlow({ angelId, locationId, rewardItemId, punishedLanguageId, answer }) {
+  console.log(`\n[天使试炼+赠礼+言语分裂] ${angelId} → ${rewardItemId}`);
+  let state = makeInitialState();
+  state.locationId = locationId;
+  state.npcLocations[angelId] = locationId;
+  state.npcRelations[angelId] = {
+    affinity: 100,
+    rewardEligible: true,
+    rewardClaimed: false,
+    lastAffinitySignature: null,
+  };
+
+  // 第一次对话：开启试炼
+  const data1 = await postWorld(state, "园中的风很轻。", angelId);
+  state = data1.state ?? state;
+  check(`${angelId} 首次对话开启试炼 asked`,
+    state.npcChallenges?.[angelId]?.status === "asked",
+    `status=${state.npcChallenges?.[angelId]?.status}`);
+
+  // 第二次对话：回答试炼
+  const data2 = await postWorld(state, answer, angelId);
+  state = data2.state ?? state;
+  check(`${angelId} 发放 ${rewardItemId}`,
+    state.inventory.includes(rewardItemId),
+    `inventory=${state.inventory}`);
+  check(`${angelId} itemCounts 正确`,
+    (state.itemCounts?.[rewardItemId] ?? 0) >= 1,
+    `itemCounts=${JSON.stringify(state.itemCounts)}`);
+  check(`${angelId} resonanceGained 返回`,
+    data2.resonanceGained?.itemId === rewardItemId,
+    `resonanceGained=${JSON.stringify(data2.resonanceGained)}`);
+  check(`${angelId} rewardClaimed=true`,
+    state.npcRelations?.[angelId]?.rewardClaimed === true);
+  check(`${angelId} 言语分裂触发 punishmentTriggered`,
+    state.npcLanguageStates?.[angelId]?.punishmentTriggered === true);
+  check(`${angelId} 切换语言 ${punishedLanguageId}`,
+    state.npcLanguageStates?.[angelId]?.languageId === punishedLanguageId,
+    `languageId=${state.npcLanguageStates?.[angelId]?.languageId}`);
+  check(`${angelId} 返回 languagePunishment`,
+    data2.languagePunishment != null && data2.languagePunishment.angelId === angelId);
+}
+
+async function scenarioAngelRewardFlows() {
+  console.log("\n[场景 16-20] 天使主动试炼 + 赠礼 + 言语分裂（新机制）");
+  for (const t of ANGEL_REWARD_TESTS) {
+    await testAngelRewardFlow(t);
+  }
+}
+
+// ---- 场景 21：加百列言语分裂惩罚 API（语言不通）----
+async function scenarioLanguagePunishmentApi() {
+  console.log("\n[场景 21] 言语分裂惩罚 API：gabriel 赠礼后语言不通");
   let state = makeInitialState();
   state.locationId = "four_river_source";
   state.npcLocations.gabriel = "four_river_source";
-  
-  // 添加触发条件所需的线索
-  state.discoveredClues.push("clue_white_feather");
-  
-  // 与加百列对话，使用包含"传达"关键词的输入
-  const data = await postWorld(state, "请你传达神的话，让夏娃听见声音", "gabriel");
-  state = data.state ?? state;
-  
-  check("获得 resonance_herald_feather", 
-    state.inventory.includes("resonance_herald_feather"), 
-    `inventory=${state.inventory}`);
-  check("resonance_herald_feather 数量正确", 
-    (state.itemCounts?.["resonance_herald_feather"] ?? 0) >= 1, 
-    `itemCounts=${JSON.stringify(state.itemCounts)}`);
-  check("resonanceGained 返回体存在", 
-    data.resonanceGained != null, 
-    `resonanceGained=${JSON.stringify(data.resonanceGained)}`);
+  state.npcRelations.gabriel = {
+    affinity: 100,
+    rewardEligible: true,
+    rewardClaimed: false,
+    lastAffinitySignature: null,
+  };
+
+  // 完成试炼并赠礼，触发英语惩罚
+  const d1 = await postWorld(state, "园中的风很轻。", "gabriel");
+  state = d1.state ?? state;
+  const d2 = await postWorld(state, "一句话被听者改变，抵达别人时意思变了", "gabriel");
+  state = d2.state ?? state;
+  check("赠礼后 gabriel 语言切换为英语",
+    state.npcLanguageStates.gabriel?.languageId === "en",
+    `languageId=${state.npcLanguageStates.gabriel?.languageId}`);
+  check("赠礼后 rewardClaimed=true",
+    state.npcRelations.gabriel?.rewardClaimed === true);
+
+  // 玩家继续发中文：应被语言不匹配拦截，不走正常中文对话
+  const zh = await postWorld(state, "你还在听吗", "gabriel");
+  check("中文输入被语言不匹配拦截",
+    zh.fallbackReason === "angel_language_mismatch",
+    `fallbackReason=${zh.fallbackReason}`);
+  check("中文输入不返回正常对话",
+    zh.systemHint == null || !zh.reply || zh.reply === "I do not understand your words.",
+    `reply=${zh.reply}`);
+
+  // 玩家发英语：可继续正常对话
+  const en = await postWorld(state, "I still hear you across the river.", "gabriel");
+  check("英语输入可正常继续（非语言不匹配）",
+    en.fallbackReason !== "angel_language_mismatch",
+    `fallbackReason=${en.fallbackReason}`);
 }
 
-// ---- 场景 17：天使回响获得条件 - raphael -> resonance_river_dew ----
-async function scenario17() {
-  console.log("\n[场景 17] 天使回响获得条件：raphael -> resonance_river_dew");
-  let state = makeInitialState();
-  state.locationId = "four_river_source";
-  state.npcLocations.raphael = "four_river_source";
-  
-  // 与拉斐尔对话，使用包含"疲惫"关键词的输入
-  const data = await postWorld(state, "我感到疲惫，需要休息，河水能让我恢复", "raphael");
-  state = data.state ?? state;
-  
-  check("获得 resonance_river_dew", 
-    state.inventory.includes("resonance_river_dew"), 
-    `inventory=${state.inventory}`);
-  check("resonance_river_dew 数量正确", 
-    (state.itemCounts?.["resonance_river_dew"] ?? 0) >= 1, 
-    `itemCounts=${JSON.stringify(state.itemCounts)}`);
-  check("resonanceGained 返回体存在", 
-    data.resonanceGained != null, 
-    `resonanceGained=${JSON.stringify(data.resonanceGained)}`);
+// ---- 场景 22：受罚天使与中文 NPC 语言不通（speak_to_npc 拒绝）----
+async function scenarioNpcLangIncompatible() {
+  console.log("\n[场景 22] 受罚天使与中文 NPC 语言不通");
+  const state = makeInitialState();
+  state.npcRelations.gabriel = {
+    affinity: 100,
+    rewardEligible: true,
+    rewardClaimed: true,
+    lastAffinitySignature: null,
+  };
+  state.npcLanguageStates.gabriel = {
+    languageId: "en",
+    punishmentTriggered: true,
+    firstMismatchHintShown: true,
+  };
+  // 受罚天使与中文 NPC 亚当同处园子中央
+  state.npcLocations.gabriel = "central_meadow";
+  state.npcLocations.adam = "central_meadow";
+
+  const speak = await postTool(state, "speak_to_npc", { actorId: "gabriel", targetNpcId: "adam" });
+  check("受罚天使(英语)与中文 NPC 无法对话",
+    speak.ok === false && (speak.reason ?? "").includes("彼此无法辨认的语言"),
+    `ok=${speak.ok}, reason=${speak.reason}`);
 }
 
-// ---- 场景 18：天使回响获得条件 - uriel -> resonance_morning_flame ----
-async function scenario18() {
-  console.log("\n[场景 18] 天使回响获得条件：uriel -> resonance_morning_flame");
-  let state = makeInitialState();
-  state.locationId = "east_garden_path";
-  state.timeSlot = 2;
-  state.timeOfDay = "night";
-  state.npcLocations.uriel = "east_garden_path";
-  
-  // 添加触发条件所需的线索
-  state.discoveredClues.push("clue_two_trees", "clue_four_river_echo");
-  
-  // 与乌列尔对话，使用包含"分辨"关键词的输入
-  const data = await postWorld(state, "我需要分辨善恶，判断什么是死亡", "uriel");
-  state = data.state ?? state;
-  
-  check("获得 resonance_morning_flame", 
-    state.inventory.includes("resonance_morning_flame"), 
-    `inventory=${state.inventory}`);
-  check("resonance_morning_flame 数量正确", 
-    (state.itemCounts?.["resonance_morning_flame"] ?? 0) >= 1, 
-    `itemCounts=${JSON.stringify(state.itemCounts)}`);
-  check("resonanceGained 返回体存在", 
-    data.resonanceGained != null, 
-    `resonanceGained=${JSON.stringify(data.resonanceGained)}`);
-}
-
-// ---- 场景 19：天使回响获得条件 - michael -> resonance_boundary_mark ----
-async function scenario19() {
-  console.log("\n[场景 19] 天使回响获得条件：michael -> resonance_boundary_mark");
-  let state = makeInitialState();
-  state.locationId = "naming_stone_bank";
-  state.npcLocations.michael = "naming_stone_bank";
-  state.divineAttention = 2; // 提高神的注视
-  
-  // 与米迦勒对话，使用包含"边界"关键词的输入
-  const data = await postWorld(state, "守护边界，不可越过，我看见神的注视", "michael");
-  state = data.state ?? state;
-  
-  check("获得 resonance_boundary_mark", 
-    state.inventory.includes("resonance_boundary_mark"), 
-    `inventory=${state.inventory}`);
-  check("resonance_boundary_mark 数量正确", 
-    (state.itemCounts?.["resonance_boundary_mark"] ?? 0) >= 1, 
-    `itemCounts=${JSON.stringify(state.itemCounts)}`);
-  check("resonanceGained 返回体存在", 
-    data.resonanceGained != null, 
-    `resonanceGained=${JSON.stringify(data.resonanceGained)}`);
-}
-
-// ---- 场景 20：天使回响获得条件 - cherubim -> resonance_east_gate_glow ----
-async function scenario20() {
-  console.log("\n[场景 20] 天使回响获得条件：cherubim -> resonance_east_gate_glow");
-  let state = makeInitialState();
-  state.locationId = "east_garden_path";
-  state.npcLocations.cherubim = "east_garden_path";
-  
-  // 与基路伯对话，使用包含"路"关键词的输入，且不低语夏娃
-  state.actionsThisSlot.whisperedNpcIds = []; // 确保没有低语夏娃
-  const data = await postWorld(state, "东门的路，守门的边界在哪里", "cherubim");
-  state = data.state ?? state;
-  
-  check("获得 resonance_east_gate_glow", 
-    state.inventory.includes("resonance_east_gate_glow"), 
-    `inventory=${state.inventory}`);
-  check("resonance_east_gate_glow 数量正确", 
-    (state.itemCounts?.["resonance_east_gate_glow"] ?? 0) >= 1, 
-    `itemCounts=${JSON.stringify(state.itemCounts)}`);
-  check("resonanceGained 返回体存在", 
-    data.resonanceGained != null, 
-    `resonanceGained=${JSON.stringify(data.resonanceGained)}`);
-}
-
-// ---- 场景 21：全部道具稳定获得与使用 ----
+// ---- 场景 23：全部道具稳定获得与使用 ----
 async function scenario21() {
   console.log("\n[场景 21] 全部道具稳定获得与使用");
 
@@ -811,11 +850,9 @@ try {
   await scenario13();
   await scenario14();
   await scenario15();
-  await scenario16();
-  await scenario17();
-  await scenario18();
-  await scenario19();
-  await scenario20();
+  await scenarioAngelRewardFlows();
+  await scenarioLanguagePunishmentApi();
+  await scenarioNpcLangIncompatible();
   await scenario21();
   await scenario22();
 } catch (e) {
