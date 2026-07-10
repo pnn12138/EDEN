@@ -1,0 +1,29 @@
+# CNB 仅预览模式部署配置
+# 通过 cnb.cool 云原生开发的「仅预览模式」运行 Next.js 全栈应用
+# 服务必须监听 8686 端口（CNB 仅预览模式要求）
+# 包含 /api/* 服务端路由，使用 Node 运行时，不做静态导出
+
+$:
+  vscode:
+    - docker:
+        image: node:20
+        volumes:
+          - /root/.npm:copy-on-write
+      services:
+        - name: vscode
+          options:
+            onlyPreview: true
+            launch: npx next start -p 8686
+            keepAliveTimeout: 24h
+            daemon: true
+      env:
+        NODE_ENV: production
+        PORT: "8686"
+        LLM_PROVIDER: volcengine
+        VOLCENGINE_BASE_URL: https://ark.cn-beijing.volces.com/api/plan/v3
+        VOLCENGINE_MODEL: ark-code-latest
+        # VOLCENGINE_API_KEY 为敏感信息，请在 CNB 项目设置 → 密钥变量中配置
+        # 未配置时应用使用 Mock 兜底，NPC 对话返回固定回复
+      stages:
+        - npm install
+        - npm run build
