@@ -57,14 +57,10 @@ export const CHAPTER1_IMAGES = {
   treeCourt: "/assets/chapter1/images/location_tree_court_final.png",
   eastGardenPath: "/assets/chapter1/images/location_east_garden_path_final.png",
   namingStoneBank: "/assets/chapter1/images/location_naming_stone_bank_final.png",
-  // 守望天使透明立绘（1254x1254 RGBA），仅作为东园幽径远影 / 守卫 presence
-  watchingAngelSprite: "/assets/chapter1/images/npc_watching_angel_builtin_candidate.png",
-  // 五位天使独立透明立绘（2026-06-22 生成，替代同图滤镜方案）
+  // 三位天使独立透明立绘（v3.0：加百列 / 米迦勒 / 路西法）
   gabrielSprite: "/assets/chapter1/images/npc_gabriel_sprite.png",
-  raphaelSprite: "/assets/chapter1/images/npc_raphael_sprite.png",
-  urielSprite: "/assets/chapter1/images/npc_uriel_sprite.png",
   michaelSprite: "/assets/chapter1/images/npc_michael_sprite.png",
-  cherubimSprite: "/assets/chapter1/images/npc_cherubim_sprite.png",
+  luciferSprite: "/assets/chapter1/images/npc_lucifer_sprite.png",
   // 圆润版刺猬透明立绘（1254x1254 RGBA），第一章万物受名处专用
   hedgehogRoundedSprite: "/assets/chapter1/images/npc_hedgehog_rounded_final.png",
   // 夜景背景（2026-06-22 Codex 生成）
@@ -101,5 +97,17 @@ export const CHAPTER1_AUDIO = {
   approachTreeLowRise: "/assets/chapter1/audio/approach_tree_low_rise.mp3",
   // 触果前紧张音
   touchFruitTension: "/assets/chapter1/audio/touch_fruit_tension.mp3",
+  // 结局：成功（夏娃吃下果子）
+  endingSuccess: "/assets/chapter1/audio/ending_success.mp3",
+  // 结局：失败（神降临）
+  endingFailure: "/assets/chapter1/audio/ending_failure.mp3",
+  // 神明献礼：光落
+  divineGiftLight: "/assets/chapter1/audio/divine_gift_light.mp3",
+  // 获得回响（天使回响）
+  resonanceGain: "/assets/chapter1/audio/resonance_gain.mp3",
+  // 解锁园中印记
+  markUnlock: "/assets/chapter1/audio/mark_unlock.mp3",
+  // 昼夜切换
+  dayNightShift: "/assets/chapter1/audio/day_night_shift.mp3",
   // godWalksInGarden 复用 Chapter0 godArrives，无需新增
 } as const;

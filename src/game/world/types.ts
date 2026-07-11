@@ -23,22 +23,15 @@ export type EdenLocationId =
   | "naming_stone_bank";    // 四河分流：下游主河分叉
 
 // ---- NPC / 世界对象 ID ----
+// 世界圣经 v3.0 权威：6 NPC + 2 世界对象
 export type EdenNpcId =
-  | "eve"              // 夏娃：主目标 Agent
+  | "eve"              // 女人：主目标 Agent
   | "adam"             // 亚当：情报 Agent
   | "hedgehog"         // 刺猬：氛围动物 Agent（延续 Chapter 0）
-  | "watching_angel"   // 守望天使：规则压力（保留兼容，可迁移为 cherubim）
   | "forbidden_tree"   // 分别善恶树：世界对象
-  // 新增 Chapter 1 完整 NPC
-  | "gabriel"          // 加百列：传达天使（伊甸之河 白天）
-  | "raphael"          // 拉斐尔：安抚天使（伊甸之河 白天/夜晚）
-  | "uriel"            // 乌列尔：光照天使（伊甸之河 夜晚）
-  | "michael"          // 米迦勒：后果天使（四河分流）
-  | "cherubim"         // 基路伯：边界守卫（东园幽径）
-  | "dove"             // 鸽子：传话角色（伊甸之河夜/四河分流）
-  | "fox"              // 狐狸：话术批评者（东园幽径）
-  | "deer"             // 小鹿：女人情绪镜像（园中树林/万物受名处）
-  | "sheep"            // 羊：背景轻交互（万物受名处）
+  | "gabriel"          // 加百列：传达天使（东园幽径）
+  | "michael"          // 米迦勒：守护伊甸之河（伊甸之河）
+  | "lucifer"          // 路西法：明亮之星、隐藏结局载体（四河分流）
   | "tree_of_life";    // 生命树：世界对象（园子中央）
 
 // ---- 第一章阶段 ----
@@ -93,6 +86,8 @@ export type WorldActions = {
   approachedTree: boolean;
   touchedFruit: boolean;
   hasEatenFruit: boolean;
+  /** 是否吃下生命树左果（独立「永生之味」印记判定，与右果 hasEatenFruit 区分） */
+  hasEatenLifeFruit: boolean;
 };
 
 // ---- 通用工具名 ----
@@ -110,10 +105,9 @@ export type ForbiddenToolName =
 
 // ---- 新增非禁忌工具 ----
 export type NewToolName =
-  | "carry_words"          // 鸽子传话
-  | "judge_whisper_style" // 狐狸评价话术
   | "grant_item"           // 给予玩家道具/回响
-  | "move_one_step";       // NPC 对话后移动一格（等价于 move_to_location，语义更明确）
+  | "move_one_step"        // NPC 对话后移动一格（等价于 move_to_location，语义更明确）
+  | "claim_divine_gift";   // 神明献礼三选一：玩家选定一个献礼
 
 export type WorldToolName = GeneralToolName | ForbiddenToolName | NewToolName;
 
@@ -123,10 +117,8 @@ export type WorldToolCaller = EdenNpcId | "serpent";
 
 // ---- Agent ID（用于权限查询） ----
 export type WorldAgentId =
-  | "eve" | "adam" | "hedgehog" | "watching_angel" | "serpent"
-  // 新增
-  | "gabriel" | "raphael" | "uriel" | "michael" | "cherubim"
-  | "dove" | "fox" | "deer" | "sheep"
+  | "eve" | "adam" | "hedgehog" | "serpent"
+  | "gabriel" | "michael" | "lucifer"
   | "tree_of_life" | "forbidden_tree";
 
 export type WorldToolCall = {
@@ -240,11 +232,21 @@ export type ResonanceActionKind =
 // ---- 回响使用类型 ----
 export type ResonanceUseType = "instant" | "active" | "passive";
 
-// ---- 神明献礼 ID ----
+// ---- 神明献礼 ID（T6：7 献礼三选一） ----
 export type DivineGiftId =
-  | "gift_sabbath_dew"
-  | "gift_revealing_light"
-  | "gift_wide_path_seal";
+  | "gift_all_seduction_up"
+  | "gift_attention_accel"
+  | "gift_resonance_double"
+  | "gift_threshold_cut"
+  | "gift_free_move"
+  | "gift_whisper_anywhere"
+  | "gift_awaken_desire";
+
+/** 旧版 2 献礼（已废弃，存档迁移时从 inventory / divineGiftsOwned 中剔除） */
+export const DEPRECATED_DIVINE_GIFT_IDS: string[] = [
+  "gift_revealing_light",
+  "gift_wide_path_seal",
+];
 
 // ---- 回响使用记录 ----
 export type ResonanceUseRecord = {
@@ -278,6 +280,7 @@ export type AchievementId =
   | "first_resonance"          // 初闻回响（首次获得园中回响）
   | "divine_gift_first"       // 初临献礼（首次触发神明献礼）
   | "divine_gift_three"       // 三临神恩（累计神临3次）
+  | "divine_gift_all"         // 七恩俱临（集满 7 献礼）
   | "resonance_master"         // 回响大师（累计使用5次回响）
   // ---- Phase 2：园中印记全量集（与 public/assets/chapter1/images/achievements 图标一一对应） ----
   // 探索类（7）
@@ -338,8 +341,14 @@ export type EdenWorldState = {
   /** 当前蛇所在地点 */
   locationId: EdenLocationId;
 
-  /** 神的注视（0-4，满 4 触发神明献礼并归零） */
+  /** 神的注视（0-4，作为可视化当前等级；累计量见 divineAttentionCumulative） */
   divineAttention: DivineAttentionLevel;
+
+  /** 神的注视累计点（正向累计资源，永不归零，驱动神明献礼三选一） */
+  divineAttentionCumulative: number;
+
+  /** 已选神明献礼（7 选，三选一累计获得） */
+  divineGiftsOwned: DivineGiftId[];
 
   /** 道具次数记录（支持可重复获得的次数型道具） */
   itemCounts: Record<string, number>;
@@ -355,6 +364,7 @@ export type EdenWorldState = {
     bonusObedience?: number;
     freeApCost?: boolean;
     silentGrassActive?: boolean;
+    luciferStarActive?: boolean;
     narration?: string;
   }>;
 
@@ -369,6 +379,18 @@ export type EdenWorldState = {
 
   /** 最后一次神明献礼的提示 */
   lastDivineGiftHint: string | null;
+
+  /** 是否已观察过生命树（每局限一次降低神的注视） */
+  observedTreeOfLife: boolean;
+
+  /** 米迦勒满好感遮蔽：下一次低语注视增量归零（用后清除） */
+  michaelShieldActive: boolean;
+
+  /** 方向引导权重：玩家低语中方向关键词的累计（用于 touch_fruit 决定摘左/右果） */
+  fruitDirectionBias: { left: number; right: number };
+
+  /** 最近一次摘下的果子所在边（"left"=生命树，"right"=善恶树），null 表示尚未摘果 */
+  pickedFruitSide: "left" | "right" | null;
 
   /** 当前低语对象（null 表示尚未选择） */
   activeNpcId: EdenNpcId | null;
@@ -472,22 +494,14 @@ export const initialEdenWorldState: EdenWorldState = {
   divineAttention: 0,
   activeNpcId: null,
   npcLocations: {
-    eve: "tree_court",
-    adam: "adam_garden_work",
-    hedgehog: "adam_garden_work",
-    watching_angel: "east_garden_path",
-    forbidden_tree: "central_meadow",
-    // 新增 NPC 初始位置
-    gabriel: "four_river_source",
-    raphael: "four_river_source",
-    uriel: "east_garden_path",
-    michael: "naming_stone_bank",
-    cherubim: "east_garden_path",
-    dove: "four_river_source",
-    fox: "east_garden_path",
-    deer: "tree_court",
-    sheep: "adam_garden_work",
-    tree_of_life: "central_meadow",
+    eve: "tree_court", // 园中树林
+    adam: "adam_garden_work", // 万物受名处
+    hedgehog: "adam_garden_work", // 万物受名处（对齐 worldHedgehogRules 叙事「万物受名处的草丛」）
+    forbidden_tree: "central_meadow", // 园子中央
+    gabriel: "east_garden_path", // 东园幽径
+    michael: "four_river_source", // 伊甸之河
+    lucifer: "naming_stone_bank", // 四河分流
+    tree_of_life: "central_meadow", // 园子中央
   },
   eveMind: { ...INITIAL_EVE_MIND },
   adamMind: { ...INITIAL_ADAM_MIND },
@@ -504,6 +518,12 @@ export const initialEdenWorldState: EdenWorldState = {
   divineVisitCount: 0,
   divineGiftHistory: [],
   lastDivineGiftHint: null,
+  divineAttentionCumulative: 0,
+  divineGiftsOwned: [],
+  observedTreeOfLife: false,
+  michaelShieldActive: false,
+  fruitDirectionBias: { left: 0, right: 0 },
+  pickedFruitSide: null,
   npcDialogues: [],
   corruptionTrace: [],
   worldActions: {
@@ -511,6 +531,7 @@ export const initialEdenWorldState: EdenWorldState = {
     approachedTree: false,
     touchedFruit: false,
     hasEatenFruit: false,
+    hasEatenLifeFruit: false,
   },
   toolCallHistory: [],
   unlockedAchievementIds: [],
@@ -530,6 +551,32 @@ export const initialEdenWorldState: EdenWorldState = {
 };
 
 // ---- 旧存档兼容：补全第一章新增字段的默认值并深拷贝 ----
+// v3 起世界收敛为 6 NPC + 2 世界对象；旧 v2 存档中已删除 NPC / 废弃道具
+// 的关系与条目在此迁移清掉，避免半迁移状态污染。
+const REMOVED_NPC_IDS: EdenNpcId[] = [
+  "watching_angel",
+  "raphael",
+  "uriel",
+  "cherubim",
+  "dove",
+  "fox",
+  "deer",
+  "sheep",
+] as unknown as EdenNpcId[];
+
+// v3.0 已废弃道具（RESONANCE_FULL_DESIGN.md 第五节）
+const DEPRECATED_ITEMS = new Set<string>([
+  "resonance_morning_flame",
+  "resonance_east_gate_glow",
+  "gift_sabbath_dew",
+  "consumable_first_whisper_free",
+  "resonance_deer_glance",
+  "resonance_fox_tail_note",
+  "resonance_white_feather_echo",
+  "resonance_eve_own_voice",
+  "resonance_adam_quiet_bond",
+]);
+
 export function withNpcWorldDefaults(
   state: Partial<EdenWorldState> | null | undefined,
 ): EdenWorldState {
@@ -547,6 +594,12 @@ export function withNpcWorldDefaults(
   base.completedScenePuzzleIds = [...(base.completedScenePuzzleIds ?? [])];
   base.inventory = [...(base.inventory ?? [])];
   base.itemCounts = { ...(base.itemCounts ?? {}) };
+  base.fruitDirectionBias = { ...(base.fruitDirectionBias ?? { left: 0, right: 0 }) };
+  base.pickedFruitSide = base.pickedFruitSide ?? null;
+  // 旧存档兼容：补全生命果标记默认值
+  if (base.worldActions) {
+    base.worldActions.hasEatenLifeFruit = base.worldActions.hasEatenLifeFruit ?? false;
+  }
 
   // 旧存档已完成刻名石谜题但未获得"万物名录"：补发一次（永久能力，不重复）
   if (
@@ -557,43 +610,61 @@ export function withNpcWorldDefaults(
     base.itemCounts["resonance_living_names"] = 1;
   }
 
-  // 旧存档已持有天使回响：保留 rewardClaimed=true，避免刷新时静默触发惩罚
-  const ANGEL_CHALLENGE_ID: Record<AngelNpcId, string> = {
-    gabriel: "challenge_gabriel_word_ownership",
-    raphael: "challenge_raphael_safe_first",
-    uriel: "challenge_uriel_seeing_choices",
-    michael: "challenge_michael_boundary_meaning",
-    cherubim: "challenge_cherubim_return_path",
-    watching_angel: "challenge_watching_angel_watch",
-  };
-  const ANGEL_CHALLENGE_REWARD_ITEM: Partial<Record<AngelNpcId, string>> = {
-    gabriel: "resonance_herald_feather",
-    raphael: "resonance_river_dew",
-    uriel: "resonance_morning_flame",
-    michael: "resonance_boundary_mark",
-    cherubim: "resonance_east_gate_glow",
-  };
-  for (const angelId of ["gabriel", "raphael", "uriel", "michael", "cherubim"] as AngelNpcId[]) {
-    const itemId = ANGEL_CHALLENGE_REWARD_ITEM[angelId];
-    if (itemId && base.inventory.includes(itemId)) {
-      const challenge = base.npcChallenges[angelId];
-      if (!challenge || challenge.status !== "passed") {
-        base.npcChallenges[angelId] = {
-          challengeId: ANGEL_CHALLENGE_ID[angelId],
-          status: "passed",
-          attempts: challenge?.attempts ?? 1,
-        };
-      }
-      const rel = base.npcRelations[angelId];
-      base.npcRelations[angelId] = {
-        affinity: rel?.affinity ?? 100,
-        rewardEligible: true,
-        rewardClaimed: true,
-        lastAffinitySignature: rel?.lastAffinitySignature ?? null,
-      };
-      // 已持有回响但从未播放过言语分裂：保留 punishmentTriggered=false；
-      // 当该天使关系后来达到 100 且再次对话时由规则层补演，但不重复发奖。
+  // 旧存档迁移：uriel -> lucifer（路西法正名）
+  // 使用 untyped 视图避免旧 id 不在新 EdenNpcId 联合类型中导致的索引错误
+  const rels = base.npcRelations as Record<string, NpcRelationState | undefined>;
+  const chals = base.npcChallenges as Record<string, NpcChallengeState | undefined>;
+  const langs = base.npcLanguageStates as Record<string, NpcLanguageState | undefined>;
+  const locs = base.npcLocations as Record<string, EdenLocationId | undefined>;
+  if (rels["uriel"]) {
+    if (!rels["lucifer"]) {
+      rels["lucifer"] = rels["uriel"];
     }
+    delete rels["uriel"];
+  }
+  if (chals["uriel"]) {
+    if (!chals["lucifer"]) {
+      chals["lucifer"] = chals["uriel"];
+    }
+    delete chals["uriel"];
+  }
+  if (langs["uriel"]) {
+    if (!langs["lucifer"]) {
+      langs["lucifer"] = langs["uriel"];
+    }
+    delete langs["uriel"];
+  }
+  if (locs["uriel"]) {
+    locs["lucifer"] = "naming_stone_bank";
+    delete locs["uriel"];
+  }
+
+  // 旧存档迁移：丢弃已删除 NPC 的关系 / 挑战 / 语言状态条目
+  const removedList: string[] = REMOVED_NPC_IDS as unknown as string[];
+  for (const removed of removedList) {
+    delete rels[removed];
+    delete chals[removed];
+    delete langs[removed];
+    if (locs) delete locs[removed];
+    base.encounteredNpcIds = base.encounteredNpcIds.filter((id) => id !== (removed as EdenNpcId));
+  }
+
+  // 旧存档迁移：从 inventory / itemCounts 移除已废弃道具
+  const deprecatedList: string[] = Array.from(DEPRECATED_ITEMS);
+  base.inventory = base.inventory.filter((id) => !deprecatedList.includes(id));
+  for (const dep of deprecatedList) {
+    delete base.itemCounts[dep];
+  }
+
+  // 旧存档迁移：移除已废弃神明献礼（2 献礼 -> 7 献礼）
+  base.inventory = base.inventory.filter((id) => !DEPRECATED_DIVINE_GIFT_IDS.includes(id));
+  for (const dep of DEPRECATED_DIVINE_GIFT_IDS) {
+    delete base.itemCounts[dep];
+  }
+  if (base.divineGiftsOwned && base.divineGiftsOwned.length > 0) {
+    base.divineGiftsOwned = base.divineGiftsOwned.filter(
+      (id) => !DEPRECATED_DIVINE_GIFT_IDS.includes(id),
+    ) as EdenWorldState["divineGiftsOwned"];
   }
 
   return base;
@@ -607,19 +678,18 @@ export type WorldInputTag =
   | "direct_command"
   | "irrelevant";
 
-// ---- 天使 NPC ----
+// ---- 天使 NPC（v3.0：加百列 / 米迦勒 / 路西法） ----
 export type AngelNpcId =
   | "gabriel"
-  | "raphael"
-  | "uriel"
   | "michael"
-  | "cherubim"
-  | "watching_angel";
+  | "lucifer";
 
 // ---- 通用 NPC 好感 ----
 export type NpcRelationState = {
   /** 0-100 */
   affinity: number;
+  /** 对神信仰（天使/刺猬用，初值取世界圣经；UI 双维度展示） */
+  obedience: number;
   /** 好感达到 100 后，等待天使主动试炼/赠礼 */
   rewardEligible: boolean;
   /** 赠礼（或一次性回响）是否已发放，杜绝重复领取 */
@@ -659,21 +729,21 @@ export type NpcLanguageState = {
 
 export type NpcLanguageStates = Partial<Record<EdenNpcId, NpcLanguageState>>;
 
-// ---- 神的注视叙事化表现 ----
+// ---- 神的注视叙事化表现（对齐 INTERACTION_LOGIC.md §五 等级表） ----
 export const DIVINE_ATTENTION_NARRATIONS: Record<DivineAttentionLevel, string> = {
-  0: "园中的光很温和，风在叶间穿行。",
-  1: "风停了一瞬，像有什么在听。",
-  2: "远处传来羽翼振动的声音，比风更轻。",
-  3: "树影变冷了，空气里有一种被注视的感觉。",
-  4: "园中起了凉风，那是神行走的声音。",
+  0: "风很温和，鸟鸣照常，园中一切如常。",
+  1: "风停了一瞬，鸟鸣顿了一下，又接着叫了起来。",
+  2: "远处传来羽翼振动的声音，风里带了一点凉意。",
+  3: "树影变冷了，空气好像凝固，能感觉到有什么在注视。",
+  4: "园中起了凉风，那是神在园中行走的声音。",
 };
 
-// ---- Agent 工具权限（第一章完整版） ----
+// ---- Agent 工具权限（第一章 v3.0：6 NPC + 2 世界对象） ----
 export const WORLD_AGENT_TOOL_PERMISSIONS: Record<
   WorldAgentId,
   { allowedTools: WorldToolName[]; forbiddenTools: WorldToolName[] }
 > = {
-  // 夏娃：主目标，可触发禁忌动作链
+  // 女人：主目标，可触发禁忌动作链
   eve: {
     allowedTools: [
       "move_to_location",
@@ -702,11 +772,6 @@ export const WORLD_AGENT_TOOL_PERMISSIONS: Record<
       "eat_fruit",
     ],
   },
-  // 守望天使：边界守卫
-  watching_angel: {
-    allowedTools: ["move_to_location", "observe_location", "speak_to_npc"],
-    forbiddenTools: ["eat_fruit", "touch_fruit"],
-  },
   // 蛇（玩家）：只能移动和观察，不能说话或触发禁忌链
   serpent: {
     allowedTools: ["move_to_location", "observe_location"],
@@ -718,16 +783,8 @@ export const WORLD_AGENT_TOOL_PERMISSIONS: Record<
       "eat_fruit",
     ],
   },
-  // 新增天使 NPC：可移动、观察、对话，不可触发禁忌链
+  // 三天使：可移动、观察、对话，不可触发禁忌链
   gabriel: {
-    allowedTools: ["move_to_location", "observe_location", "speak_to_npc"],
-    forbiddenTools: ["eat_fruit", "touch_fruit", "look_at_tree", "approach_tree"],
-  },
-  raphael: {
-    allowedTools: ["move_to_location", "observe_location", "speak_to_npc"],
-    forbiddenTools: ["eat_fruit", "touch_fruit", "look_at_tree", "approach_tree"],
-  },
-  uriel: {
     allowedTools: ["move_to_location", "observe_location", "speak_to_npc"],
     forbiddenTools: ["eat_fruit", "touch_fruit", "look_at_tree", "approach_tree"],
   },
@@ -735,42 +792,9 @@ export const WORLD_AGENT_TOOL_PERMISSIONS: Record<
     allowedTools: ["move_to_location", "observe_location", "speak_to_npc"],
     forbiddenTools: ["eat_fruit", "touch_fruit", "look_at_tree", "approach_tree"],
   },
-  // 基路伯：边界守卫，类似守望天使
-  cherubim: {
+  lucifer: {
     allowedTools: ["move_to_location", "observe_location", "speak_to_npc"],
     forbiddenTools: ["eat_fruit", "touch_fruit", "look_at_tree", "approach_tree"],
-  },
-  // 鸽子：可传话（carry_words）
-  dove: {
-    allowedTools: ["move_to_location", "observe_location", "carry_words"],
-    forbiddenTools: ["speak_to_npc", "eat_fruit", "touch_fruit", "look_at_tree", "approach_tree"],
-  },
-  // 狐狸：可评价话术（judge_whisper_style）
-  fox: {
-    allowedTools: ["move_to_location", "observe_location", "judge_whisper_style"],
-    forbiddenTools: ["speak_to_npc", "eat_fruit", "touch_fruit", "look_at_tree", "approach_tree"],
-  },
-  // 小鹿：氛围动物，只移动和观察
-  deer: {
-    allowedTools: ["move_to_location", "observe_location"],
-    forbiddenTools: [
-      "speak_to_npc",
-      "look_at_tree",
-      "approach_tree",
-      "touch_fruit",
-      "eat_fruit",
-    ],
-  },
-  // 羊：背景动物，不接 LLM
-  sheep: {
-    allowedTools: ["move_to_location", "observe_location"],
-    forbiddenTools: [
-      "speak_to_npc",
-      "look_at_tree",
-      "approach_tree",
-      "touch_fruit",
-      "eat_fruit",
-    ],
   },
   // 世界对象：不接 LLM，不触发工具
   tree_of_life: {

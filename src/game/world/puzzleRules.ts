@@ -14,7 +14,7 @@ import { getClueById } from "@/content/world/clues";
 import { getItemById } from "@/content/world/items";
 import { grantResonance } from "@/game/world/resonanceRules";
 import { applyDivineAttention } from "@/game/world/divineAttentionRules";
-import { triggerDivineGiftIfFull, type DivineGiftResult } from "@/game/world/divineGiftRules";
+import { shouldTriggerGiftChoice, rollGiftChoices } from "@/game/world/divineGiftRules";
 import { evaluateFreeTextAnswer, type PuzzleAnswerGrade } from "@/game/world/puzzleAnswerRules";
 
 export type ScenePuzzleRewardResult = {
@@ -31,7 +31,7 @@ export type ScenePuzzleAnswerResult = {
   feedback: string;
   state: EdenWorldState;
   rewards: ScenePuzzleRewardResult[];
-  divineGift?: DivineGiftResult | null;
+  divineGiftChoice?: string[] | null;
 };
 
 function clampMind(value: number): number {
@@ -72,6 +72,8 @@ function cloneWorldStateForPuzzle(state: EdenWorldState): EdenWorldState {
     pendingConsumableEffects: (state.pendingConsumableEffects ?? []).map((effect) => ({ ...effect })),
     resonanceUseHistory: (state.resonanceUseHistory ?? []).map((record) => ({ ...record })),
     divineGiftHistory: (state.divineGiftHistory ?? []).map((record) => ({ ...record })),
+    divineAttentionCumulative: state.divineAttentionCumulative ?? 0,
+    divineGiftsOwned: [...(state.divineGiftsOwned ?? [])],
   });
 }
 
@@ -124,7 +126,7 @@ export function applyScenePuzzleAnswer(
       feedback: "这个选择没有在园中留下痕迹。",
       state: normalizePuzzleState(state),
       rewards: [],
-      divineGift: null,
+      divineGiftChoice: null,
     };
   }
 
@@ -132,7 +134,7 @@ export function applyScenePuzzleAnswer(
   const alreadyCompleted = isScenePuzzleCompleted(next, puzzle.id);
   const success = isSuccessfulOption(puzzle, option);
   const rewards: ScenePuzzleRewardResult[] = [];
-  let divineGift: DivineGiftResult | null = null;
+  let divineGiftChoice: string[] | null = null;
 
   if (alreadyCompleted) {
     return {
@@ -142,18 +144,20 @@ export function applyScenePuzzleAnswer(
       feedback: "这个问题已经在本局留下答案，奖励不会再次出现。",
       state: next,
       rewards,
-      divineGift,
+      divineGiftChoice,
     };
   }
 
   if (!success) {
     if (puzzle.failure.attentionDelta) {
-      next.divineAttention = applyDivineAttention(next.divineAttention, puzzle.failure.attentionDelta);
+      applyDivineAttention(next, puzzle.failure.attentionDelta);
       addReward(rewards, {
         type: "attention",
         title: `神的注视 +${puzzle.failure.attentionDelta}`,
       });
-      divineGift = triggerDivineGiftIfFull(next);
+      divineGiftChoice = shouldTriggerGiftChoice(next)
+        ? rollGiftChoices(next.divineGiftsOwned)
+        : null;
     }
 
     return {
@@ -163,7 +167,7 @@ export function applyScenePuzzleAnswer(
       feedback: puzzle.failure.hint,
       state: next,
       rewards,
-      divineGift,
+      divineGiftChoice,
     };
   }
 
@@ -200,14 +204,16 @@ export function applyScenePuzzleAnswer(
   }
 
   if (puzzle.rewards.attentionDelta) {
-    next.divineAttention = applyDivineAttention(next.divineAttention, puzzle.rewards.attentionDelta);
+    applyDivineAttention(next, puzzle.rewards.attentionDelta);
     addReward(rewards, {
       type: "attention",
       title: puzzle.rewards.attentionDelta > 0
         ? `神的注视 +${puzzle.rewards.attentionDelta}`
         : `神的注视 ${puzzle.rewards.attentionDelta}`,
     });
-    divineGift = triggerDivineGiftIfFull(next);
+    divineGiftChoice = shouldTriggerGiftChoice(next)
+      ? rollGiftChoices(next.divineGiftsOwned)
+      : null;
   }
 
   next.completedScenePuzzleIds = [...next.completedScenePuzzleIds, puzzle.id];
@@ -216,11 +222,11 @@ export function applyScenePuzzleAnswer(
     success: true,
     alreadyCompleted: false,
     selectedOptionId: option.id,
-    feedback: puzzle.successFeedback,
-    state: next,
-    rewards,
-    divineGift,
-  };
+      feedback: puzzle.successFeedback,
+      state: next,
+      rewards,
+      divineGiftChoice,
+    };
 }
 
 // ---- 自由文本模式 ----
@@ -242,7 +248,7 @@ function applyFreeTextAnswer(
       feedback: "这个问题已经在本局留下答案，奖励不会再次出现。",
       state: next,
       rewards: [],
-      divineGift: null,
+      divineGiftChoice: null,
     };
   }
 
@@ -252,7 +258,7 @@ function applyFreeTextAnswer(
   if (!success) {
     const hint = result?.feedback ?? puzzle.failure.hint;
     if (puzzle.failure.attentionDelta) {
-      next.divineAttention = applyDivineAttention(next.divineAttention, puzzle.failure.attentionDelta);
+      applyDivineAttention(next, puzzle.failure.attentionDelta);
     }
     return {
       success: false,
@@ -262,7 +268,7 @@ function applyFreeTextAnswer(
       feedback: hint,
       state: next,
       rewards: [],
-      divineGift: null,
+      divineGiftChoice: null,
     };
   }
 
@@ -300,10 +306,10 @@ function applyFreeTextAnswer(
     alreadyCompleted: false,
     selectedOptionId: "",
     grade,
-    feedback: result?.feedback ?? puzzle.successFeedback,
-    state: next,
-    rewards,
-    divineGift: null,
-  };
+      feedback: result?.feedback ?? puzzle.successFeedback,
+      state: next,
+      rewards,
+      divineGiftChoice: null,
+    };
 }
 

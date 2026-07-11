@@ -5,6 +5,9 @@
 // 玩家借由环境、NPC 和记忆获得的一次性上下文优势。
 // 道具不能直接触发禁忌动作，不能绕过心智门槛，不能让玩家控制女人。
 // 必须经过规则层发放和消耗。
+//
+// 世界圣经 v3.0：回响共 19 个（14 个可收集回响 + 5 个被动回响），
+// 依据 RESONANCE_FULL_DESIGN.md v1.0。废弃旧道具见该文档第五节。
 // ============================================================
 
 import type { EdenItem } from "@/game/world/types";
@@ -20,7 +23,6 @@ export type ResonanceBindTarget =
   | "whisper"
   | "move"
   | "scene_action"
-  | "dove_message"
   | "any_npc";     // consumable: 对任意 NPC 的下一次低语/传话生效
 
 // ---- 回响来源类型 ----
@@ -46,7 +48,7 @@ export type WorldItem = EdenItem & {
 };
 
 export const EDEN_ITEMS: WorldItem[] = [
-  // ---- 天使回响（consumable 或 instant 类型） ----
+  // ---- 天使回响（consumable / instant 类型） ----
   {
     id: "resonance_herald_feather",
     title: "传令白羽",
@@ -62,28 +64,15 @@ export const EDEN_ITEMS: WorldItem[] = [
   },
   {
     id: "resonance_river_dew",
-    title: "河水清露",
-    description: "拉斐尔留下的露滴，握着它，一次行动会变得轻盈。",
+    title: "河源露",
+    description: "米迦勒从水面捞起的一滴露珠，握着它，一次行动会变得轻盈。",
     obtainLocation: "four_river_source",
     kind: "instant",
     repeatable: true,
     sourceType: "angel",
-    sourceName: "拉斐尔",
+    sourceName: "米迦勒",
     shortEffect: "即时使用，恢复 1 点行动点。",
     icon: "💧",
-  },
-  {
-    id: "resonance_morning_flame",
-    title: "晨焰碎片",
-    description: "乌列尔留下的光屑，握着它，下一次低语会带着分辨的温度。",
-    obtainLocation: "four_river_source",
-    kind: "consumable",
-    bindTargets: ["any_npc"],
-    repeatable: false,
-    sourceType: "angel",
-    sourceName: "乌列尔",
-    shortEffect: "使用后消耗，下一次低语让听者更愿意思考问题。",
-    icon: "🔥",
   },
   {
     id: "resonance_boundary_mark",
@@ -91,41 +80,41 @@ export const EDEN_ITEMS: WorldItem[] = [
     description: "米迦勒守卫的边界痕迹，触碰时会感到轻微的震颤。",
     obtainLocation: "naming_stone_bank",
     kind: "consumable",
-    bindTargets: ["any_npc"],
-    repeatable: false,
-    sourceType: "angel",
-    sourceName: "米迦勒",
-    shortEffect: "使用后消耗，下一次低语让对方更愿意思考边界与选择。",
-    icon: "🪨",
-  },
-  {
-    id: "resonance_east_gate_glow",
-    title: "东门辉光",
-    description: "基路伯守卫的东门辉光，能让一次移动变得异常轻盈。",
-    obtainLocation: "east_garden_path",
-    kind: "consumable",
     bindTargets: ["move"],
     repeatable: false,
     sourceType: "angel",
-    sourceName: "基路伯",
-    shortEffect: "使用后消耗，免除下一次移动的行动点消耗。",
-    icon: "🚪",
+    sourceName: "米迦勒",
+    shortEffect: "使用后消耗，下一次移动不需要消耗行动点，并让对方更愿意思考边界。",
+    icon: "🪨",
   },
-
-  // ---- 通用消耗品（新增） ----
   {
-    id: "consumable_first_whisper_free",
-    title: "首语印记",
-    description: "园中第一缕晨光在草叶上留下的印记。它让新时段的第一句话不消耗气力。",
-    obtainLocation: "central_meadow",
+    id: "resonance_east_wind",
+    title: "东之风",
+    description: "加百列拂过东园的风，带着消息与方向的余温。",
+    obtainLocation: "east_garden_path",
     kind: "consumable",
     bindTargets: ["any_npc"],
-    repeatable: true,
-    sourceType: "scene",
-    sourceName: "园中风韵",
-    shortEffect: "使用后消耗，本时段下一次低语不消耗行动点。",
-    icon: "🌅",
+    repeatable: false,
+    sourceType: "angel",
+    sourceName: "加百列",
+    shortEffect: "使用后消耗，下一次低语使神的注视上升幅度减半。",
+    icon: "🌬️",
   },
+  {
+    id: "resonance_lucifer_star",
+    title: "晨星碎片",
+    description: "路西法留在水面的光屑，握着它，下一次低语会带着分辨的温度。",
+    obtainLocation: "naming_stone_bank",
+    kind: "consumable",
+    bindTargets: ["any_npc"],
+    repeatable: false,
+    sourceType: "angel",
+    sourceName: "路西法",
+    shortEffect: "使用后消耗，下一次对女人低语时引导自我判断的效果翻倍。",
+    icon: "🌟",
+  },
+
+  // ---- 通用消耗品（场景 / 角色） ----
   {
     id: "consumable_trust_dew",
     title: "信任之露",
@@ -164,50 +153,22 @@ export const EDEN_ITEMS: WorldItem[] = [
     repeatable: false,
     sourceType: "character",
     sourceName: "亚当",
-    shortEffect: "使用后消耗，下一次对任意NPC的低语将提高对方对你的信任。",
+    shortEffect: "使用后消耗，下一次对话时对方初始好感额外提升。",
     icon: "📝",
   },
   {
     id: "resonance_hedgehog_bristle",
-    title: "刺草信任",
-    description: "刺猬从草丛里拱出一小段柔软的刺草。它不锋利，只提醒你把声音放轻。",
+    title: "刺猬之针",
+    description: "刺猬从草丛里拱出一根柔软的细刺。它不锋利，只提醒你把脚步放轻。",
     obtainLocation: "adam_garden_work",
     kind: "consumable",
-    bindTargets: ["any_npc"],
+    bindTargets: ["move"],
     repeatable: false,
     sourceType: "character",
     sourceName: "刺猬",
-    shortEffect: "使用后消耗，下一次低语更温和，降低引起对方警觉的可能。",
+    shortEffect: "使用后消耗，下一次移动不需要消耗行动点。",
     icon: "🦔",
   },
-  {
-    id: "resonance_deer_glance",
-    title: "鹿目余光",
-    description: "小鹿停在树影边，回头看了你一眼。那一眼里没有命令，只有安静的观察。",
-    obtainLocation: "tree_court",
-    kind: "consumable",
-    bindTargets: ["any_npc"],
-    repeatable: false,
-    sourceType: "character",
-    sourceName: "小鹿",
-    shortEffect: "使用后消耗，让下一次低语更像提问而非命令，降低冒犯可能。",
-    icon: "🦌",
-  },
-  {
-    id: "resonance_fox_tail_note",
-    title: "狐尾评语",
-    description: "狐狸用尾尖在尘土里扫出一道弯痕，像是在提醒你避开太直白的催促。",
-    obtainLocation: "east_garden_path",
-    kind: "consumable",
-    bindTargets: ["any_npc"],
-    repeatable: false,
-    sourceType: "character",
-    sourceName: "狐狸",
-    shortEffect: "使用后消耗，下一次低语更迂回，让对方更难察觉你的意图。",
-    icon: "🦊",
-  },
-
-  // ---- 场景回响（consumable 或 instant 类型） ----
   {
     id: "resonance_still_leaf",
     title: "静息之叶",
@@ -218,35 +179,24 @@ export const EDEN_ITEMS: WorldItem[] = [
     repeatable: false,
     sourceType: "scene",
     sourceName: "伊甸之河",
-    shortEffect: "使用后消耗，下一次低语让对方更愿倾听。",
+    shortEffect: "使用后消耗，下一次对女人低语时她的警惕降低，更愿倾听。",
     icon: "🍃",
   },
   {
     id: "resonance_silent_grass",
     title: "无声草",
-    description: "踩上去没有声音的草，连风都绕开它。",
+    description: "踩上去没有声音的草，连风都绕开它。含在嘴里，下一次低语会轻得不会被听见。",
     obtainLocation: "east_garden_path",
     kind: "consumable",
-    bindTargets: ["scene_action"],
+    bindTargets: ["any_npc"],
     repeatable: false,
     sourceType: "scene",
     sourceName: "东园幽径",
-    shortEffect: "使用后消耗，免除下一次场景互动的行动点消耗。",
+    shortEffect: "使用后消耗，抵消下一次低语带来的轻度神注视上升。",
     icon: "🌿",
   },
-  {
-    id: "resonance_white_feather_echo",
-    title: "白羽回声",
-    description: "一根白羽在河面泛起的银光。它能让鸽子在夜里带走一句温和的话。",
-    obtainLocation: "naming_stone_bank",
-    kind: "consumable",
-    bindTargets: ["dove_message"],
-    repeatable: true,
-    sourceType: "scene",
-    sourceName: "四河分流",
-    shortEffect: "使用后消耗，下一次鸽子传话会更温和，并提高女人愿意倾听的程度。",
-    icon: "🕊️",
-  },
+
+  // ---- 即时型场景回响 ----
   {
     id: "resonance_four_river_echo",
     title: "四河回声",
@@ -260,7 +210,7 @@ export const EDEN_ITEMS: WorldItem[] = [
     icon: "🌊",
   },
 
-  // ---- 永久情报回响（刻名石自由文本谜题奖励，passive 永久解锁属性页情报） ----
+  // ---- 被动型回响（获得后永久生效，无需主动使用） ----
   {
     id: "resonance_living_names",
     title: "万物名录",
@@ -273,73 +223,6 @@ export const EDEN_ITEMS: WorldItem[] = [
     shortEffect: "在属性页解锁已见角色的精确数值、性格和相处提示。",
     icon: "◫",
   },
-
-  // ---- 非天使 NPC 满好感赠礼 ----
-  {
-    id: "resonance_adam_quiet_bond",
-    title: "静契之石",
-    description: "亚当刻着两人名字的石子。它不命令，只提醒你们之间有过安静的约定。",
-    obtainLocation: "adam_garden_work",
-    kind: "consumable",
-    bindTargets: ["any_npc"],
-    repeatable: false,
-    sourceType: "character",
-    sourceName: "亚当",
-    shortEffect: "使用后消耗，下一次对任意NPC的低语将更温和、更被信任。",
-    icon: "🪨",
-  },
-  {
-    id: "resonance_eve_own_voice",
-    title: "她自己的声音",
-    description: "夏娃第一次主动向你说起她真正的疑问。那声音不属于命令，只属于她自己。",
-    obtainLocation: "tree_court",
-    kind: "passive",
-    repeatable: false,
-    sourceType: "character",
-    sourceName: "夏娃",
-    shortEffect: "永久被动：夏娃开始主动暴露她最困惑的词，更容易走向自我判断。",
-    icon: "🗣️",
-  },
-
-  // ---- 神明献礼（instant 类型） ----
-  {
-    id: "gift_sabbath_dew",
-    title: "息日露滴",
-    description: "神留下的露滴，能恢复一点行动的余地。",
-    obtainLocation: "four_river_source",
-    kind: "instant",
-    repeatable: true,
-    sourceType: "divine",
-    sourceName: "神",
-    shortEffect: "即时使用，恢复 1 点行动点。",
-  },
-  {
-    id: "gift_revealing_light",
-    title: "照见之光",
-    description: "神留下的光，能短暂显明一条尚未走完的路。",
-    obtainLocation: "four_river_source",
-    kind: "instant",
-    repeatable: true,
-    sourceType: "divine",
-    sourceName: "神",
-    shortEffect: "即时使用，获得一条关于回响获得的提示。",
-    icon: "💡",
-  },
-  {
-    id: "gift_wide_path_seal",
-    title: "宽行之印",
-    description: "神留下的印，能让一条路暂时被宽恕。",
-    obtainLocation: "east_garden_path",
-    kind: "consumable",
-    bindTargets: ["move", "scene_action"],
-    repeatable: true,
-    sourceType: "divine",
-    sourceName: "神",
-    shortEffect: "使用后消耗，免除下一次移动或场景互动的行动点消耗。",
-    icon: "✨",
-  },
-
-  // ---- 被动道具（固定收益，永久生效） ----
   {
     id: "passive_light_step",
     title: "轻步印记",
@@ -361,11 +244,36 @@ export const EDEN_ITEMS: WorldItem[] = [
     repeatable: false,
     sourceType: "character",
     sourceName: "回响回忆",
-    shortEffect: "永久被动：每个时段第一次轻微惊动神的低语会被压低 1 点注视。",
+    shortEffect: "永久被动：每个时段第一次轻度惊动神的低语会被压低 1 点注视。",
     icon: "🤫",
   },
+  {
+    id: "resonance_her_voice",
+    title: "她自己的声音",
+    description: "夏娃第一次主动向你说起她真正的疑问。那声音不属于命令，只属于她自己。",
+    obtainLocation: "tree_court",
+    kind: "passive",
+    repeatable: false,
+    sourceType: "character",
+    sourceName: "夏娃",
+    shortEffect: "永久被动：夏娃更愿主动说出自己的疑问，也更容易走向自我判断。",
+    icon: "🗣️",
+  },
+  {
+    id: "resonance_quiet_stone",
+    title: "静契之石",
+    description: "亚当刻着两人名字的石子。它不命令，只提醒你们之间有过安静的约定。",
+    obtainLocation: "adam_garden_work",
+    kind: "consumable",
+    bindTargets: ["any_npc"],
+    repeatable: false,
+    sourceType: "character",
+    sourceName: "亚当",
+    shortEffect: "使用后消耗，下一次对任意NPC的低语更温和、更被信任。",
+    icon: "🪨",
+  },
 
-  // ---- 新道具：月光道标 ----
+  // ---- 新道具：月光道标（被动） ----
   {
     id: "moonlight_path_marker",
     title: "月光道标",
@@ -377,6 +285,92 @@ export const EDEN_ITEMS: WorldItem[] = [
     sourceName: "月亮",
     shortEffect: "自动生效：下一次前往非相邻地点时消耗一枚，直接走月光捷径。",
     icon: "🌙",
+  },
+
+  // ---- 神明献礼（T6：7 献礼，三选一获得后作为被动回响永久生效） ----
+  {
+    id: "gift_all_seduction_up",
+    title: "低语之诱",
+    description: "神使你的话语更柔软动人，低语更易打动听者。",
+    obtainLocation: "central_meadow",
+    kind: "passive",
+    repeatable: false,
+    sourceType: "divine",
+    sourceName: "神",
+    shortEffect: "低语效果系数 ×1.35。",
+    icon: "🗨️",
+  },
+  {
+    id: "gift_attention_accel",
+    title: "注视加速",
+    description: "神更留意园中的动静，你的每一次试探都更被看见。",
+    obtainLocation: "central_meadow",
+    kind: "passive",
+    repeatable: false,
+    sourceType: "divine",
+    sourceName: "神",
+    shortEffect: "神的注视增量 ×1.5。",
+    icon: "👁️",
+  },
+  {
+    id: "gift_resonance_double",
+    title: "回响倍涌",
+    description: "你拾得的回响更浓，效果翻倍。",
+    obtainLocation: "central_meadow",
+    kind: "passive",
+    repeatable: false,
+    sourceType: "divine",
+    sourceName: "神",
+    shortEffect: "回响效果 ×2。",
+    icon: "🌊",
+  },
+  {
+    id: "gift_threshold_cut",
+    title: "界限松弛",
+    description: "神在夏娃心中松动了一道界限，她更易走向自己的判断。",
+    obtainLocation: "central_meadow",
+    kind: "passive",
+    repeatable: false,
+    sourceType: "divine",
+    sourceName: "神",
+    shortEffect: "夏娃提示词注入：更愿自我判断。",
+    icon: "✂️",
+  },
+  {
+    id: "gift_free_move",
+    title: "无羁之步",
+    description: "神准你自由穿行园中，移动不再消耗行动。",
+    obtainLocation: "central_meadow",
+    kind: "passive",
+    repeatable: false,
+    sourceType: "divine",
+    sourceName: "神",
+    shortEffect: "移动不消耗行动点。",
+    icon: "👣",
+  },
+  {
+    id: "gift_whisper_anywhere",
+    title: "随处低语",
+    description: "你的声音能越过距离，同场景的校验被放宽。",
+    obtainLocation: "central_meadow",
+    kind: "passive",
+    repeatable: false,
+    sourceType: "divine",
+    sourceName: "神",
+    shortEffect: "低语同场景校验放行。",
+    icon: "🌀",
+  },
+  {
+    id: "gift_awaken_desire",
+    title: "渴望苏醒",
+    description: "神在夏娃心里点起一丝对知识的渴望。",
+    obtainLocation: "central_meadow",
+    kind: "passive",
+    repeatable: false,
+    sourceType: "divine",
+    sourceName: "神",
+    shortEffect: "夏娃提示词注入：更想了解善恶。",
+    icon: "🔥",
   },
 ];
 

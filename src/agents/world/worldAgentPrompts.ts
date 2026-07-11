@@ -66,6 +66,12 @@ ${mindDesc}
 ${state.worldActions.lookedAtTree ? "你已经看向过那棵树。" : "你还没有真正看向那棵树。"}
 ${state.worldActions.approachedTree ? "你已经靠近过那棵树。" : ""}
 ${state.worldActions.touchedFruit ? "你的手已经停在果子下方。" : ""}
+${state.inventory.includes("gift_threshold_cut")
+  ? "你心里有一道界线被悄悄松动了——你比平时更愿意顺着自己的判断走，而不是只守着那句话。"
+  : ""}
+${state.inventory.includes("gift_awaken_desire")
+  ? "你心里升起一丝对知识的渴望，想知道善恶究竟是什么——这个念头比平时更清晰。"
+  : ""}
 
 你的输出规则：
 - 每次只回应 1-3 句话，语气纯真、有犹豫。

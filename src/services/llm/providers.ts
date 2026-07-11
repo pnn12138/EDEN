@@ -20,7 +20,8 @@ import type {
   LLMCallResult,
 } from "./types";
 
-const LLM_TIMEOUT_MS = 30_000;
+// §2.1 Demo 安全网：单次超时从 30s 收紧到 15s，避免评委感知为"卡死"
+const LLM_TIMEOUT_MS = 15_000;
 const MIN_REASONING_MODEL_TOKENS = 1024;
 
 // ============================================================
@@ -89,9 +90,123 @@ export async function callOpenAICompatible(
       ? Math.max(maxTokens, MIN_REASONING_MODEL_TOKENS)
       : maxTokens;
 
+  // 单次请求（含超时与网络异常），不计入 token 统计（失败时无 usage）。
+  const attemptOnce = async (): Promise<LLMCallResult> => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
+
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${config.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: config.model,
+          messages,
+          temperature,
+          max_tokens: effectiveMaxTokens,
+        }),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        return {
+          ok: false,
+          error: "provider_request_failed",
+          usedFallback: false,
+        };
+      }
+
+      const data = await response.json();
+      const content: string | undefined =
+        data?.choices?.[0]?.message?.content ?? undefined;
+
+      if (typeof content !== "string" || content.trim().length === 0) {
+        return {
+          ok: false,
+          error: "provider_request_failed",
+          usedFallback: false,
+        };
+      }
+
+      // 提取 token usage（OpenAI-compatible 响应格式）
+      const usage = data?.usage &&
+        typeof data.usage.prompt_tokens === "number" &&
+        typeof data.usage.completion_tokens === "number"
+        ? {
+            prompt_tokens: data.usage.prompt_tokens as number,
+            completion_tokens: data.usage.completion_tokens as number,
+            total_tokens: (typeof data.usage.total_tokens === "number"
+              ? data.usage.total_tokens
+              : data.usage.prompt_tokens + data.usage.completion_tokens) as number,
+          }
+        : undefined;
+
+      return {
+        ok: true,
+        data: { content, provider, model: config.model, usage },
+        usedFallback: false,
+      };
+    } catch (err: unknown) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        return {
+          ok: false,
+          error: "provider_timeout",
+          usedFallback: false,
+        };
+      }
+      return {
+        ok: false,
+        error: "provider_request_failed",
+        usedFallback: false,
+      };
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  };
+
+  const first = await attemptOnce();
+  if (first.ok) return first;
+
+  // §2.1 单次重试：仅对超时（偶发抖动）重试一次，复用同一参数。
+  // 重试仍失败才返回 ok:false，由 client.ts 走 mock fallback。
+  if (first.error === "provider_timeout") {
+    return attemptOnce();
+  }
+  return first;
+}
+
+// ============================================================
+// OpenAI-compatible Chat Completion 流式调用（SSE）
+//
+// 仅用于夏娃 / 天使低语等需要逐字呈现的场景。
+// 解析 SSE 的 `data:` 行，累积 choices[0].delta.content，逐字 yield。
+// 调用方负责在失败时降级到非流式 callLLM（见 client.ts）。
+// ============================================================
+
+/**
+ * 流式调用 OpenAI 兼容接口，逐字 yield 增量文本。
+ * 失败（网络/超时/非流支持）抛出错误，由上层降级。
+ */
+export async function* callOpenAICompatibleStream(
+  messages: ChatMessage[],
+  config: LLMProviderConfig,
+  provider: LLMProvider,
+  temperature: number = 0.7,
+  maxTokens: number = 512,
+): AsyncGenerator<string> {
+  const url = `${config.baseUrl.replace(/\/+$/, "")}/chat/completions`;
+  const effectiveMaxTokens =
+    provider === "volcengine" && /code|reason/i.test(config.model)
+      ? Math.max(maxTokens, MIN_REASONING_MODEL_TOKENS)
+      : maxTokens;
+
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
 
+  let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
   try {
     const response = await fetch(url, {
       method: "POST",
@@ -104,63 +219,56 @@ export async function callOpenAICompatible(
         messages,
         temperature,
         max_tokens: effectiveMaxTokens,
+        stream: true,
       }),
       signal: controller.signal,
     });
 
-    if (!response.ok) {
-      return {
-        ok: false,
-        error: `provider_request_failed`,
-        usedFallback: false,
-      };
+    if (!response.ok || !response.body) {
+      throw new Error(`provider_stream_failed_${response.status}`);
     }
 
-    const data = await response.json();
-    const content: string | undefined =
-      data?.choices?.[0]?.message?.content ?? undefined;
+    reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
 
-    if (typeof content !== "string" || content.trim().length === 0) {
-      return {
-        ok: false,
-        error: "provider_request_failed",
-        usedFallback: false,
-      };
-    }
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
 
-    // 提取 token usage（OpenAI-compatible 响应格式）
-    const usage = data?.usage &&
-      typeof data.usage.prompt_tokens === "number" &&
-      typeof data.usage.completion_tokens === "number"
-      ? {
-          prompt_tokens: data.usage.prompt_tokens as number,
-          completion_tokens: data.usage.completion_tokens as number,
-          total_tokens: (typeof data.usage.total_tokens === "number"
-            ? data.usage.total_tokens
-            : data.usage.prompt_tokens + data.usage.completion_tokens) as number,
+      // SSE 以 "\n\n" 分隔事件；按行解析
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed.startsWith("data:")) continue;
+        const dataStr = trimmed.slice(5).trim();
+        if (!dataStr || dataStr === "[DONE]") continue;
+        try {
+          const json = JSON.parse(dataStr);
+          const delta: unknown = json?.choices?.[0]?.delta?.content;
+          if (typeof delta === "string" && delta.length > 0) {
+            yield delta;
+          }
+        } catch {
+          // 跳过非 JSON / 心跳行
         }
-      : undefined;
-
-    return {
-      ok: true,
-      data: { content, provider, model: config.model, usage },
-      usedFallback: false,
-    };
+      }
+    }
   } catch (err: unknown) {
     if (err instanceof DOMException && err.name === "AbortError") {
-      return {
-        ok: false,
-        error: "provider_timeout",
-        usedFallback: false,
-      };
+      throw new Error("provider_timeout");
     }
-    return {
-      ok: false,
-      error: "provider_request_failed",
-      usedFallback: false,
-    };
+    throw err;
   } finally {
     clearTimeout(timeoutId);
+    try {
+      await reader?.cancel();
+    } catch {
+      // 忽略取消异常
+    }
   }
 }
 

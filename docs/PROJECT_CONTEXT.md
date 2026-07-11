@@ -6,8 +6,8 @@
 
 ## 1. Executive Snapshot
 
-Last updated: `2026-07-10`
-Updated by: `CodeBuddy（规划 11 收尾修复）`
+Last updated: `2026-07-11`
+Updated by: `Codex（Phase E/H2/H3 提交前验收 #55）`
 Current phase: `第一章 /world 规划 11 收尾修复完成，完整验收已通过。基于 Codex 2026-07-09 复验（#53）结论完成：① 刻名石自由文本否定语义修复（puzzleAnswerRules 支持“不是/并非/不再”等否定，被否定的反向概念不再判 wrong）；② 伊甸之河 e2e 改经园子中央绕行、刻名石 e2e 断言改精确匹配；③ 视觉 smoke 当前目标提示断言对齐真实文案；④ world smoke 按“好感 100 + 天使试炼/赠礼 + 言语分裂”新机制重写场景 16-20，并新增加百列语言惩罚 API 与受罚天使 speak_to_npc 语言不通场景。规则层仍为状态变化、奖励、好感、语言、惩罚的唯一权威，LLM 只输出对白与工具意图。`
 Current build status: `全部通过（2026-07-10 CodeBuddy 收尾修复）：npm run lint 通过；npx tsc --noEmit 通过；npm run build 通过；node scripts/test-scene-puzzle-rules.mjs 51/51 通过；node scripts/test-world-visual-smoke.mjs 238/238 通过；node scripts/test-world-smoke.mjs（http://127.0.0.1:3020，因 3019 被占用且未授权终止，改用同构建全新生产服务器）191/0 通过；npm run test:e2e -- tests/e2e/chapter1-mechanics.spec.ts --project=desktop-chromium 3/3 通过。注：world smoke 端口 3020 与约定 3019 不同，属环境占用导致，验证结论等价。`
 
@@ -461,7 +461,20 @@ Reviewed by: `Codex`
 | K043 | Medium | 万物受名处存在非当前角色半透明虚影和刻名石/刺猬视觉拥挤。 | 复现截图显示对话态非当前亚当使用 brightness+blur+opacity 后呈现黑色虚影；刻名石 CSS 位于 `left:50%; top:70%`，紧邻中央刺猬。 | 取消"黑色幽灵式"暗化，改用轻微降饱和或选中描边；刻名石上移并偏离刺猬，按 1920×1080 截图验收点击区域与视觉锚点。 |
 | K044 | Medium | 场景谜题交互与新需求不一致。 | 刻名石、东园幽径、伊甸之河均使用选项式 `ScenePuzzleModal`；伊甸之河 trigger 为 `on_enter`。 | 将伊甸之河改为显式可点击对象；刻名石改为自由文本语义判定，保留规则层权威和失败重试。 |
 | K045 | Medium | 通用 NPC 好感度、主动挑战和满好感奖励尚不存在。 | `EdenWorldState` 只有 Eve/Adam 心智、inventory 与 completedScenePuzzleIds；属性页多数 NPC 数值为静态常量；天使回响通过地点+关键词被动检查。 | 新增规则层关系状态、挑战状态和一次性奖励记录；Agent 只生成提问/赠礼意图，最终判定与发奖仍由规则层执行。 |
+| K046 | High | v3.0 设计与实现 NPC 体系脱节。 | 2026-07-10 定稿的 world bible v3.0 与 npc_full_design v1.0 收敛为 6 NPC（女人/亚当/米迦勒/加百列/路西法/刺猬），但 npcs.ts、types.ts 仍是 15 NPC（含 watching_angel/raphael/uriel/cherubim/dove/fox/deer/sheep）。路西法以 uriel 隐藏身份映射。约 22 个源文件 + 1 个 e2e 受影响。 | 按 doc/第一章/plan_docs/12_CODEBUDDY_TASK_CHAPTER1_V3_WORLD_CONVERGENCE_MIGRATION.md Phase B 由 CodeBuddy 迁移；Codex 负责验收。 |
+| K047 | Fixed | 神明注视降低机制已完整实现。 | Phase D 全部落地：注视>=2 Eve obedience+5/回合(mindRules)、满4+10 spike(triggerDivineGiftIfFull)、进时段-1、跨天+1、观察生命树-1、每获回响+1、无声草抵消、米迦勒满好感遮蔽、michael attentionRisk=1、语义分级0/+1/+2/+3+夜晚/晨星/天使区域+NPC话题关键词。smoke 185/0 含场景23-27。 | Closed by CodeBuddy Phase D 收尾。 |
+| K048 | Medium | selfJudgement 与 AP 数值文档自身矛盾。 | world bible v3.0 §3 要求删除 selfJudgement，但 EveMind 仍有该字段，achievementRules.ts 与 INTERACTION_LOGIC.md 动作链门槛仍引用 selfJudgement>=35/50/70。AP 方面 world bible 写 3 AP、实现与 README 写 5 AP。 | Plan 文档 Phase A 先定调：selfJudgement 改派生值、AP 统一为 5 并回改文档。 |
+| K049 | High | 道具系统新旧混用，mark_all_resonance 不可达。 | items.ts 仍含已废弃的 resonance_morning_flame/resonance_east_gate_glow/gift_sabbath_dew；achievementRules.ts 的 RESONANCE_ALL_MARK_SET 含废弃道具，新设计下 mark_all_resonance 永不可达。divineGiftRules.ts 仍引用乌列尔/基路伯。 | 按 Plan 文档 Phase C 由 CodeBuddy 删废弃道具、补齐 14 回响、对齐印记判定。 |
+| K050 | Fixed | 路西法立绘已补齐。 | npc_lucifer_sprite.png 已生成（2.1MB）并放入 public/assets/chapter1/images/，assets.ts 已注册。28 印记图标齐。 | Closed by CodeBuddy Phase B 收尾。 |
+| K051 | Fixed | Phase H1 Demo 安全网已落地。 | 13号文档 §2.1 超时15s+重试、§2.2 园中之声引导面板+首获回响气泡、§2.3 死因内化提示（第6/9时段）+失败复盘均已实现。Codex 独立复验 tsc/lint/build/smoke(173/0) 全绿。 | Closed by CodeBuddy Phase H1。 |
+| K052 | Medium | LLM 超时 30s 对 Demo 偏长，且无重试。 | providers.ts 已有 LLM_TIMEOUT_MS=30000+AbortController（非完全缺失），但 30s 等待体验上=卡死；偶发抖动直接 fallback 浪费一次成功机会。 | 按 13 号文档 §2.1 调到 15s + 单次重试。 |
+| K053 | Medium | 低语无流式输出，整段等待 1-5s。 | callOpenAICompatible 非 stream；叙事游戏缺边想边说沉浸感。火山引擎支持 stream:true。 | 按 13 号文档 §3.1 加流式（原生 fetch ReadableStream，不引依赖）。 |
+| K054 | Medium | 音频事件覆盖盲区。 | useChapter1Audio 覆盖移动/观察/对话/树动作，但缺成功结局/失败结局/神明献礼/获回响/印记解锁/昼夜切换音效。情绪高潮点可能静默。 | 按 13 号文档 §3.2 补 6 个关键音效。 |
+| K055 | Low | /ending 占位死页 + 资源中间文件未清理。 | src/app/ending/page.tsx 仅占位文案；public/assets/chapter1/images 有大量 _v2/_candidate/_source 中间产物未被引用。 | 按 13 号文档 §4.1/§4.3 删占位页+清理未引用资源。 |
 
+| 2026-07-10 | Codex | 第一章 Phase B（NPC 收敛）独立复验 | PASS with 1 P1. 独立跑 tsc/lint/build 全绿；EdenNpcId 收敛 8 个、AngelNpcId 收敛 3 个；废弃 NPC 残留仅 types.ts 迁移代码；npcChallenges/npcLanguages/npcGuides/npcStatusHints/route.ts/tool/route.ts 均 0 废弃引用；路西法位置 naming_stone_bank、serpentTrust=30、人设对齐设计、无隐藏结局暴露；天使路由按 angelId 分发三人设；旧存档迁移逻辑保留。P1 遗留：assets.ts 已注册 luciferSprite 但 public 下无实际图片文件，试玩破图。设计偏差（非阻断）：天使只有 affinity 单维度，设计要求 obedience+serpentTrust 双维度，建议 Phase E 或文档定调明确天使例外。可衔接 Phase C 道具清理。 |
+| 2026-07-11 | Codex | Phase H1（Demo 安全网）独立复验 | PASS. 独立跑 tsc 0错/lint 0错/build 成功/test-world-smoke.mjs 173/0（mock 服务器 localhost:3019）。逐项核查：providers.ts LLM_TIMEOUT_MS=15000+attemptOnce 单次重试（provider_timeout 时）✅；page.tsx 园中之声可收起引导面板+首获回响气泡 ✅；advanceToNextSlot 第6时段刺猬轻推/第9时段亚当轻推（deathCauseHints 走园内叙事）✅；EndingReview 失败分支渲染 review.failureReasons「为何失败」✅。额外发现：路西法立绘已补（K050 闭环）；CodeBuddy 额外推进 Phase D 约50%（computeDivineAttentionDelta 语义分级0/+1/+2/+3+夜晚+晨星+天使区域、NPC attentionRisk+话题关键词、进时段-1、跨天+1）。Phase D 剩余未实现：§4.0 代价机制（注视>=2 obedience+5/满4+10 spike）、§4.2 观察生命树-1/无声草抵消/米迦勒遮蔽、§4.1 每获回响+1、michael attentionRisk=1 待补设。 |
+| 2026-07-11 | Codex | Phase D（神注视机制）收尾独立复验 | PASS. 独立跑 tsc 0错/lint 0错/build 成功/test-world-smoke.mjs 185/0（mock localhost:3019，新增场景23注视持续代价/24每获回响+1/25无声草抵消/26米迦勒遮蔽/27michael attentionRisk）/test-scene-puzzle-rules.mjs 51/0。逐行核查5项落点：mindRules:106-110 divineAttention>=2 obedience+5 ✅；resonanceRules:209-216 非gift_/passive_回响注视+1 ✅；route.ts:466-469 silentGrassActive delta=max(0,delta-1) ✅；route.ts:455-488 michaelShieldActive 激活(affinity>=100)+消耗(delta=0+清除)+叙事提示 ✅；npcs.ts:101 michael attentionRisk=1 ✅。Phase D 全部11项神注视机制（三层上升+4条降低+持续代价+满4spike）闭环。核心机制闭环（NPC+道具+印记+神注视）已齐，可进入玩家测试阶段。剩余未做：Phase E（心智门槛/selfJudgement派生值）、Phase H2（流式输出/音频/注视可见反馈）、Phase H3（占位页/资源清理/AI创作说明）。 |
 风险等级说明：
 
 * High：影响是否可运行、是否可提交、是否符合比赛要求
@@ -730,3 +743,62 @@ Codex 每轮测试或审查后必须维护本文件：
 9. AI 功能变化时更新 `AI Systems`。
 10. 提交状态变化时更新 `Submission Readiness`。
 11. 保持文档简洁，优先保留对 Agent 理解项目最有价值的信息。
+
+
+---
+
+## 16. Codex 验收记录（2026-07-11，Phase E / H2 / H3 提交前）
+
+验收范围：Phase E（动作链门槛+难度下调+方向引导+生命树分支）、Phase H2（流式输出+音频补齐+注视可见反馈）、Phase H3（删 /ending+资源清理+AI_ASSET_RECORD 完整性）。
+
+验证命令结果（本次实测，LLM_PROVIDER=mock，端口 3021）：
+- npx tsc --noEmit：0 错误。
+- npm run lint：0 警告/错误。
+- npm run build：EXIT=0，15 页，无 /ending 路由，/world 34.6kB。
+- node scripts/test-world-smoke.mjs：197 通过 / 0 失败（含新增场景 28 摘左果不驱逐+可再摘右果、场景 29 direct_command selfJudgement +2）。
+
+实现确认：
+- Phase E：toolRules 门槛 <20/<30/obedience>=75/<35/<45 已落地，死代码已删；mindRules 注视>=2 obedience +2、direct_command selfJudgement +2、serpentTrust -6；divineGiftRules 满4 obedience +5；worldActions 方向权重 recordFruitDirectionGuidance 已接入低语（route.ts:574），executeEatFruitWorld 摘左果重置 touchedFruit、obedience +10、serpentTrust -5、不触发结局，可再引导摘右果通关。
+- Phase H2：providers.callOpenAICompatibleStream + client.callLLMStream + route.ts SSE（ReadableStream/TextEncoder/data:delta|end）+ world/page.tsx getReader 消费全链路；仅 eve/天使低语流式；6 个新音频文件齐 + useChapter1Audio 6 hook + page.tsx 调用点；whisperFeedback 注视2/3 叙事、route.ts:639 满献礼追加句、worldHedgehogRules 注视>=2 切 alert。
+- Phase H3：/ending 已删无断链；主图 17 个引用全命中、achievements 28 图标齐全；next.config.js 未配 images.unoptimized；AI_ASSET_RECORD 四类齐全。
+
+发现的问题（待 CodeBuddy 修复）：
+- P1 规则违反：doc/第一章/plan_docs/Phase0_启动提示词.md、doc/第一章/plan_docs/伊甸园开发执行规划_正式版.md 被删除，违反 AGENTS.md「不要删除 doc/ 目录内文件」，需 git restore 恢复。
+- P2 提交卫生：smoke_*.log/srv_h2*.log/smoke_*.txt/smoke_verify_*.log 等 13 个临时日志及 .pptx_build/ 未被 .gitignore 覆盖，存在误提交风险。
+- P2 文档一致性：AI_ASSET_RECORD.md 的 IMG029/IMG030（拉斐尔/乌列尔立绘）仍写「已接入 /world」，但文件已删、assets.ts 未引用，需更新状态。
+- P3 逻辑风险：mark_life_fruit 成就解锁条件要求 hasEatenFruit=true，但摘左果（生命果）分支未设该标志，导致该成就实质不可达；摘左果+12时段结束当前走 god_arrives 失败结局。需确认是否为「生命果独立结局」设计意图并修正。
+- 范围外改动：LoginPanel->LoginModal 重构 + src/lib/auth.ts，不在三 Phase 范围但功能完整无断链，需确认是否计入本轮证据链。LoginPanel->LoginModal 重构 + src/lib/auth.ts 为登录体验优化，属本轮 CodeBuddy 改动，已接入首页无断链。
+
+结论：编译/构建/lint/smoke 全绿，三 Phase 核心交付到位，可进入提交流程；但需先修复 P1（doc 文件恢复）与 P2（gitignore + 文档一致性）后再提交。
+
+【2026-07-11 Codex 复验 #55b】CodeBuddy 已修复 P1-P3，复验实测：tsc 0 错误、lint 0 警告、build EXIT=0、smoke 203/0（含场景30）。P1 doc 两文件已 git restore 恢复；P2 .gitignore 规则生效（13 个临时日志已 !! 忽略）、IMG029/IMG030 已改否；P3 hasEatenLifeFruit 在 types/worldActions/achievementRules/globalTracker/smoke 五处一致、mark_life_fruit 可达、场景30 全绿；任务5 说明已补。次要观察（不阻塞）：globalTracker.ts:152 life_fruit 追踪仅看 hasEatenLifeFruit，摘生命果后又摘善恶果通关也会记入 life_fruit，使 mark_all_ending 判定偏宽松，建议后续优化。本轮 P1-P3 修复通过，可提交。
+---
+
+【2026-07-11 Codex 审查 #56（规划文档校正，未改业务代码）】用户要求校正 `doc/第一章/plan_docs/14_CODEBUDDY_TASK_CHAPTER1_UI_GAMEPLAY_OPTIMIZATION.md` 并新增「每场景 6 固定立绘槽位」需求。Codex 逐项核对实际代码后重写该文档为 v2，核心发现：
+- 原方案引用的 8 个文件不存在（CurrentLocationModal/CurrentGoalModal/GardenVoiceModal/ChatBox/TabSnake/TabAttribute/attributeRules/gifts），相关逻辑实为 page.tsx 内联。
+- 「当前位置/园中之声」是常驻 HUD/面板而非弹窗，原「加关闭按钮/移除自动弹出」描述不适用。
+- T3.2 润色按钮置灰已实现（page.tsx:2827 `!activeNpc`），T3.4「恢复 token 统计/复用 duel」前提不成立（duel 统计字符数 n 非 token，polish 路由无 usage 透出），改为新增功能。
+- T2.2 移动端适配与 PROJECT_CONTEXT「移动端不再为目标」冲突，已移除。
+- T4 属性系统与献礼选择与现有架构冲突（Eve 已三轴/Adam 四轴/天使单值 affinity；献礼池仅 2 种且为自动发放机制），标记为「需设计确认」。
+- 新增 P0 基础任务 T1 立绘槽位系统：新建 src/game/world/stageSlots.ts 定义 6 槽位 + allocateStageSlots 分配器，重构 page.tsx:1787-1920 为槽位驱动渲染，world 对象走背景层不占槽位。本次仅改规划文档，未触碰业务代码，build/test 状态不变（沿用 #55b：203/0）。
+
+【2026-07-11 Codex 审查 #57（规划文档细化，未改业务代码）】应用户要求，将 `doc/第一章/plan_docs/14_..._OPTIMIZATION.md` 在 v2 基础上扩展为含详细实现规划的执行规格：分 4 阶段（A=T1 槽位系统先行 / B=T3刺猬+T2顶部 / C=T4润色 / D=T7立绘+T5T6），T1 给出 `stageSlots.ts` 6 槽位坐标（center-main/flank×2/back×2/foreground）+ `allocateStageSlots` 分配器伪码 + page.tsx:1787-1920 渲染重构方案 + CSS `.eden-stage-slot--1..6`；T5/T6 给出 Codex 推荐方案 A（T5 仅 Eve 展示三轴复用 EveMind、不重构 Adam/天使；T6 开局 2 选 1 复用 grantDivineGift、不引入全局好感叠加、叠加机制暂缓）；附阶段验证门禁与 testid 保留要求。本次仅改规划文档，build/test 状态不变（沿用 #55b）。
+
+【2026-07-11 Codex 审查 #58（T5/T6 取向确认定稿，未改业务代码）】深入核实 T5/T6 现状后定稿：
+- T5 现状更正：原方案「还原三数值属性」前提与现状相反--`page.tsx:181 buildAttributeProfile`+`:2209` 属性 Tab 已对每个 NPC 展示 3 行数值（解锁后），「亲近/疏远」是未解锁模糊态（`fuzzyStage`，有意设计）。真问题=天使/刺猬三行为硬编码假值（加百列恒 98/12/85），不反映真实 `npcRelations.affinity`（初始 15/5/30）。确认采用方案 A'（数据真实性修复）：天使/刺猬「信任」行改读真实 affinity，保留未解锁模糊态与 Eve/Adam 现状，不重构心智模型；否决方案 B（全量统一三轴，丢失 Adam 维度+重构天使模型）。
+- T6 确认采用方案 A（开局 2 选 1）：intro 末拍插入献礼选择，复用 `grantDivineGift`（道具+Eve obedience+5），保留注视满4自动发放；不实现全局好感叠加（与 affinity/挑战系统耦合，暂缓）；否决方案 B（3 选 1 需扩献礼池）。
+- 已更新 plan_docs/14 文档 5.2/5.3 节为定稿。本次仅改规划文档，build/test 状态不变（沿用 #55b）。
+
+【2026-07-11 Codex 审查 #59（T5/T6 按设计文档定稿，未改业务代码）】结合用户提供的规则3-8与「思维模型需在其他NPC生效」要求，核实设计文档后定稿：
+- T5 权威依据=`design/01_world_bible.md §3`：所有 NPC 统一双维度（obedience对神信仰 + serpentTrust对玩家好感），删除 selfJudgement；初值女人80/20、亚当85/10、米迦勒95/5、加百列85/15、路西法40/30、刺猬60/35。现状偏差：Eve 3轴/Adam 4轴（规则4保护不改逻辑，仅显示投影双维度）；天使/刺猬仅单值affinity+buildAttributeProfile硬编码假值。定稿：显示层全NPC改2行双维度删第三行风味项（声音敏锐度等）；状态层给天使/刺猬NpcRelationState新增obedience（圣经初值），applyNpcAffinity同步微调（路西法响应质疑信号-2~-4，余者稳定）；serpentTrust复用现有affinity。路西法obedience响应幅度待用户确认（已给默认）。
+- T6 礼包：核实`RESONANCE_FULL_DESIGN.md:100`第3种献礼gift_sabbath_dew(息日露滴)已「功能合并到河源露」并入DEPRECATED_ITEMS，故2种为设计定稿。定稿开局2选1（复用grantDivineGift，不扩池，遵循规则5），不恢复息日露滴。
+- T5.4 洞察门禁分散（用户新需求）：万物名录解锁双维度数值；各NPC牵绊道具解锁该NPC深层关系；消耗品用usedItemIds(已存在,types.ts:218)判「曾获得」，不新增状态字段（规则3/5）。
+- 已更新plan_docs/14 文档5.2/5.3/5.4+代码映射+自校验。本次仅改规划文档，build/test不变（沿用#55b）。
+
+【2026-07-11 Codex 审查 #60（T6 献礼系统按会话019f47c6重建定稿，未改业务代码）】用户指向会话019f47c6，Codex 读取该会话jsonl后确认：曾设计6献礼+开局三选一+递进注视+全被动机制，但代码/RESONANCE_FULL_DESIGN只落地2献礼(照见之光/宽行之印,息日露滴已合并废弃)，与设计脱节。用户确认7献礼合理，并定：上限7(可集满)、集满7强制全NPC对玩家好感=100。T6定稿(取代原2献礼系统)：
+- 7被动献礼：全语增幅(+35%低语)/天眷隐声(注视上升+50%,修订版)/回响加倍(效果翻倍)/阈值降阶(提示词注入"你很向往变得和神一样",修订版)/移动不受限(免移动AP)/低语无距(跨场景对话)/唤醒欲望(提示词注入吃果倾向)。
+- 机制：开局三选一(intro末拍抽3选1)+递进累计注视触发三选一(阈值2/4/6/8/10/12可调)+上限7+集满7顶点(全NPC serpentTrust/affinity=100,Eve serpentTrust=100,Adam suspicion=0,天使刺猬 affinity=100+rewardEligible,obedience不变)。
+- 注视语义反转：从"满4失败压力"改"正向累计资源"；须改DivineAttentionLevel/divineAttentionRules/divineGiftRules并同步01_world_bible.md§3与RESONANCE_FULL_DESIGN.md。
+- T6列为阶段E(P0最大,4h)，独立于T1/T5。已更新plan_docs/14文档5.3+代码映射+阶段表+自校验。本次仅改规划文档，build/test不变(沿用#55b)。
+
+【2026-07-11 Codex 审查 #61（plan_docs/14 补全为开发就绪文档，未改业务代码）】将 `doc/第一章/plan_docs/14_..._OPTIMIZATION.md` 从任务清单级扩展为 CodeBuddy 可直接照改的开发文档（v3，530行）：每个任务含精确行号引用+可直接复制的代码块+步骤+验收。关键代码骨架已写入：T1 `stageSlots.ts`(6槽位+allocateStageSlots分配器)+`NPC_SPRITE`扩天使+槽位驱动渲染+CSS；T4 polish传人设+token透出(`polish/route.ts`)+蛇我页签展示；T5 `NpcRelationState`加obedience(圣经初值)+`applyNpcAffinity`路西法响应+`buildAttributeProfile`全NPC双维度2行删第三行；T5.4 `showDetailed`分层(万物名录解锁数值/牵绊道具`usedItemIds||inventory`解锁深层关系)；T6 `DivineGiftId`7枚举+`divineAttentionCumulative`累计+`divineGiftRules`重写(rollGiftChoices/shouldTriggerGiftChoice/claimDivineGift/applyGiftCapstone全NPC好感=100)+注视累计+7 passive献礼+三选一弹窗+成就。30代码块平衡，15节齐全。本次仅改规划文档，build/test不变(沿用#55b)。

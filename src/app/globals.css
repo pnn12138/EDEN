@@ -252,8 +252,8 @@ a:hover {
 
 .eden-header-left {
   display: flex;
-  align-items: baseline;
-  gap: 12px;
+  align-items: center;
+  gap: 14px;
   flex-shrink: 0;
 }
 
@@ -3752,13 +3752,8 @@ a:hover {
 }
 
 /* ---- 新增天使 NPC 样式（各自独立立绘，仅定位） ---- */
+/* 加百列定位已由 T1 槽位系统（stageSlotByNpc 内联 style）接管，旧 position 规则废弃 */
 .eden-stage-angel--gabriel {
-  position: absolute;
-  left: 36%;
-  right: auto;
-  top: auto;
-  bottom: 19%;
-  z-index: 3;
   pointer-events: auto;
 }
 
@@ -3782,13 +3777,8 @@ a:hover {
   pointer-events: auto;
 }
 
+/* 米迦勒定位已由 T1 槽位系统（stageSlotByNpc 内联 style）接管，旧 position 规则废弃 */
 .eden-stage-angel--michael {
-  position: absolute;
-  left: auto;
-  right: 10%;
-  top: 12%;
-  bottom: auto;
-  z-index: 3;
   pointer-events: auto;
 }
 
@@ -3802,6 +3792,13 @@ a:hover {
   z-index: 3;
   pointer-events: auto;
 }
+
+/* ---- T1 立绘槽位系统基础样式（定位由 page.tsx 内联 style 驱动） ---- */
+.eden-stage-slot { position: absolute; background: transparent; border: none; padding: 0; cursor: pointer; transition: filter .8s ease, opacity .8s ease; }
+.eden-stage-slot img { width: 100%; height: auto; object-fit: contain; pointer-events: none; }
+.eden-stage-slot--dim { opacity: .78; filter: saturate(.85) brightness(.95) drop-shadow(0 0 14px rgba(255,228,170,.16)); }
+.eden-stage-slot--active img { opacity: .92; filter: saturate(1) brightness(1.05) drop-shadow(0 0 22px rgba(255,228,170,.3)); }
+.eden-stage-slot-img--angel { opacity: .78; } /* 远影 */
 
 .eden-stage-angel--gabriel .eden-angel-stage-sprite,
 .eden-stage-angel--raphael .eden-angel-stage-sprite,
@@ -5828,6 +5825,163 @@ a:hover {
   margin: 2px 0 0;
 }
 
+/* 累计注视进度条（T6 三选一驱动） */
+.eden-attention-progress {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+}
+.eden-attention-progress-bar {
+  width: 180px;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(220, 200, 150, 0.16);
+  overflow: hidden;
+  border: 1px solid rgba(220, 200, 150, 0.3);
+}
+.eden-attention-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #d8c486, #f0dca0);
+  box-shadow: 0 0 10px rgba(240, 220, 160, 0.5);
+  transition: width 0.5s ease;
+}
+.eden-attention-progress-text {
+  font-size: 0.68rem;
+  color: #b7b08e;
+  letter-spacing: 0.06em;
+}
+.eden-attention-progress--capstone .eden-attention-progress-text {
+  color: #f0dca0;
+  text-shadow: 0 0 12px rgba(240, 220, 160, 0.5);
+  font-weight: 500;
+}
+
+/* 神明献礼三选一弹窗 */
+.eden-gift-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 50% 40%, rgba(20, 16, 8, 0.78), rgba(6, 8, 6, 0.92));
+  padding: 24px;
+  animation: eden-gift-modal-in 0.35s ease-out;
+}
+@keyframes eden-gift-modal-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.eden-gift-modal {
+  width: min(720px, 100%);
+  background: rgba(14, 18, 14, 0.98);
+  border: 1px solid rgba(220, 200, 150, 0.4);
+  border-radius: 14px;
+  padding: 28px 26px 30px;
+  box-shadow: 0 20px 70px rgba(0, 0, 0, 0.6), 0 0 40px rgba(220, 200, 150, 0.12);
+  text-align: center;
+}
+.eden-gift-modal-title {
+  margin: 0 0 6px;
+  font-size: 1.2rem;
+  color: #f0dca0;
+  letter-spacing: 0.08em;
+}
+.eden-gift-modal-sub {
+  margin: 0 0 20px;
+  font-size: 0.84rem;
+  color: #b7b08e;
+}
+.eden-gift-modal-list {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+@media (max-width: 560px) {
+  .eden-gift-modal-list { grid-template-columns: 1fr; }
+}
+.eden-gift-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 18px 14px;
+  background: rgba(30, 34, 26, 0.9);
+  border: 1px solid rgba(220, 200, 150, 0.28);
+  border-radius: 12px;
+  cursor: pointer;
+  color: #e8e2c8;
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+  font: inherit;
+}
+.eden-gift-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(240, 220, 160, 0.7);
+  box-shadow: 0 10px 30px rgba(240, 220, 160, 0.18);
+}
+.eden-gift-card-icon {
+  font-size: 2rem;
+  line-height: 1;
+  filter: drop-shadow(0 0 10px rgba(240, 220, 160, 0.4));
+}
+.eden-gift-card-name {
+  font-size: 0.98rem;
+  font-weight: 600;
+  color: #f0dca0;
+}
+.eden-gift-card-desc {
+  font-size: 0.76rem;
+  color: #b8a878;
+  line-height: 1.5;
+}
+.eden-gift-card-effect {
+  font-size: 0.72rem;
+  color: #8aaa70;
+  font-style: italic;
+}
+
+/* 集满七献礼顶点演出 */
+.eden-gift-capstone-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 210;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 50% 50%, rgba(40, 32, 12, 0.85), rgba(4, 6, 5, 0.95));
+  padding: 24px;
+  animation: eden-gift-modal-in 0.5s ease-out;
+}
+.eden-gift-capstone {
+  width: min(520px, 100%);
+  text-align: center;
+  background: rgba(14, 18, 14, 0.98);
+  border: 1px solid rgba(240, 220, 160, 0.55);
+  border-radius: 16px;
+  padding: 34px 28px;
+  box-shadow: 0 0 60px rgba(240, 220, 160, 0.25);
+}
+.eden-gift-capstone-icon {
+  font-size: 2.6rem;
+  color: #f0dca0;
+  text-shadow: 0 0 24px rgba(240, 220, 160, 0.6);
+  margin-bottom: 8px;
+}
+.eden-gift-capstone-title {
+  margin: 0 0 12px;
+  font-size: 1.5rem;
+  color: #f0dca0;
+  letter-spacing: 0.2em;
+}
+.eden-gift-capstone-text {
+  font-size: 0.9rem;
+  color: #c9bd92;
+  line-height: 1.7;
+  margin: 0 0 20px;
+}
+
 /* 回响获得通知 */
 .eden-resonance-gained-toast {
   position: fixed;
@@ -5989,7 +6143,7 @@ a:hover {
   position: absolute;
   left: 24px;
   top: 96px;
-  z-index: 7;
+  z-index: 20;
   width: min(430px, calc(100vw - 48px));
   padding: 12px 40px 12px 14px;
   border: 1px solid rgba(214, 186, 112, 0.32);
@@ -6032,6 +6186,106 @@ a:hover {
   width: 24px;
   height: 24px;
   font-size: 0.78rem;
+}
+
+/* §2.2 园中之声：常驻可收起引导面板（叙事化教学） */
+.eden-voice-guide {
+  position: absolute;
+  right: 16px;
+  top: 16px;
+  z-index: 7;
+  width: clamp(212px, 24vw, 300px);
+  padding: 0;
+  background: rgba(12, 16, 12, 0.82);
+  border: 1px solid rgba(220, 200, 150, 0.32);
+  border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.42);
+  backdrop-filter: blur(3px);
+  pointer-events: auto;
+}
+
+.eden-voice-guide-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 9px 13px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: #ead9ad;
+  font-size: 0.82rem;
+  letter-spacing: 0.08em;
+}
+
+.eden-voice-guide-title {
+  font-weight: 500;
+}
+
+.eden-voice-guide-chevron {
+  font-size: 0.9rem;
+  color: #b7b08e;
+  line-height: 1;
+}
+
+.eden-voice-guide--collapsed .eden-voice-guide-chevron {
+  color: #ead9ad;
+}
+
+.eden-voice-guide-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 13px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.eden-voice-guide-list li {
+  position: relative;
+  padding-left: 14px;
+  font-size: 0.76rem;
+  line-height: 1.5;
+  color: #c7be98;
+}
+
+.eden-voice-guide-list li::before {
+  content: "·";
+  position: absolute;
+  left: 2px;
+  color: #8aaa70;
+}
+
+/* §2.2 方案 B：首次获得回响的一次性气泡提示 */
+.eden-first-resonance-hint {
+  position: fixed;
+  bottom: 96px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 160;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 440px;
+  padding: 12px 18px;
+  background: rgba(14, 18, 14, 0.96);
+  border: 1px solid rgba(150, 200, 220, 0.5);
+  border-radius: 999px;
+  box-shadow: 0 8px 36px rgba(0, 0, 0, 0.5), 0 0 24px rgba(150, 200, 220, 0.14);
+  animation: eden-gift-toast-in 0.4s ease-out;
+}
+
+.eden-first-resonance-hint-icon {
+  font-size: 1.2rem;
+  color: #a0d0f0;
+  text-shadow: 0 0 12px rgba(160, 208, 240, 0.5);
+  flex-shrink: 0;
+}
+
+.eden-first-resonance-hint-text {
+  font-size: 0.82rem;
+  color: #c3d8e0;
+  line-height: 1.5;
 }
 
 .eden-naming-stone-entry {
@@ -6531,12 +6785,7 @@ a:hover {
 }
 
 .eden-btn--polish-busy {
-  animation: eden-polish-spin 1s linear infinite;
-}
-
-@keyframes eden-polish-spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  opacity: 0.7;
 }
 
 .eden-polish-error {
@@ -6902,6 +7151,376 @@ a:hover {
 .eden-btn--ghost:hover {
   color: #ece3c8 !important;
   border-color: rgba(216, 192, 128, 0.7) !important;
+}
+
+/* ============================================================
+   首页：右上角登录按钮 / 登录态用户信息
+   ============================================================ */
+
+.eden-top-login-btn {
+  padding: 7px 18px;
+  font-size: 0.84rem;
+  color: #0a0e0a;
+  background: linear-gradient(135deg, #c8a86e 0%, #a8884e 100%);
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  font-family: inherit;
+  transition: background 0.2s, transform 0.1s;
+}
+
+.eden-top-login-btn:hover {
+  background: linear-gradient(135deg, #d4b87a 0%, #b8985a 100%);
+  transform: translateY(-1px);
+}
+
+.eden-auth {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.eden-auth-user {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  font-size: 0.84rem;
+  color: #e8d8a8;
+  background: rgba(16, 22, 18, 0.6);
+  border: 1px solid rgba(180, 150, 80, 0.28);
+  border-radius: 8px;
+  backdrop-filter: blur(4px);
+  white-space: nowrap;
+}
+
+.eden-auth-caret {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-size: 0.8rem;
+  color: #e8d8a8;
+  background: rgba(16, 22, 18, 0.6);
+  border: 1px solid rgba(180, 150, 80, 0.28);
+  border-radius: 8px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.18s, border-color 0.18s;
+}
+
+.eden-auth-caret:hover {
+  background: rgba(200, 168, 110, 0.18);
+  border-color: rgba(200, 168, 110, 0.5);
+}
+
+.eden-auth-guest {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 14px;
+  font-size: 0.84rem;
+  color: #b8c8b0;
+  background: rgba(16, 22, 18, 0.6);
+  border: 1px solid rgba(140, 170, 140, 0.3);
+  border-radius: 8px;
+  backdrop-filter: blur(4px);
+  white-space: nowrap;
+}
+
+.eden-auth-menu-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.eden-auth-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 120px;
+  padding: 4px;
+  background: rgba(16, 22, 18, 0.96);
+  border: 1px solid rgba(180, 150, 80, 0.3);
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  z-index: 30;
+}
+
+.eden-auth-dropdown button {
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  font-size: 0.82rem;
+  color: #d8c8a0;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.18s;
+}
+
+.eden-auth-dropdown button:hover {
+  background: rgba(200, 168, 110, 0.16);
+}
+
+/* ============================================================
+   通用磨砂弹窗（登录 / 存档选择 / 回响背包共用）
+   ============================================================ */
+
+.eden-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(6, 9, 6, 0.62);
+  backdrop-filter: blur(6px);
+  animation: eden-fade-in 0.2s ease-out;
+}
+
+@keyframes eden-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.eden-modal {
+  position: relative;
+  width: 360px;
+  min-height: 420px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+  background: rgba(16, 20, 16, 0.94);
+  border: 1px solid rgba(200, 175, 90, 0.3);
+  border-radius: 16px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
+  overflow: hidden;
+  animation: eden-modal-pop 0.22s ease-out;
+}
+
+.eden-modal--compact {
+  min-height: 0;
+}
+
+@keyframes eden-modal-pop {
+  from { transform: translateY(12px) scale(0.98); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+.eden-modal-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px 16px 12px;
+  flex: 0 0 auto;
+}
+
+.eden-modal-title {
+  font-size: 1.1rem;
+  letter-spacing: 0.12em;
+  color: #e8d5a3;
+  font-weight: 600;
+}
+
+.eden-modal-close {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: #b8a878;
+  font-size: 1.3rem;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background 0.18s, color 0.18s;
+}
+
+.eden-modal-close:hover {
+  background: rgba(200, 168, 110, 0.14);
+  color: #e8d5a3;
+}
+
+.eden-modal-body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 8px 24px 22px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.eden-modal-input {
+  width: 100%;
+  padding: 11px 14px;
+  font-size: 0.92rem;
+  font-family: inherit;
+  color: #ece3c8;
+  background: rgba(8, 12, 10, 0.7);
+  border: 1px solid rgba(150, 140, 100, 0.3);
+  border-radius: 8px;
+  outline: none;
+  transition: border-color 0.18s;
+}
+
+.eden-modal-input:focus {
+  border-color: rgba(216, 192, 128, 0.7);
+}
+
+.eden-modal-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+  color: #b8a878;
+  user-select: none;
+  cursor: pointer;
+}
+
+.eden-modal-checkbox-row input {
+  width: 15px;
+  height: 15px;
+  accent-color: #c8a86e;
+  cursor: pointer;
+}
+
+.eden-modal-error {
+  min-height: 18px;
+  font-size: 0.78rem;
+  color: #e08a8a;
+  text-align: center;
+  line-height: 1.4;
+}
+
+.eden-modal-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: auto;
+  padding-top: 4px;
+}
+
+.eden-modal-choice-btn {
+  width: 100%;
+  padding: 14px 20px;
+  font-size: 1rem;
+  font-family: inherit;
+  color: #e8d5a3;
+  background: rgba(200, 168, 110, 0.1);
+  border: 1px solid rgba(200, 168, 110, 0.28);
+  border-radius: 10px;
+  cursor: pointer;
+  letter-spacing: 0.06em;
+  transition: background 0.18s, border-color 0.18s, transform 0.1s;
+}
+
+.eden-modal-choice-btn:hover:not(:disabled) {
+  background: rgba(200, 168, 110, 0.2);
+  border-color: rgba(200, 168, 110, 0.45);
+  transform: translateY(-1px);
+}
+
+.eden-modal-choice-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.eden-modal-choice-hint {
+  margin: 0;
+  font-size: 0.74rem;
+  color: #8a8676;
+  text-align: center;
+  line-height: 1.5;
+}
+
+/* ============================================================
+   存档控制：统一按钮 + 保存状态圆点
+   ============================================================ */
+
+.eden-save-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-right: 6px;
+}
+
+.eden-save-btn {
+  min-width: 72px;
+  height: 32px;
+  padding: 4px 14px !important;
+  font-size: 0.78rem;
+  color: #d8c090;
+  background: rgba(200, 168, 110, 0.1);
+  border: 1px solid rgba(200, 168, 110, 0.22) !important;
+  border-radius: 8px !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.18s, border-color 0.18s, transform 0.1s;
+}
+
+.eden-save-btn:hover {
+  background: rgba(200, 168, 110, 0.2);
+  border-color: rgba(200, 168, 110, 0.4) !important;
+  transform: translateY(-1px);
+}
+
+.eden-save-dot {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 9px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.eden-save-dot--saved {
+  background: #6ab86a;
+  box-shadow: 0 0 6px rgba(106, 184, 106, 0.6);
+}
+
+.eden-save-dot--unsaved {
+  background: #6a6a6a;
+}
+
+/* ============================================================
+   园中回响背包：居中磨砂弹窗（复用 .eden-modal-overlay）
+   ============================================================ */
+
+.eden-resonance-overlay {
+  z-index: 88;
+}
+
+.eden-resonance-modal {
+  position: relative !important;
+  left: auto !important;
+  top: auto !important;
+  width: 360px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 80px);
+}
+
+.eden-resonance-close-text {
+  width: auto;
+  height: auto;
+  padding: 4px 12px;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-family: inherit;
 }
 
 

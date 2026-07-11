@@ -110,6 +110,13 @@ export type UseChapter1AudioReturn = {
   playTreeLook: () => void;
   playApproachTree: () => void;
   playTouchFruit: () => void;
+  // 结局 / 献礼 / 回响 / 印记 / 昼夜 音效
+  playEndingSuccess: () => void;
+  playEndingFailure: () => void;
+  playDivineGift: () => void;
+  playResonanceGain: () => void;
+  playMarkUnlock: () => void;
+  playDayNightShift: () => void;
 };
 
 export function useChapter1Audio({
@@ -132,6 +139,12 @@ export function useChapter1Audio({
   const treeLookRef = useRef<HTMLAudioElement | null>(null);
   const approachTreeRef = useRef<HTMLAudioElement | null>(null);
   const touchFruitRef = useRef<HTMLAudioElement | null>(null);
+  const endingSuccessRef = useRef<HTMLAudioElement | null>(null);
+  const endingFailureRef = useRef<HTMLAudioElement | null>(null);
+  const divineGiftRef = useRef<HTMLAudioElement | null>(null);
+  const resonanceGainRef = useRef<HTMLAudioElement | null>(null);
+  const markUnlockRef = useRef<HTMLAudioElement | null>(null);
+  const dayNightShiftRef = useRef<HTMLAudioElement | null>(null);
 
   // 追踪前一个地点和注视，用于环境音切换
   const prevLocationRef = useRef(locationId);
@@ -182,6 +195,26 @@ export function useChapter1Audio({
 
     touchFruitRef.current = createAudioElement(CHAPTER1_AUDIO.touchFruitTension);
     if (touchFruitRef.current) touchFruitRef.current.volume = 0.45;
+
+    // 结局 / 献礼 / 回响 / 印记 / 昼夜 音效
+    endingSuccessRef.current = createAudioElement(CHAPTER1_AUDIO.endingSuccess);
+    if (endingSuccessRef.current) endingSuccessRef.current.volume = 0.4;
+
+    endingFailureRef.current = createAudioElement(CHAPTER1_AUDIO.endingFailure);
+    if (endingFailureRef.current) endingFailureRef.current.volume = 0.4;
+
+    // 献礼 / 印记音量低于对话音（对话音 0.25）
+    divineGiftRef.current = createAudioElement(CHAPTER1_AUDIO.divineGiftLight);
+    if (divineGiftRef.current) divineGiftRef.current.volume = 0.16;
+
+    resonanceGainRef.current = createAudioElement(CHAPTER1_AUDIO.resonanceGain);
+    if (resonanceGainRef.current) resonanceGainRef.current.volume = 0.3;
+
+    markUnlockRef.current = createAudioElement(CHAPTER1_AUDIO.markUnlock);
+    if (markUnlockRef.current) markUnlockRef.current.volume = 0.18;
+
+    dayNightShiftRef.current = createAudioElement(CHAPTER1_AUDIO.dayNightShift);
+    if (dayNightShiftRef.current) dayNightShiftRef.current.volume = 0.22;
 
     return () => {
       safePause(mainAmbientRef.current);
@@ -299,6 +332,42 @@ export function useChapter1Audio({
     }
   }, [soundEnabled]);
 
+  const playEndingSuccess = useCallback(() => {
+    if (soundEnabled) {
+      safePlay(endingSuccessRef.current);
+    }
+  }, [soundEnabled]);
+
+  const playEndingFailure = useCallback(() => {
+    if (soundEnabled) {
+      safePlay(endingFailureRef.current);
+    }
+  }, [soundEnabled]);
+
+  const playDivineGift = useCallback(() => {
+    if (soundEnabled) {
+      safePlay(divineGiftRef.current);
+    }
+  }, [soundEnabled]);
+
+  const playResonanceGain = useCallback(() => {
+    if (soundEnabled) {
+      safePlay(resonanceGainRef.current);
+    }
+  }, [soundEnabled]);
+
+  const playMarkUnlock = useCallback(() => {
+    if (soundEnabled) {
+      safePlay(markUnlockRef.current);
+    }
+  }, [soundEnabled]);
+
+  const playDayNightShift = useCallback(() => {
+    if (soundEnabled) {
+      safePlay(dayNightShiftRef.current);
+    }
+  }, [soundEnabled]);
+
   return {
     playMapMove,
     playObserveLocation,
@@ -309,5 +378,11 @@ export function useChapter1Audio({
     playTreeLook,
     playApproachTree,
     playTouchFruit,
+    playEndingSuccess,
+    playEndingFailure,
+    playDivineGift,
+    playResonanceGain,
+    playMarkUnlock,
+    playDayNightShift,
   };
 }

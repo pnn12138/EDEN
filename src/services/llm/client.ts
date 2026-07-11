@@ -19,6 +19,7 @@ import {
   resolveProvider,
   resolveProviderConfig,
   callOpenAICompatible,
+  callOpenAICompatibleStream,
   callMockProvider,
 } from "./providers";
 
@@ -101,5 +102,48 @@ export async function callLLM(
     case "mock":
     default:
       return callMockProvider(messages);
+  }
+}
+
+/**
+ * 流式统一 LLM 调用入口（逐字生成）。
+ *
+ * 行为：
+ * - mock provider 或配置缺失 → 直接降级为非流式 callLLM，一次性 yield 完整文本。
+ * - 真实 provider（volcengine / deepseek）→ 调用 callOpenAICompatibleStream 逐字 yield。
+ * - 流式过程中抛错 → 自动降级为非流式 callLLM 再试一次，yield 完整文本。
+ *
+ * 调用方（api/world/route.ts）负责把逐字增量以 SSE 推送给前端。
+ */
+export async function* callLLMStream(
+  messages: ChatMessage[],
+  options?: { temperature?: number; maxTokens?: number; fallbackToMock?: boolean },
+): AsyncGenerator<string> {
+  const provider = resolveProvider();
+  const config = resolveProviderConfig(provider);
+
+  // mock / 配置缺失：无法流式，直接返回完整文本
+  if (provider === "mock" || !config) {
+    const result = await callLLM(messages, options);
+    if (result.ok && result.data?.content) {
+      yield result.data.content;
+    }
+    return;
+  }
+
+  try {
+    yield* callOpenAICompatibleStream(
+      messages,
+      config,
+      provider,
+      options?.temperature,
+      options?.maxTokens,
+    );
+  } catch {
+    // 流式失败 → 降级非流式再试一次
+    const result = await callLLM(messages, options);
+    if (result.ok && result.data?.content) {
+      yield result.data.content;
+    }
   }
 }

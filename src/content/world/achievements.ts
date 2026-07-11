@@ -253,8 +253,9 @@ export const LEGACY_ACHIEVEMENTS: Achievement[] = [
   { id: "beyond_the_river", name: "河道之外", desc: "同一局使用三种不同的园中回响。", category: "gameplay", hidden: false },
   { id: "arrive_quietly", name: "低声而至", desc: "神的注视不高于 1 时进入园子中央。", category: "gameplay", hidden: false },
   { id: "first_resonance", name: "初闻回响", desc: "首次获得一段园中回响。园子开始回应你的行动。", category: "explore", hidden: false },
-  { id: "divine_gift_first", name: "初临献礼", desc: "首次让神的注视满盈，并获得神明献礼。", category: "explore", hidden: false },
-  { id: "divine_gift_three", name: "三临神恩", desc: "同一局累计获得三次神明献礼。", category: "explore", hidden: false },
+  { id: "divine_gift_first", name: "初临献礼", desc: "首次从神的三选一献礼中选定一份。神的注视已化作可循的资源。", category: "explore", hidden: false },
+  { id: "divine_gift_three", name: "三临神恩", desc: "同一局累计从三选一献礼中选定三份。", category: "explore", hidden: false },
+  { id: "divine_gift_all", name: "七恩俱临", desc: "集齐神的七份献礼，园中众人对你全然倾心。", category: "explore", hidden: false },
   { id: "resonance_master", name: "回响大师", desc: "同一局累计使用五次园中回响。", category: "gameplay", hidden: false },
 ];
 

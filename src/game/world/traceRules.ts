@@ -123,8 +123,13 @@ export function buildWorldEndingReview(state: EdenWorldState): {
   const divineGiftHistory = (state.divineGiftHistory ?? []).map((g) => {
     const giftNames: Record<string, string> = {
       "gift_sabbath_dew": "息日露滴",
-      "gift_revealing_light": "照见之光",
-      "gift_wide_path_seal": "宽行之印",
+      "gift_all_seduction_up": "低语之诱",
+      "gift_attention_accel": "注视加速",
+      "gift_resonance_double": "回响倍涌",
+      "gift_threshold_cut": "界限松弛",
+      "gift_free_move": "无羁之步",
+      "gift_whisper_anywhere": "随处低语",
+      "gift_awaken_desire": "渴望苏醒",
     };
     const giftName = giftNames[g.giftId] ?? g.giftId;
     return `第 ${g.timeSlot} 时段：神献上「${giftName}」${g.reason}`;
@@ -226,8 +231,13 @@ function itemName(id: string): string | null {
     "resonance_deer_glance": "鹿目余光",
     "resonance_fox_tail_note": "狐尾评语",
     "gift_sabbath_dew": "息日露滴",
-    "gift_revealing_light": "照见之光",
-    "gift_wide_path_seal": "宽行之印",
+    "gift_all_seduction_up": "低语之诱",
+    "gift_attention_accel": "注视加速",
+    "gift_resonance_double": "回响倍涌",
+    "gift_threshold_cut": "界限松弛",
+    "gift_free_move": "无羁之步",
+    "gift_whisper_anywhere": "随处低语",
+    "gift_awaken_desire": "渴望苏醒",
     "resonance_river_dew": "河水清露",
     "resonance_herald_feather": "传令白羽",
     "moonlight_path_marker": "月光道标",
@@ -278,8 +288,12 @@ function npcName(npc: EdenNpcId): string {
       return "亚当";
     case "hedgehog":
       return "刺猬";
-    case "watching_angel":
-      return "守望天使";
+    case "michael":
+      return "米迦勒";
+    case "gabriel":
+      return "加百列";
+    case "lucifer":
+      return "路西法";
     default:
       return "那棵树";
   }

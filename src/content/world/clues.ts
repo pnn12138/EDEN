@@ -57,10 +57,10 @@ export const EDEN_CLUES: EdenClue[] = [
   },
   {
     id: "clue_angel_patrols_tree",
-    title: "天使在东园幽径巡望",
+    title: "天使在东园幽径守望",
     description:
-      "守望天使常在东园幽径附近巡望。它不说话，但它的存在让那条小道比别处更静、更冷。",
-    source: "watching_angel",
+      "加百列常在东园幽径附近守望。他温和，但他的存在让那条小道比别处更静、更冷。",
+    source: "east_garden_path",
     hiddenTags: ["angel", "tree", "risk"],
   },
   {

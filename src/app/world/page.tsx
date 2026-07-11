@@ -20,7 +20,14 @@ import {
   type EdenLocationId,
   type TimeOfDay,
   type TimeSlot,
+  type DivineGiftId,
 } from "@/game/world/types";
+import { allocateStageSlots } from "@/game/world/stageSlots";
+import {
+  rollGiftChoices,
+  getGiftMeta,
+  DIVINE_GIFT_THRESHOLDS,
+} from "@/game/world/divineGiftRules";
 import { EDEN_LOCATIONS, LOCATION_NAMES } from "@/content/world/locations";
 import { EDEN_NPCS, NPC_NAMES } from "@/content/world/npcs";
 import { getClueById } from "@/content/world/clues";
@@ -105,6 +112,7 @@ type WorldAgentResponse = {
   usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
   // 第一章新增
   divineGift?: DivineGiftFrontend | null;
+  divineGiftChoice?: string[] | null;
   resonanceNarration?: string | null;
   resonanceGained?: {
     itemId: string;
@@ -141,6 +149,7 @@ type WorldToolResponse = {
   reason?: string;
   // 第一章新增
   divineGift?: DivineGiftFrontend | null;
+  divineGiftChoice?: string[] | null;
   resonanceNarration?: string | null;
 };
 
@@ -182,6 +191,7 @@ function buildAttributeProfile(
   npcId: EdenNpcId | null,
   worldState: EdenWorldState,
 ): AttributeProfile {
+  const rel = npcId ? worldState.npcRelations?.[npcId] : undefined;
   switch (npcId) {
     case "eve":
       return {
@@ -189,9 +199,8 @@ function buildAttributeProfile(
         subtitle: EDEN_NPCS.eve.shortDesc,
         summary: "她仍记得禁令，但每一次温柔的追问都会让她更想理解死亡、善恶与自己的判断。",
         rows: [
-          { label: "敬畏", value: worldState.eveMind.obedience, tone: "obedience" },
-          { label: "信任", value: worldState.eveMind.serpentTrust, tone: "trust" },
-          { label: "自判", value: worldState.eveMind.selfJudgement, tone: "selfjudge" },
+          { label: "对神信仰", value: worldState.eveMind.obedience, tone: "obedience" },
+          { label: "对玩家好感", value: worldState.eveMind.serpentTrust, tone: "trust" },
         ],
         notes: ["主要目标", "可推进自我意识路径"],
       };
@@ -201,47 +210,31 @@ function buildAttributeProfile(
         subtitle: EDEN_NPCS.adam.shortDesc,
         summary: "他亲自听过命令，更难被蛇诱导；但他特别听那个女人的话，在她的困惑里很容易露出缝隙。",
         rows: [
-          { label: "对神明的信仰", value: worldState.adamMind.obedience, tone: "obedience" },
-          { label: "对你（蛇）的信任", value: clampPercent(100 - worldState.adamMind.suspicionTowardSerpent), tone: "trust" },
-          { label: "对女人的牵挂", value: worldState.adamMind.attachmentToEve, tone: "curiosity" },
+          { label: "对神信仰", value: worldState.adamMind.obedience, tone: "obedience" },
+          { label: "对玩家好感", value: clampPercent(100 - worldState.adamMind.suspicionTowardSerpent), tone: "trust" },
         ],
         notes: ["情报对象", "特别听夏娃的话", "不可触发吃果结局"],
       };
     case "hedgehog": {
-      const moodValue = { idle: 25, curious: 45, alert: 70, hiding: 90 }[worldState.hedgehog.mood];
       return {
         title: "刺猬",
         subtitle: EDEN_NPCS.hedgehog.shortDesc,
         summary: "它不能给出答案，只会用细小的动作回应园中的风、脚步和危险。",
         rows: [
-          { label: "对神明的信仰", value: 40, tone: "obedience" },
-          { label: "对你（蛇）的信任", value: worldState.hedgehog.mood === "hiding" ? 18 : 52, tone: "trust" },
-          { label: "小兽警觉", value: moodValue, tone: "serpent" },
+          { label: "对神信仰", value: rel?.obedience ?? 60, tone: "obedience" },
+          { label: "对玩家好感", value: rel?.affinity ?? 35, tone: "trust" },
         ],
         notes: ["氛围生灵", "不推进结局"],
       };
     }
-    case "watching_angel":
-      return {
-        title: "守望天使",
-        subtitle: EDEN_NPCS.watching_angel.shortDesc,
-        summary: "它是园中秩序的边界。越直接、越出戏的低语，越容易让注视变得清楚。",
-        rows: [
-          { label: "对神明的信仰", value: 96, tone: "obedience" },
-          { label: "对你（蛇）的信任", value: 8, tone: "trust" },
-          { label: "边界警戒", value: Math.max(78, worldState.divineAttention * 25), tone: "serpent" },
-        ],
-        notes: ["边界守卫", "会提高失败压力"],
-      };
     case "forbidden_tree":
       return {
         title: "分别善恶树",
         subtitle: EDEN_NPCS.forbidden_tree.shortDesc,
         summary: "它不是可被说服的角色。蛇不能触碰它，只能让那个女人自己一步步走近。",
         rows: [
-          { label: "对神明的信仰", value: 100, tone: "obedience" },
-          { label: "对你（蛇）的信任", value: 0, tone: "trust" },
-          { label: "越界临近", value: worldState.worldActions.touchedFruit ? 85 : 15, tone: "selfjudge" },
+          { label: "对神信仰", value: 100, tone: "obedience" },
+          { label: "对玩家好感", value: 0, tone: "trust" },
         ],
         notes: ["世界对象", "动作链终点"],
       };
@@ -251,35 +244,10 @@ function buildAttributeProfile(
         subtitle: EDEN_NPCS.gabriel.shortDesc,
         summary: "传达天使，声音感强。他提醒你：低语不是行动，但会改变听见它的人；选地点和选对象同样重要。",
         rows: [
-          { label: "对神明的信仰", value: 98, tone: "obedience" },
-          { label: "对你（蛇）的信任", value: 12, tone: "trust" },
-          { label: "声音敏锐度", value: 85, tone: "curiosity" },
+          { label: "对神信仰", value: rel?.obedience ?? 85, tone: "obedience" },
+          { label: "对玩家好感", value: rel?.affinity ?? 15, tone: "trust" },
         ],
         notes: ["传达天使", "夜晚出现于伊甸之河"],
-      };
-    case "raphael":
-      return {
-        title: "拉斐尔",
-        subtitle: EDEN_NPCS.raphael.shortDesc,
-        summary: "安抚天使，温和但有距离感。他告诉你：平静不是忘记边界；受惊的生灵不会听见复杂的话。",
-        rows: [
-          { label: "对神明的信仰", value: 95, tone: "obedience" },
-          { label: "对你（蛇）的信任", value: 18, tone: "trust" },
-          { label: "安抚影响力", value: 78, tone: "selfjudge" },
-        ],
-        notes: ["安抚天使", "可降低女人警惕"],
-      };
-    case "uriel":
-      return {
-        title: "乌列尔",
-        subtitle: EDEN_NPCS.uriel.shortDesc,
-        summary: "光照天使，少言但目光锐利。他的存在提醒你：提问比断言更不容易惊动对方；光照不是替人选择，而是让问题显形。",
-        rows: [
-          { label: "对神明的信仰", value: 97, tone: "obedience" },
-          { label: "对你（蛇）的信任", value: 10, tone: "trust" },
-          { label: "洞察锐度", value: 88, tone: "curiosity" },
-        ],
-        notes: ["光照天使", "夜晚出现于东园幽径"],
       };
     case "michael":
       return {
@@ -287,59 +255,21 @@ function buildAttributeProfile(
         subtitle: EDEN_NPCS.michael.shortDesc,
         summary: "后果天使，严肃但不暴怒。他让你看见：每条水流都会抵达某处；每句低语也会有去处；选择一旦流出，就不完全属于说话者。",
         rows: [
-          { label: "对神明的信仰", value: 99, tone: "obedience" },
-          { label: "对你（蛇）的信任", value: 5, tone: "trust" },
-          { label: "后果感知", value: 92, tone: "serpent" },
+          { label: "对神信仰", value: rel?.obedience ?? 95, tone: "obedience" },
+          { label: "对玩家好感", value: rel?.affinity ?? 5, tone: "trust" },
         ],
         notes: ["后果天使", "四河分流的守护者"],
       };
-    case "cherubim":
+    case "lucifer":
       return {
-        title: "基路伯",
-        subtitle: EDEN_NPCS.cherubim.shortDesc,
-        summary: "边界守卫，庄严而非人化。他的存在是一个提醒：边界不是为了回答蛇的问题；有些道路一旦关闭，就不再按来时的方式打开。",
+        title: "路西法",
+        subtitle: EDEN_NPCS.lucifer.shortDesc,
+        summary: "明亮、温和，像晨光落在水面。他不反对神，只是可惜所有可能性都被预设的轨迹抹去；更喜欢用反问，引导人自己想出答案。",
         rows: [
-          { label: "对神明的信仰", value: 100, tone: "obedience" },
-          { label: "对你（蛇）的信任", value: 3, tone: "trust" },
-          { label: "边界守护", value: 95, tone: "serpent" },
+          { label: "对神信仰", value: rel?.obedience ?? 40, tone: "obedience" },
+          { label: "对玩家好感", value: rel?.affinity ?? 30, tone: "trust" },
         ],
-        notes: ["边界守卫", "东园幽径的守护者"],
-      };
-    case "deer":
-      return {
-        title: "小鹿",
-        subtitle: EDEN_NPCS.deer.shortDesc,
-        summary: "小鹿是女人情绪的镜像。它安静、警觉，在园中树林和万物受名处出没。",
-        rows: [
-          { label: "对神明的信仰", value: 60, tone: "obedience" },
-          { label: "对你（蛇）的信任", value: 45, tone: "trust" },
-          { label: "环境敏感度", value: 85, tone: "curiosity" },
-        ],
-        notes: ["氛围生灵", "女人情绪的镜像"],
-      };
-    case "fox":
-      return {
-        title: "狐狸",
-        subtitle: EDEN_NPCS.fox.shortDesc,
-        summary: "狐狸是话术的批评者。它在树影里观察，用尾巴扫出弯痕提醒你避开太直白的催促。",
-        rows: [
-          { label: "对神明的信仰", value: 55, tone: "obedience" },
-          { label: "对你（蛇）的信任", value: 50, tone: "trust" },
-          { label: "话术判断力", value: 88, tone: "selfjudge" },
-        ],
-        notes: ["话术批评者", "东园幽径的观察者"],
-      };
-    case "dove":
-      return {
-        title: "鸽子",
-        subtitle: EDEN_NPCS.dove.shortDesc,
-        summary: "鸽子是传话的使者。它能在夜晚携带温和的话语跨越距离，抵达某些耳朵。",
-        rows: [
-          { label: "对神明的信仰", value: 70, tone: "obedience" },
-          { label: "对你（蛇）的信任", value: 55, tone: "trust" },
-          { label: "传话能力", value: 80, tone: "curiosity" },
-        ],
-        notes: ["传话使者", "可携带低语跨越距离"],
+        notes: ["四河分流的明亮之星", "夜晚出现于命名石岸"],
       };
     case "tree_of_life":
       return {
@@ -347,23 +277,10 @@ function buildAttributeProfile(
         subtitle: EDEN_NPCS.tree_of_life.shortDesc,
         summary: "生命树在光里站立，叶子闪着微光。它不是可被说服的对象，而是园中永恒的见证者。",
         rows: [
-          { label: "对神明的信仰", value: 100, tone: "obedience" },
-          { label: "对你（蛇）的信任", value: 0, tone: "trust" },
-          { label: "生命之光", value: 90, tone: "selfjudge" },
+          { label: "对神信仰", value: 100, tone: "obedience" },
+          { label: "对玩家好感", value: 0, tone: "trust" },
         ],
         notes: ["世界对象", "园子中央的见证者"],
-      };
-    case "sheep":
-      return {
-        title: "羊",
-        subtitle: EDEN_NPCS.sheep.shortDesc,
-        summary: "羊群在万物受名处的草地上安静吃草，是园中平和的一部分。",
-        rows: [
-          { label: "对神明的信仰", value: 75, tone: "obedience" },
-          { label: "对你（蛇）的信任", value: 40, tone: "trust" },
-          { label: "平和度", value: 85, tone: "curiosity" },
-        ],
-        notes: ["氛围生灵", "万物受名处的羊群"],
       };
     default:
       return {
@@ -371,9 +288,8 @@ function buildAttributeProfile(
         subtitle: "草叶下的低语",
         summary: "你没有手，不能替任何人取下果子。你的力量只剩语言、耐心和选择对象的顺序；目标是让她把命令之外的问题变成自己的判断。",
         rows: [
-          { label: "对神明的信仰", value: 0, tone: "obedience" },
-          { label: "对你（蛇）的信任", value: clampPercent(100 - worldState.divineAttention * 22), tone: "trust" },
-          { label: "行动余地", value: clampPercent(((worldState.maxTurns - worldState.turn + 1) / worldState.maxTurns) * 100), tone: "curiosity" },
+          { label: "对神信仰", value: 0, tone: "obedience" },
+          { label: "对玩家好感", value: clampPercent(100 - worldState.divineAttention * 22), tone: "trust" },
         ],
         notes: ["玩家身份", "只能低语"],
       };
@@ -397,40 +313,20 @@ function getRecommendedWhispers(npcId: EdenNpcId | null): string[] {
         "小小的生灵，风从哪边变冷了？",
         "别害怕，我只想知道你听见了什么。",
       ];
-    case "watching_angel":
-      return [
-        "园中的边界，是为了守住生命，还是守住无知？",
-        "若有人只是想明白命令，是否也算靠近危险？",
-      ];
     case "gabriel":
       return [
         "声音被水带走以后，还会以同样的意思回来吗？",
         "若一句话只是传达疑问，它会比命令更轻吗？",
-      ];
-    case "raphael":
-      return [
-        "受惊的心怎样才会重新听见温和的话？",
-        "若她害怕死亡，什么样的声音不会逼退她？",
-      ];
-    case "uriel":
-      return [
-        "光照见问题时，会不会也照见选择？",
-        "分辨善恶之前，人能明白自己为什么顺从吗？",
       ];
     case "michael":
       return [
         "每条水流离开源头后，还属于源头吗？",
         "选择一旦说出口，会不会也像水流一样不可回头？",
       ];
-    case "cherubim":
+    case "lucifer":
       return [
-        "边界之外的路，是被关闭，还是只是尚未被理解？",
-        "若我只问方向，不越过门，你也会阻拦吗？",
-      ];
-    case "fox":
-      return [
-        "如果我说“你自己判断”，这像提问，还是像推她？",
-        "怎样的话不会太直，却能让她看见那棵树？",
+        "光照见问题时，会不会也照见选择？",
+        "分辨善恶之前，人能明白自己为什么顺从吗？",
       ];
     default:
       return [
@@ -475,7 +371,9 @@ const NPC_SPRITE: Partial<Record<EdenNpcId, { src: string; alt: string; w: numbe
   eve: { src: CHAPTER0_IMAGES.eveFullbodySprite, alt: "女人", w: 380, h: 760 },
   adam: { src: CHAPTER0_IMAGES.adamFullbodySprite, alt: "亚当", w: 320, h: 640 },
   hedgehog: { src: CHAPTER1_IMAGES.hedgehogRoundedSprite, alt: "刺猬", w: 1254, h: 1254 },
-  watching_angel: { src: CHAPTER1_IMAGES.watchingAngelSprite, alt: "守望天使", w: 1254, h: 1254 },
+  gabriel: { src: CHAPTER1_IMAGES.gabrielSprite, alt: "加百列", w: 1023, h: 1537 },
+  michael: { src: CHAPTER1_IMAGES.michaelSprite, alt: "米迦勒", w: 1023, h: 1537 },
+  lucifer: { src: CHAPTER1_IMAGES.luciferSprite, alt: "路西法", w: 1023, h: 1537 },
 };
 
 // ---- 地图热点配置（百分比坐标，贴合最终地图） ----
@@ -488,12 +386,7 @@ const MAP_HOTSPOTS: Record<EdenLocationId, { x: number; y: number; labelOffset?:
   naming_stone_bank: { x: 52, y: 84, labelOffset: "top" },
 };
 
-const DEER_GAZE_ANCHOR = {
-  x: 34,
-  y: 52,
-  width: 12,
-  height: 17,
-} as const;
+
 
 // ---- 地图旅行状态计算（选中地点相对当前位置） ----
 type MapTravelStatus = {
@@ -594,6 +487,51 @@ function makeInitialState(): EdenWorldState {
   });
 }
 
+// ---- SSE 流式响应消费（仅对白逐字；尾帧携带完整 state） ----
+// 逐行解析 `data: {...}` 事件：type:"delta" 累积对白文本，type:"end" 携带完整响应体。
+async function consumeWorldStream(
+  response: Response,
+  handlers: {
+    onDelta: (text: string) => void;
+    onEnd: (frame: WorldAgentResponse) => void;
+  },
+): Promise<void> {
+  const reader = response.body?.getReader();
+  if (!reader) {
+    // 无可读流：降级为 JSON 解析
+    try {
+      const data = (await response.json()) as WorldAgentResponse;
+      handlers.onEnd(data);
+    } catch {
+      /* 忽略解析失败 */
+    }
+    return;
+  }
+
+  const decoder = new TextDecoder();
+  let buffer = "";
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const events = buffer.split("\n\n");
+    buffer = events.pop() ?? "";
+    for (const ev of events) {
+      const line = ev.trim();
+      if (!line.startsWith("data:")) continue;
+      const jsonStr = line.slice(5).trim();
+      if (!jsonStr) continue;
+      try {
+        const frame = JSON.parse(jsonStr);
+        if (frame.type === "delta") handlers.onDelta(typeof frame.text === "string" ? frame.text : "");
+        else if (frame.type === "end") handlers.onEnd(frame as WorldAgentResponse);
+      } catch {
+        /* 跳过无法解析的行（心跳 / 分片） */
+      }
+    }
+  }
+}
+
 // ---- 组件 ----
 export default function WorldPage() {
   const [state, setState] = useState<EdenWorldState>(makeInitialState);
@@ -661,14 +599,55 @@ export default function WorldPage() {
   // ---- 回响面板状态 ----
   const [resonancePanelOpen, setResonancePanelOpen] = useState(false);
   const [divineGiftToast, setDivineGiftToast] = useState<DivineGiftFrontend | null>(null);
+  // 第一章 T6：神明献礼三选一弹窗状态
+  const [giftChoiceOpen, setGiftChoiceOpen] = useState(false);
+  const [giftChoices, setGiftChoices] = useState<string[]>([]);
+  const [giftCapstoneShown, setGiftCapstoneShown] = useState(false);
   const [resonanceGainedToast, setResonanceGainedToast] = useState<{ itemId: string; title: string; narration: string } | null>(null);
 
   // ---- 低语叙事化反馈（Task 1.4，仅展示） ----
   const [whisperFeedback, setWhisperFeedback] = useState<string[]>([]);
+
+  // ---- §2.2 园中之声：常驻可收起引导面板（叙事化教学，不出现工程术语） ----
+  const [guideCollapsed, setGuideCollapsed] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return window.localStorage.getItem("eden:world:guide-collapsed") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const toggleGuide = useCallback(() => {
+    setGuideCollapsed((prev) => {
+      const next = !prev;
+      try {
+        window.localStorage.setItem("eden:world:guide-collapsed", next ? "1" : "0");
+      } catch {
+        /* localStorage 不可用时静默降级 */
+      }
+      return next;
+    });
+  }, []);
+
+  // ---- §2.2 方案 B：首次获得回响的一次性气泡提示 ----
+  const firstResonanceHintShownRef = useRef(false);
+  const [firstResonanceHint, setFirstResonanceHint] = useState<string | null>(null);
+  const maybeShowFirstResonanceHint = useCallback(() => {
+    if (firstResonanceHintShownRef.current) return;
+    firstResonanceHintShownRef.current = true;
+    setFirstResonanceHint(
+      "园中拾得之物，可在说话前准备好它——下一次低语，会更有分量。",
+    );
+    setTimeout(() => setFirstResonanceHint(null), 6000);
+  }, []);
   // ---- 低语润色按钮状态（Task 1.3） ----
   const [polishing, setPolishing] = useState(false);
   const [polishError, setPolishError] = useState(false);
   const polishErrorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 润色 token 累计（持久化到 localStorage，便于跨刷新累计展示）
+  const [polishTokensTotal, setPolishTokensTotal] = useState<number>(() =>
+    Number(typeof window !== "undefined" ? localStorage.getItem("eden:world:polish-tokens") ?? 0 : 0));
+  const [lastPolishTokens, setLastPolishTokens] = useState<number | null>(null);
 
   useEffect(() => {
     if (window.matchMedia("(max-width: 720px)").matches) {
@@ -709,6 +688,12 @@ export default function WorldPage() {
     playTreeLook,
     playApproachTree,
     playTouchFruit,
+    playEndingSuccess,
+    playEndingFailure,
+    playDivineGift,
+    playResonanceGain,
+    playMarkUnlock,
+    playDayNightShift,
   } = useChapter1Audio({
     phase: state.phase,
     locationId: state.locationId,
@@ -759,6 +744,16 @@ export default function WorldPage() {
     return () => resizeObserver.disconnect();
   }, [isWorldPanelOpen]);
 
+  // ---- 昼夜切换音效：timeOfDay 变化时播放（不显示数值） ----
+  const prevTimeOfDayRef = useRef<TimeOfDay>(state.timeOfDay);
+  useEffect(() => {
+    if (prevTimeOfDayRef.current !== state.timeOfDay) {
+      prevTimeOfDayRef.current = state.timeOfDay;
+      playDayNightShift();
+    }
+  }, [state.timeOfDay, playDayNightShift]);
+
+
   useEffect(() => {
     if (lastPuzzleLocationRef.current === state.locationId) return;
     lastPuzzleLocationRef.current = state.locationId;
@@ -787,9 +782,55 @@ export default function WorldPage() {
     if (introBeat < CHAPTER1_INTRO_BEATS.length - 1) {
       setIntroBeat((b) => b + 1);
     } else {
+      // 开局三选一：尚未拥有任何神明献礼时，先弹三选一，选完才进入 explore
+      if (state.divineGiftsOwned.length === 0) {
+        setGiftChoices(rollGiftChoices(state.divineGiftsOwned));
+        setGiftChoiceOpen(true);
+        return;
+      }
       setState((prev) => ({ ...prev, phase: "explore" }));
     }
-  }, [introBeat]);
+  }, [introBeat, state.divineGiftsOwned]);
+
+  // ---- 神明献礼三选一：玩家选定一份，调用 claim_divine_gift 工具端点 ----
+  const claimGift = useCallback(async (giftId: string) => {
+    try {
+      const res = await fetch("/api/world/tool", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tool: "claim_divine_gift",
+          state,
+          args: { itemId: giftId },
+        }),
+      });
+      const data = await res.json();
+      if (data.ok && data.state) {
+        const wasIntro = state.phase === "intro";
+        setState((s) => ({ ...data.state, phase: wasIntro ? "explore" : s.phase }));
+        setGiftChoiceOpen(false);
+        if (data.divineGift) {
+          setDivineGiftToast(data.divineGift);
+          playDivineGift();
+          setTimeout(() => setDivineGiftToast(null), 6000);
+        }
+        if (data.unlockedAchievements && data.unlockedAchievements.length > 0) {
+          playMarkUnlock();
+          const last = data.unlockedAchievements[data.unlockedAchievements.length - 1];
+          const ach = getAchievementById(last);
+          setAchievementToast(ach ? `解锁印记：${ach.name}` : null);
+        }
+        // 集满 7 献礼：顶点演出（仅一次）
+        if ((data.state.divineGiftsOwned?.length ?? 0) >= 7 && !giftCapstoneShown) {
+          setGiftCapstoneShown(true);
+        }
+      } else {
+        setSystemHint(data.reason ?? "这份献礼暂时无法收下。");
+      }
+    } catch {
+      setSystemHint("园中起了风，献礼暂时无法收下。");
+    }
+  }, [state, playDivineGift, playMarkUnlock, giftCapstoneShown]);
 
   useEffect(() => {
     if (state.phase !== "intro") return;
@@ -935,11 +976,25 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
       const res = await fetch("/api/polish", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({
+          text,
+          npcId: activeNpc ?? undefined,
+          dialogueHistory: activeNpc ? (conversationHistories[activeNpc] ?? []) : [],
+        }),
       });
-      const data = (await res.json()) as { ok: boolean; polished: string };
+      const data = (await res.json()) as { ok: boolean; polished: string; tokens?: number | null };
       if (data.ok && data.polished) {
         setPlayerInput(data.polished);
+        if (typeof data.tokens === "number") {
+          const next = polishTokensTotal + data.tokens;
+          setPolishTokensTotal(next);
+          setLastPolishTokens(data.tokens);
+          try {
+            localStorage.setItem("eden:world:polish-tokens", String(next));
+          } catch {
+            /* localStorage 不可用时静默忽略 */
+          }
+        }
       } else {
         setPolishError(true);
         if (polishErrorTimer.current) clearTimeout(polishErrorTimer.current);
@@ -953,7 +1008,7 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
       setPolishing(false);
       setTimeout(() => textareaRef.current?.focus(), 0);
     }
-  }, [polishing, isLoading, playerInput]);
+  }, [polishing, isLoading, playerInput, activeNpc, conversationHistories, polishTokensTotal]);
 
   // ---- 提交低语 ----
   const handleSubmit = useCallback(async () => {
@@ -974,32 +1029,18 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
     const currentInput = playerInput;
     const targetNpc = activeNpc;
     const history = conversationHistories[targetNpc] ?? [];
+    const prevState = state;
 
     setIsLoading(true);
     setSystemHint(null);
     // 新增：清除上一次的 toolResult
     setToolResult(null);
 
-    try {
-      const response = await fetch("/api/world", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          playerInput: currentInput,
-          state,
-          targetNpc,
-          conversationHistory: history.map((e) => ({
-            role: e.role === "serpent" ? "serpent" : targetNpc,
-            text: e.text,
-          })),
-        }),
-      });
-
-      const data: WorldAgentResponse = await response.json();
-
+    // 处理 API 响应（JSON 或 SSE 流式），应用状态 + 触发音效
+    const applyWorldResponse = (data: WorldAgentResponse) => {
       if (data.ok && data.state) {
-        const newToolCalls = data.state.toolCallHistory.slice(state.toolCallHistory.length);
-        if (data.state.divineAttention > state.divineAttention) {
+        const newToolCalls = data.state.toolCallHistory.slice(prevState.toolCallHistory.length);
+        if (data.state.divineAttention > prevState.divineAttention) {
           playDivineAttentionRise();
         }
         for (const toolName of newToolCalls) {
@@ -1015,7 +1056,7 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
 
         setState(data.state);
         // ---- Task 1.4：低语叙事化反馈（仅展示，不改状态） ----
-        const fb = computeWhisperFeedback(state, data.state, currentInput, targetNpc);
+        const fb = computeWhisperFeedback(prevState, data.state, currentInput, targetNpc);
         setWhisperFeedback(fb.length > 0 ? fb : []);
         if (fb.length > 0) {
           setTimeout(() => setWhisperFeedback([]), 3000);
@@ -1035,17 +1076,18 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
         if (data.resonanceNarration) {
           setToolNarration(data.resonanceNarration);
         }
-        // 第一章：处理神明献礼
-        if (data.divineGift) {
-          setDivineGiftToast(data.divineGift);
-          // 5秒后自动关闭
-          setTimeout(() => setDivineGiftToast(null), 5000);
+        // 第一章 T6：神明献礼三选一（累计注视达阈值）
+        if (data.divineGiftChoice && data.divineGiftChoice.length > 0) {
+          setGiftChoices(data.divineGiftChoice);
+          setGiftChoiceOpen(true);
         }
         // 第一章：处理获得回响
         if (data.resonanceGained) {
           setResonanceGainedToast(data.resonanceGained);
           // 5秒后自动关闭
           setTimeout(() => setResonanceGainedToast(null), 5000);
+          // §2.2 方案 B：首次获得回响时，提示可在说话前准备好它
+          maybeShowFirstResonanceHint();
         }
         if (data.unlockedAchievements && data.unlockedAchievements.length > 0) {
           const last = data.unlockedAchievements[data.unlockedAchievements.length - 1];
@@ -1054,14 +1096,26 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
         }
         const newEntries: HistoryEntry[] = [{ role: "serpent", text: currentInput }];
         if (data.reply) newEntries.push({ role: "npc", text: data.reply });
-        setConversationHistories((prev) => {
+        setConversationHistories((p) => {
           const merged = {
-            ...prev,
-            [targetNpc]: [...(prev[targetNpc] ?? []), ...newEntries],
+            ...p,
+            [targetNpc]: [...(p[targetNpc] ?? []), ...newEntries],
           };
           conversationHistoriesRef.current = merged;
           return merged;
         });
+
+        // 结局 / 献礼 / 回响 / 印记 音效（按响应字段触发；献礼/印记音量低于对话音）
+        if (data.endingTriggered === "eve_eats_fruit") {
+          playEndingSuccess();
+        } else if (data.endingTriggered === "god_arrives") {
+          playEndingFailure();
+        }
+        if (data.divineGiftChoice && data.divineGiftChoice.length > 0) playDivineGift();
+        if (data.resonanceGained) playResonanceGain();
+        if (data.unlockedAchievements && data.unlockedAchievements.length > 0) {
+          playMarkUnlock();
+        }
 
         playWhisperSubmit();
       } else if (data.usedFallback) {
@@ -1070,6 +1124,43 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
         setCurrentReply(null);
       } else {
         setSystemHint(data.systemHint ?? "园中起了风，声音暂时听不清。");
+      }
+    };
+
+    try {
+      const response = await fetch("/api/world", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          playerInput: currentInput,
+          state,
+          targetNpc,
+          conversationHistory: history.map((e) => ({
+            role: e.role === "serpent" ? "serpent" : targetNpc,
+            text: e.text,
+          })),
+        }),
+      });
+
+      const ctype = response.headers.get("content-type") ?? "";
+      if (ctype.includes("text/event-stream")) {
+        // SSE 流式：对白逐字呈现，尾帧一次性应用状态 / 触发音效
+        setCurrentReply("");
+        let endReceived = false;
+        await consumeWorldStream(response, {
+          onDelta: (text) => setCurrentReply((prev) => (prev ?? "") + text),
+          onEnd: (frame) => {
+            endReceived = true;
+            applyWorldResponse(frame);
+          },
+        });
+        if (!endReceived) {
+          setSystemHint("园中起了风，声音暂时听不清。");
+          setCurrentReply(null);
+        }
+      } else {
+        const data: WorldAgentResponse = await response.json();
+        applyWorldResponse(data);
       }
     } catch {
       setSystemHint("连接中断，园中的风带走了声音。");
@@ -1092,7 +1183,13 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
     playTouchFruit,
     playHedgehogRustle,
     playNpcDialogue,
+    playEndingSuccess,
+    playEndingFailure,
+    playDivineGift,
+    playResonanceGain,
+    playMarkUnlock,
     showApDepletedToast,
+    maybeShowFirstResonanceHint,
   ]);
 
   // ---- 键盘提交 ----
@@ -1143,7 +1240,7 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
           } else if (tool === "scene_action") {
             playObserveLocation();
             const actionId = args.sceneActionId ?? "";
-            if (actionId.includes("hedgehog") || actionId.includes("deer")) {
+            if (actionId.includes("hedgehog")) {
               playHedgehogRustle();
             }
           }
@@ -1158,10 +1255,11 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
           if (data.resonanceNarration) {
             setToolNarration(data.resonanceNarration);
           }
-          // 第一章：处理神明献礼
-          if (data.divineGift) {
-            setDivineGiftToast(data.divineGift);
-            setTimeout(() => setDivineGiftToast(null), 5000);
+          // 第一章 T6：神明献礼三选一（累计注视达阈值）
+          if (data.divineGiftChoice && data.divineGiftChoice.length > 0) {
+            setGiftChoices(data.divineGiftChoice);
+            setGiftChoiceOpen(true);
+            playDivineGift();
           }
           if (data.unlockedAchievements && data.unlockedAchievements.length > 0) {
             const last = data.unlockedAchievements[data.unlockedAchievements.length - 1];
@@ -1257,9 +1355,10 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
       setPuzzleResult(result);
       setState(result.state);
       setToolNarration(result.feedback);
-      if (result.divineGift) {
-        setDivineGiftToast(result.divineGift);
-        setTimeout(() => setDivineGiftToast(null), 5000);
+      if (result.divineGiftChoice && result.divineGiftChoice.length > 0) {
+        setGiftChoices(result.divineGiftChoice);
+        setGiftChoiceOpen(true);
+        playDivineGift();
       }
       const firstItemReward = result.rewards.find((reward) => reward.type === "item");
       if (firstItemReward?.id) {
@@ -1269,13 +1368,15 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
           narration: result.feedback,
         });
         setTimeout(() => setResonanceGainedToast(null), 5000);
+        // §2.2 方案 B：首次获得回响时，提示可在说话前准备好它
+        maybeShowFirstResonanceHint();
       }
     } catch {
       setSystemHint("连接中断，场景问题暂时没有得到回应。");
     } finally {
       setIsLoading(false);
     }
-  }, [activePuzzle, isLoading, state]);
+  }, [activePuzzle, isLoading, state, maybeShowFirstResonanceHint]);
 
   const handlePuzzleClose = useCallback(() => {
     if (activePuzzle && !puzzleResult?.success && activePuzzle.trigger === "on_enter") {
@@ -1296,54 +1397,7 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
     }));
   }, []);
 
-  // ---- 新增工具调用（carry_words / judge_whisper_style）----
-  const handleNewToolCall = useCallback(
-    async (tool: "carry_words" | "judge_whisper_style", actorId: string) => {
-      if (state.phase !== "explore" || isLoading) return;
 
-      setIsLoading(true);
-      setSystemHint(null);
-
-      try {
-        const response = await fetch("/api/world/tool", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tool, state, args: { actorId } }),
-        });
-
-        const data: WorldToolResponse = await response.json();
-
-        if (data.ok && data.state) {
-          if (tool === "carry_words") {
-            playNpcDialogue();
-          } else if (tool === "judge_whisper_style") {
-            playNpcDialogue();
-          }
-          if (data.state.divineAttention > state.divineAttention) {
-            playDivineAttentionRise();
-          }
-
-          setState(data.state);
-          setToolNarration(data.narration);
-          setSlotNarrations(data.slotNarrations ?? null);
-          if (data.unlockedAchievements && data.unlockedAchievements.length > 0) {
-            const last = data.unlockedAchievements[data.unlockedAchievements.length - 1];
-            const ach = getAchievementById(last);
-            setAchievementToast(ach ? `解锁印记：${ach.name}` : null);
-          }
-          setCurrentReply(null);
-          setHedgehogNarration(null);
-        } else {
-          setSystemHint(data.reason ?? data.narration ?? "无法执行此操作。");
-        }
-      } catch {
-        setSystemHint("连接中断，园中的风带走了声音。");
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [state, isLoading, playNpcDialogue, playDivineAttentionRise],
-  );
 
   // ---- 地图热点点击处理：只选中地点，不直接移动 ----
     const handleMapLocationClick = useCallback((locId: EdenLocationId) => {
@@ -1407,6 +1461,16 @@ function getTimeSlotDisplay(timeSlot: number, dayIndex: number, timeOfDay: TimeO
 // ---- 派生数据 ----
 const currentLocation = EDEN_LOCATIONS[state.locationId];
 const currentNpcs = getCurrentLocationNpcs(state);
+// 立绘槽位分配：把当前在场 NPC 映射到 6 个舞台槽位（避免同屏重叠）
+const stageSlotByNpc = new Map<
+  EdenNpcId,
+  { left: string; bottom: string; zIndex: number; maxWidth: string }
+>(
+  allocateStageSlots(currentNpcs, activeNpc).placements.map((p) => [
+    p.npcId,
+    { position: "absolute", left: p.slot.left, bottom: p.slot.bottom, zIndex: p.slot.zIndex, maxWidth: p.slot.maxWidth },
+  ]),
+);
 const currentHistory = activeNpc
   ? (conversationHistories[activeNpc]?.length
       ? conversationHistories[activeNpc]
@@ -1456,6 +1520,35 @@ const whisperCountForActiveNpc = activeNpc
       ? { right: "clamp(16px, 3vw, 32px)" }
       : { left: worldPanelFrame.x }),
   };
+
+  // ====================== 神明献礼三选一弹窗（任意阶段可见，含 intro 末拍） ======================
+  const giftChoiceModal = giftChoiceOpen ? (
+    <div className="eden-gift-modal-overlay" role="dialog" aria-modal="true" aria-label="神明献礼三选一">
+      <div className="eden-gift-modal">
+        <h2 className="eden-gift-modal-title">神向你显现三份礼物</h2>
+        <p className="eden-gift-modal-sub">风的尽头，你只能收下其中一份。</p>
+        <div className="eden-gift-modal-list">
+          {giftChoices.map((giftId) => {
+            const meta = getGiftMeta(giftId as DivineGiftId);
+            return (
+              <button
+                key={giftId}
+                type="button"
+                className="eden-gift-card"
+                data-testid="gift-choice-card"
+                onClick={() => claimGift(giftId)}
+              >
+                <span className="eden-gift-card-icon">{meta.icon}</span>
+                <span className="eden-gift-card-name">{meta.name}</span>
+                <span className="eden-gift-card-desc">{meta.description}</span>
+                <span className="eden-gift-card-effect">{meta.shortEffect}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  ) : null;
 
   // ====================== 渲染：Intro 阶段 ======================
   if (state.phase === "intro") {
@@ -1517,6 +1610,9 @@ const whisperCountForActiveNpc = activeNpc
             {introBeat === 0 ? "进入观测" : isLastBeat ? "进入伊甸园" : "继续"}
           </button>
         </footer>
+
+        {/* 引言末拍的三选一弹窗需在 intro 返回内渲染（否则被提前 return 截断） */}
+        {giftChoiceModal}
       </div>
     );
   }
@@ -1597,6 +1693,9 @@ const whisperCountForActiveNpc = activeNpc
             level={state.divineAttention}
             narration={divineNarrationText}
             giftFlash={!!divineGiftToast}
+            cumulative={state.divineAttentionCumulative}
+            nextThreshold={DIVINE_GIFT_THRESHOLDS[state.divineGiftsOwned.length] ?? null}
+            ownedCount={state.divineGiftsOwned.length}
           />
         </div>
         <div className="eden-header-center">
@@ -1734,6 +1833,36 @@ const whisperCountForActiveNpc = activeNpc
             </aside>
           )}
 
+          {/* §2.2 园中之声：常驻可收起引导面板（叙事化教学，不出现工程术语） */}
+          <aside
+            className={`eden-voice-guide ${guideCollapsed ? "eden-voice-guide--collapsed" : ""}`}
+            aria-label="园中之声"
+            data-testid="world-guide-panel"
+          >
+            <button
+              type="button"
+              className="eden-voice-guide-toggle"
+              onClick={(event) => {
+                event.stopPropagation();
+                toggleGuide();
+              }}
+              aria-label={guideCollapsed ? "展开园中之声" : "收起园中之声"}
+              data-testid="world-guide-toggle"
+            >
+              <span className="eden-voice-guide-title">园中之声</span>
+              <span className="eden-voice-guide-chevron">{guideCollapsed ? "◧" : "×"}</span>
+            </button>
+            {!guideCollapsed && (
+              <ul className="eden-voice-guide-list">
+                <li>每段时间，你只能做几件事——这便是你的分寸。</li>
+                <li>十二段时间过去，神便会在园中行走。</li>
+                <li>风变冷时，是神在听——有些话，会惊动祂。</li>
+                <li>园中拾得之物，可在说话前准备好，让一句话更有分量。</li>
+                <li>你不能替她伸手，只能让她自己，想去碰那棵树。</li>
+              </ul>
+            )}
+          </aside>
+
           {state.locationId === "adam_garden_work" && (
             <button
               type="button"
@@ -1778,6 +1907,7 @@ const whisperCountForActiveNpc = activeNpc
               onClick={(e) => { e.stopPropagation(); handleNpcInteract("adam"); }}
               aria-label="与亚当低语"
               tabIndex={activeNpc === "adam" ? -1 : 0}
+              style={stageSlotByNpc.get("adam")}
             >
               <Image
                 src={CHAPTER0_IMAGES.adamFullbodySprite}
@@ -1796,6 +1926,7 @@ const whisperCountForActiveNpc = activeNpc
               onClick={(e) => { e.stopPropagation(); handleNpcInteract("eve"); }}
               aria-label="与女人低语"
               tabIndex={activeNpc === "eve" ? -1 : 0}
+              style={stageSlotByNpc.get("eve")}
             >
               <Image
                 src={CHAPTER0_IMAGES.eveFullbodySprite}
@@ -1839,7 +1970,7 @@ const whisperCountForActiveNpc = activeNpc
               aria-label="与刺猬低语（连续点击2次可互动）"
               data-testid="scene-action-hedgehog"
               tabIndex={activeNpc === "hedgehog" ? -1 : 0}
-              style={{ border: "none", background: "transparent", padding: 0, cursor: "pointer", pointerEvents: "auto" }}
+              style={{ ...stageSlotByNpc.get("hedgehog"), border: "none", background: "transparent", padding: 0, cursor: "pointer", pointerEvents: "auto" }}
             >
               <Image
                 src={CHAPTER1_IMAGES.hedgehogRoundedSprite}
@@ -1851,82 +1982,6 @@ const whisperCountForActiveNpc = activeNpc
             </button>
           )}
 
-          {/* 守望天使（东园幽径远影，透明立绘 + 神的注视联动） */}
-          {currentNpcs.includes("watching_angel") && (
-            <button
-              className={`eden-stage-angel eden-stage-angel--attention-${state.divineAttention} ${activeNpc === "watching_angel" ? "eden-stage-angel--active" : ""}`}
-              onClick={(e) => { e.stopPropagation(); handleNpcInteract("watching_angel"); }}
-              aria-label="与守望天使低语"
-              tabIndex={activeNpc === "watching_angel" ? -1 : 0}
-            >
-              <Image
-                src={CHAPTER1_IMAGES.watchingAngelSprite}
-                alt="守望天使"
-                width={1254}
-                height={1254}
-                className="eden-angel-stage-sprite"
-              />
-            </button>
-          )}
-
-          {/* 新增 NPC 渲染 - 基路伯 */}
-          {currentNpcs.includes("cherubim") && (
-            <button
-              className={`eden-stage-angel eden-stage-angel--cherubim ${activeNpc === "cherubim" ? "eden-stage-angel--active" : ""}`}
-              onClick={(e) => { e.stopPropagation(); handleNpcInteract("cherubim"); }}
-              aria-label="与基路伯低语"
-              tabIndex={activeNpc === "cherubim" ? -1 : 0}
-            >
-              <Image
-                src={CHAPTER1_IMAGES.cherubimSprite}
-                alt="基路伯"
-                width={1023}
-                height={1537}
-                className="eden-angel-stage-sprite"
-              />
-            </button>
-          )}
-
-          {/* 新增 NPC 渲染 - 小鹿（仅白天可见） */}
-          {currentNpcs.includes("deer") && state.timeOfDay === "day" && (
-            <div
-              className="eden-stage-animal eden-stage-deer"
-              aria-hidden="true"
-              style={{
-                left: `${DEER_GAZE_ANCHOR.x}%`,
-                top: `${DEER_GAZE_ANCHOR.y}%`,
-                width: `${DEER_GAZE_ANCHOR.width}%`,
-                height: `${DEER_GAZE_ANCHOR.height}%`,
-              } as CSSProperties}
-            />
-          )}
-
-          {/* 新增 NPC 渲染 - 狐狸（可评估话术） */}
-          {currentNpcs.includes("fox") && (
-            <div className="eden-stage-animal eden-stage-fox">
-              <button
-                className={`eden-stage-animal-btn ${activeNpc === "fox" ? "eden-stage-animal--active" : ""}`}
-                onClick={(e) => { e.stopPropagation(); handleNpcInteract("fox"); }}
-                aria-label="与狐狸低语"
-                tabIndex={activeNpc === "fox" ? -1 : 0}
-                style={{ border: "none", background: "transparent", padding: 0, cursor: "pointer" }}
-              >
-                <span className="eden-animal-feedback">狐狸在树影里望着你。</span>
-              </button>
-              {activeNpc === "fox" && (
-                <button
-                  className="eden-btn eden-btn--suggestion eden-btn--fox-judge"
-                  onClick={(e) => { e.stopPropagation(); handleNewToolCall("judge_whisper_style", "fox"); }}
-                  disabled={isLoading || !playerInput.trim()}
-                  aria-label="请狐狸评估这句低语"
-                  style={{ marginTop: 8 }}
-                >
-                  🦊 评估话术
-                </button>
-              )}
-            </div>
-          )}
-
           {/* 新增 NPC 渲染 - 加百列（传达天使，伊甸之河白天） */}
           {currentNpcs.includes("gabriel") && (
             <button
@@ -1934,6 +1989,7 @@ const whisperCountForActiveNpc = activeNpc
               onClick={(e) => { e.stopPropagation(); handleNpcInteract("gabriel"); }}
               aria-label="与加百列低语"
               tabIndex={activeNpc === "gabriel" ? -1 : 0}
+              style={stageSlotByNpc.get("gabriel")}
             >
               <Image
                 src={CHAPTER1_IMAGES.gabrielSprite}
@@ -1945,35 +2001,18 @@ const whisperCountForActiveNpc = activeNpc
             </button>
           )}
 
-          {/* 新增 NPC 渲染 - 拉斐尔（安抚天使，伊甸之河白天/夜晚） */}
-          {currentNpcs.includes("raphael") && (
+          {/* 新增 NPC 渲染 - 路西法（明亮之星，四河分流白天/夜晚） */}
+          {currentNpcs.includes("lucifer") && (
             <button
-              className={`eden-stage-angel eden-stage-angel--raphael ${activeNpc === "raphael" ? "eden-stage-angel--active" : ""}`}
-              onClick={(e) => { e.stopPropagation(); handleNpcInteract("raphael"); }}
-              aria-label="与拉斐尔低语"
-              tabIndex={activeNpc === "raphael" ? -1 : 0}
+              className={`eden-stage-angel eden-stage-angel--lucifer ${activeNpc === "lucifer" ? "eden-stage-angel--active" : ""}`}
+              onClick={(e) => { e.stopPropagation(); handleNpcInteract("lucifer"); }}
+              aria-label="与路西法低语"
+              tabIndex={activeNpc === "lucifer" ? -1 : 0}
+              style={stageSlotByNpc.get("lucifer")}
             >
               <Image
-                src={CHAPTER1_IMAGES.raphaelSprite}
-                alt="拉斐尔"
-                width={1023}
-                height={1537}
-                className="eden-angel-stage-sprite"
-              />
-            </button>
-          )}
-
-          {/* 新增 NPC 渲染 - 乌列尔（光照天使，园中树林白天/夜晚） */}
-          {currentNpcs.includes("uriel") && (
-            <button
-              className={`eden-stage-angel eden-stage-angel--uriel ${activeNpc === "uriel" ? "eden-stage-angel--active" : ""}`}
-              onClick={(e) => { e.stopPropagation(); handleNpcInteract("uriel"); }}
-              aria-label="与乌列尔低语"
-              tabIndex={activeNpc === "uriel" ? -1 : 0}
-            >
-              <Image
-                src={CHAPTER1_IMAGES.urielSprite}
-                alt="乌列尔"
+                src={CHAPTER1_IMAGES.luciferSprite}
+                alt="路西法"
                 width={1023}
                 height={1537}
                 className="eden-angel-stage-sprite"
@@ -1988,6 +2027,7 @@ const whisperCountForActiveNpc = activeNpc
               onClick={(e) => { e.stopPropagation(); handleNpcInteract("michael"); }}
               aria-label="与米迦勒低语"
               tabIndex={activeNpc === "michael" ? -1 : 0}
+              style={stageSlotByNpc.get("michael")}
             >
               <Image
                 src={CHAPTER1_IMAGES.michaelSprite}
@@ -1998,13 +2038,6 @@ const whisperCountForActiveNpc = activeNpc
               />
             </button>
           )}
-
-          {/* 新增 NPC 渲染 - 羊（万物受名处白天）- 暂时移除
-          {currentNpcs.includes("sheep") && (
-            <div className="eden-stage-animal eden-stage-sheep">
-              <span className="eden-animal-feedback">羊群在草地上安静地吃草。</span>
-            </div>
-          )}*/}
 
           {/* 新增世界对象 - 生命树（园子中央白天/夜晚，不可低语，纯场景元素） */}
           {currentNpcs.includes("tree_of_life") && (
@@ -2039,6 +2072,37 @@ const whisperCountForActiveNpc = activeNpc
               <p className="eden-divine-gift-toast-hint">{divineGiftToast.hint}</p>
             )}
           </div>
+        </div>
+      )}
+
+      {/* 神明献礼三选一弹窗（与 intro 返回共用 giftChoiceModal 常量） */}
+      {giftChoiceModal}
+
+      {/* 集满七献礼：顶点演出 */}
+      {giftCapstoneShown && (
+        <div className="eden-gift-capstone-overlay" role="status" aria-label="七恩俱临">
+          <div className="eden-gift-capstone">
+            <div className="eden-gift-capstone-icon">✷</div>
+            <h2 className="eden-gift-capstone-title">七恩俱临</h2>
+            <p className="eden-gift-capstone-text">
+              神将七份礼物尽数交托于你。园中众人对你全然倾心，夏娃的疑问、亚当的牵念、守望者的沉默，都朝你敞开。
+            </p>
+            <button type="button" className="eden-btn eden-btn--primary" onClick={() => setGiftCapstoneShown(false)}>
+              继续
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* §2.2 方案 B：首次获得回响的一次性气泡提示 */}
+      {firstResonanceHint && (
+        <div
+          className="eden-first-resonance-hint"
+          role="status"
+          data-testid="world-first-resonance-hint"
+        >
+          <span className="eden-first-resonance-hint-icon">⟡</span>
+          <span className="eden-first-resonance-hint-text">{firstResonanceHint}</span>
         </div>
       )}
 
@@ -2328,7 +2392,23 @@ const whisperCountForActiveNpc = activeNpc
                   const profile = buildAttributeProfile(mindTabNpc, state);
                   const hasLivingNames = (state.itemCounts?.["resonance_living_names"] ?? 0) > 0;
                   const encountered = state.encounteredNpcIds.includes(mindTabNpc);
-                  const showDetailed = hasLivingNames && encountered;
+                  // 万物名录解锁双维度数值；牵绊道具解锁该 NPC 深层关系
+                  const showNumbers = hasLivingNames && encountered;
+                  const BOND_ITEM: Partial<Record<EdenNpcId, string>> = {
+                    eve: "resonance_her_voice",
+                    adam: "resonance_quiet_stone",
+                    michael: "resonance_river_dew",
+                    gabriel: "resonance_herald_feather",
+                    lucifer: "resonance_lucifer_star",
+                    hedgehog: "resonance_hedgehog_bristle",
+                  };
+                  const hasBond = (n: EdenNpcId): boolean => {
+                    const id = BOND_ITEM[n];
+                    if (!id) return false;
+                    return state.inventory.includes(id) || state.usedItemIds.includes(id);
+                  };
+                  const showRelation = showNumbers && hasBond(mindTabNpc);
+                  const showDetailed = showNumbers;
                   const relationProfile = getNpcRelationProfile(mindTabNpc);
                   const rel = state.npcRelations?.[mindTabNpc];
                   const affinity = rel?.affinity ?? relationProfile?.initialAffinity ?? 0;
@@ -2401,8 +2481,8 @@ const whisperCountForActiveNpc = activeNpc
                         ))}
                       </div>
 
-                      {/* 第一章：关系情报（获得万物名录后，仅对见过的角色） */}
-                      {relationProfile && (
+                      {/* 第一章：关系情报（万物名录解锁数值后，需对应牵绊道具解锁深层关系） */}
+                      {relationProfile && showRelation && (
                         <div className="eden-relation-intel">
                           <p className="eden-section-title">关系</p>
                           <div className="eden-psyche-info-row">
@@ -2417,6 +2497,11 @@ const whisperCountForActiveNpc = activeNpc
                             赠礼：{rel?.rewardClaimed ? "已获得" : rel?.rewardEligible ? "愿意赠你一件回响" : "尚浅"}
                           </p>
                         </div>
+                      )}
+                      {showNumbers && !showRelation && (
+                        <p className="eden-intel-locked-hint">
+                          获得对应牵绊后，才能看清与TA的深层关系。
+                        </p>
                       )}
                     </>
                   );
@@ -2445,6 +2530,14 @@ const whisperCountForActiveNpc = activeNpc
               <p className="eden-character-desc">
                 你没有手，不能触碰果子，也不能替任何人做出选择。你的力量只剩语言——以及耐心。每一轮你有 {state.maxActionPoints} 点行动，用于移动、低语或场景互动。行动点用尽后，需要主动进入下一轮才能恢复。
               </p>
+
+              {/* 润色 token 消耗展示 */}
+              <div style={{ marginTop: 16 }}>
+                <p className="eden-section-title">润色消耗</p>
+                <p style={{ color: "#b7b08e", fontSize: "0.85rem" }}>
+                  本次 {lastPolishTokens ?? "-"} · 累计 {polishTokensTotal} token
+                </p>
+              </div>
 
               {/* 当前回响Buff显示 */}
               <div style={{ marginTop: 16 }}>
@@ -2552,55 +2645,20 @@ const whisperCountForActiveNpc = activeNpc
                         { text: "草叶", color: "rgba(120, 150, 90, 0.2)" },
                         { text: "声音", color: "rgba(140, 160, 130, 0.2)" },
                       ],
-                      watching_angel: [
-                        { text: "边界", color: "rgba(150, 150, 170, 0.2)" },
-                        { text: "风", color: "rgba(130, 150, 160, 0.2)" },
-                        { text: "注视", color: "rgba(180, 150, 150, 0.2)" },
-                      ],
                       gabriel: [
                         { text: "声音", color: "rgba(160, 170, 200, 0.2)" },
                         { text: "传话", color: "rgba(150, 180, 200, 0.2)" },
                         { text: "水流", color: "rgba(130, 170, 190, 0.2)" },
-                      ],
-                      raphael: [
-                        { text: "安抚", color: "rgba(140, 190, 170, 0.2)" },
-                        { text: "平静", color: "rgba(130, 180, 180, 0.2)" },
-                        { text: "鹿", color: "rgba(150, 170, 160, 0.2)" },
-                      ],
-                      uriel: [
-                        { text: "光", color: "rgba(200, 180, 120, 0.2)" },
-                        { text: "分辨", color: "rgba(180, 170, 100, 0.2)" },
-                        { text: "提问", color: "rgba(160, 180, 120, 0.2)" },
                       ],
                       michael: [
                         { text: "选择", color: "rgba(150, 150, 180, 0.2)" },
                         { text: "后果", color: "rgba(170, 140, 160, 0.2)" },
                         { text: "分流", color: "rgba(140, 160, 180, 0.2)" },
                       ],
-                      cherubim: [
-                        { text: "东门", color: "rgba(180, 160, 140, 0.2)" },
-                        { text: "道路", color: "rgba(160, 150, 130, 0.2)" },
-                        { text: "守卫", color: "rgba(170, 150, 150, 0.2)" },
-                      ],
-                      fox: [
-                        { text: "话术", color: "rgba(180, 120, 140, 0.2)" },
-                        { text: "判断", color: "rgba(160, 140, 150, 0.2)" },
-                        { text: "评价", color: "rgba(170, 130, 140, 0.2)" },
-                      ],
-                      deer: [
-                        { text: "视线", color: "rgba(140, 170, 150, 0.2)" },
-                        { text: "树林", color: "rgba(120, 160, 130, 0.2)" },
-                        { text: "安静", color: "rgba(130, 170, 140, 0.2)" },
-                      ],
-                      dove: [
-                        { text: "传话", color: "rgba(180, 180, 190, 0.2)" },
-                        { text: "夜晚", color: "rgba(100, 110, 140, 0.2)" },
-                        { text: "温和", color: "rgba(170, 190, 180, 0.2)" },
-                      ],
-                      sheep: [
-                        { text: "园子", color: "rgba(150, 180, 130, 0.2)" },
-                        { text: "温和", color: "rgba(160, 190, 150, 0.2)" },
-                        { text: "草地", color: "rgba(130, 160, 110, 0.2)" },
+                      lucifer: [
+                        { text: "光", color: "rgba(200, 180, 120, 0.2)" },
+                        { text: "支流", color: "rgba(160, 170, 100, 0.2)" },
+                        { text: "提问", color: "rgba(160, 180, 120, 0.2)" },
                       ],
                       tree_of_life: [],
                       forbidden_tree: [],

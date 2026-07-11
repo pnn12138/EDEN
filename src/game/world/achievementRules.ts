@@ -73,11 +73,8 @@ export function checkAndUnlockAchievements(state: EdenWorldState): string[] {
 
   const usedResonanceIds = (state.resonanceUseHistory ?? []).map((record) => record.itemId);
 
-  // 借翼传言：成功让鸽子传话（工具历史或白羽回声均可证明）
-  if (
-    state.toolCallHistory.includes("carry_words") ||
-    usedResonanceIds.includes("resonance_white_feather_echo")
-  ) {
+  // 借翼传言：成功获得传令白羽（旧快照兼容）
+  if (usedResonanceIds.includes("resonance_herald_feather")) {
     tryUnlock("borrowed_wing_message");
   }
 
@@ -103,6 +100,9 @@ export function checkAndUnlockAchievements(state: EdenWorldState): string[] {
   }
   if ((state.divineGiftHistory ?? []).length >= 3) {
     tryUnlock("divine_gift_three");
+  }
+  if ((state.divineGiftsOwned ?? []).length >= 7) {
+    tryUnlock("divine_gift_all");
   }
 
   // 回响大师：累计使用五次主动/即时/被动回响
@@ -130,20 +130,18 @@ export function checkAndUnlockAchievements(state: EdenWorldState): string[] {
   }
 
   const RESONANCE_ALL_MARK_SET = [
-    "resonance_herald_feather",
-    "resonance_river_dew",
-    "resonance_morning_flame",
-    "resonance_boundary_mark",
-    "resonance_east_gate_glow",
-    "resonance_borrowed_name",
-    "resonance_hedgehog_bristle",
-    "resonance_deer_glance",
-    "resonance_fox_tail_note",
     "resonance_still_leaf",
+    "resonance_borrowed_name",
     "resonance_silent_grass",
-    "resonance_white_feather_echo",
+    "resonance_hedgehog_bristle",
+    "resonance_herald_feather",
+    "resonance_east_wind",
+    "resonance_lucifer_star",
+    "resonance_quiet_stone",
+    "resonance_river_dew",
+    "resonance_boundary_mark",
     "resonance_four_river_echo",
-    "resonance_living_names",
+    "consumable_trust_dew",
   ];
   if (RESONANCE_ALL_MARK_SET.every((id) => state.inventory.includes(id))) {
     tryUnlock("mark_all_resonance");
@@ -177,10 +175,10 @@ export function checkAndUnlockAchievements(state: EdenWorldState): string[] {
   if (relations.length >= 6 && relations.every((r) => r.affinity >= 80)) {
     tryUnlock("mark_all_npc_friend");
   }
-  if (state.eveMind.serpentTrust >= 100 || state.inventory.includes("resonance_eve_own_voice")) {
+  if (state.eveMind.serpentTrust >= 100 || state.inventory.includes("resonance_her_voice")) {
     tryUnlock("mark_her_trust");
   }
-  if (affinityOf("adam") >= 100 || state.inventory.includes("resonance_adam_quiet_bond")) {
+  if (affinityOf("adam") >= 100 || state.inventory.includes("resonance_quiet_stone")) {
     tryUnlock("mark_adam_friend");
   }
   if (affinityOf("michael") >= 100) {
@@ -189,8 +187,8 @@ export function checkAndUnlockAchievements(state: EdenWorldState): string[] {
   if (affinityOf("gabriel") >= 100) {
     tryUnlock("mark_gabriel_tip");
   }
-  // 晨星的共鸣：路西法在代码中以「光照天使乌列尔」的隐藏身份出现
-  if (affinityOf("uriel") >= 100) {
+  // 晨星的共鸣：路西法好感满
+  if (affinityOf("lucifer") >= 100) {
     tryUnlock("mark_lucifer_trust");
   }
   if (affinityOf("hedgehog") >= 100 || state.hedgehog.mood === "curious") {
@@ -199,11 +197,11 @@ export function checkAndUnlockAchievements(state: EdenWorldState): string[] {
   if ((state.npcDialogues ?? []).length >= 50) {
     tryUnlock("mark_question_10");
   }
-  // 未闻之语（隐藏）：与晨星聊到「边界」隐藏话题
+  // 未闻之语（隐藏）：与路西法聊到「边界」隐藏话题
   if (
     (state.npcDialogues ?? []).some(
       (d) =>
-        (d.speakerId === "uriel" || d.targetId === "uriel") &&
+        (d.speakerId === "lucifer" || d.targetId === "lucifer") &&
         d.topicId === "topic_lucifer_boundary",
     )
   ) {
@@ -230,11 +228,8 @@ export function checkAndUnlockAchievements(state: EdenWorldState): string[] {
   }
   const ANGEL_IDS: EdenNpcId[] = [
     "gabriel",
-    "raphael",
-    "uriel",
     "michael",
-    "cherubim",
-    "watching_angel",
+    "lucifer",
   ];
   const talkedToAngel = (state.npcDialogues ?? []).some(
     (d) => ANGEL_IDS.includes(d.speakerId) || ANGEL_IDS.includes(d.targetId),
@@ -255,7 +250,7 @@ export function checkAndUnlockAchievements(state: EdenWorldState): string[] {
     tryUnlock("mark_fail_ending");
   }
   // 永生之味：引导女人吃下生命树果子并撑到 12 时段结束
-  if (state.worldActions?.hasEatenFruit && (state.timeSlot >= 12 || state.endingId === "god_arrives")) {
+  if (state.worldActions?.hasEatenLifeFruit && (state.timeSlot >= 12 || state.endingId === "god_arrives")) {
     tryUnlock("mark_life_fruit");
   }
   // 诸路皆通：跨局集齐 3 种普通结局

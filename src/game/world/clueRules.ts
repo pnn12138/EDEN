@@ -24,7 +24,7 @@ export function tryDiscoverClues(
   source: EdenLocationId | EdenNpcId,
 ): { newlyDiscovered: string[]; narrations: string[] } {
   const candidates =
-    typeof source === "string" && (source === "eve" || source === "adam" || source === "hedgehog" || source === "watching_angel" || source === "forbidden_tree")
+    typeof source === "string" && (source === "eve" || source === "adam" || source === "hedgehog" || source === "gabriel" || source === "michael" || source === "lucifer" || source === "forbidden_tree" || source === "tree_of_life")
       ? getCluesByNpc(source as EdenNpcId)
       : getCluesByLocation(source as EdenLocationId);
 

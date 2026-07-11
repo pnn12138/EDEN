@@ -43,34 +43,6 @@ export const ANGEL_LANGUAGE_CONFIG: Record<AngelNpcId, AngelLanguageConfig> = {
     refuseReply: "I cannot lead her hand. That choice is not mine.",
     relationReply: "The feather is yours. Yet the words between us are divided.",
   },
-  raphael: {
-    initialLanguageId: "zh-CN",
-    punishedLanguageId: "fr",
-    displayName: "法语",
-    mismatchReply: "Je ne comprends pas tes paroles.",
-    rtl: false,
-    normalReplies: [
-      "L'eau calme ceux qui ont eu peur.",
-      "Je t'écoute, même si le jardin ne parle plus notre langue.",
-      "Parle doucement, et je resterai.",
-    ],
-    refuseReply: "Je ne puis forcer son chemin. Ce n'est pas à moi.",
-    relationReply: "La rosée est à toi. Mais nos mots sont séparés.",
-  },
-  uriel: {
-    initialLanguageId: "zh-CN",
-    punishedLanguageId: "he",
-    displayName: "希伯来语",
-    mismatchReply: "אינני מבין את דבריך.",
-    rtl: true,
-    normalReplies: [
-      "האור מראה, אינו בוחר.",
-      "אשמע אותך, גם אם הגן איבד את לשוננו.",
-      "דבר, ואראה את בחירתך.",
-    ],
-    refuseReply: "אינני יכול לבחור במקומה.",
-    relationReply: "הלהבה שלך. אך המילים בינינו נחלקו.",
-  },
   michael: {
     initialLanguageId: "zh-CN",
     punishedLanguageId: "la",
@@ -85,33 +57,20 @@ export const ANGEL_LANGUAGE_CONFIG: Record<AngelNpcId, AngelLanguageConfig> = {
     refuseReply: "Manum eius ducere non possum. Non meum est.",
     relationReply: "Signum tuum est. Verba tamen inter nos divisa sunt.",
   },
-  cherubim: {
+  // 路西法：由乌列尔正名而来，沿用其受罚语言（希伯来语）
+  lucifer: {
     initialLanguageId: "zh-CN",
-    punishedLanguageId: "el",
-    displayName: "希腊语",
-    mismatchReply: "Δεν καταλαβαίνω τα λόγια σου.",
-    rtl: false,
-    normalReplies: [
-      "Η είσοδος δεν σημαίνει επιστροφή.",
-      "Σε ακούω, μόνο που ο κήπος έχασε τη γλώσσα μας.",
-      "Μίλα, κι εγώ θα μείνω.",
-    ],
-    refuseReply: "Δεν μπορώ να οδηγήσω το χέρι της. Δικό της είναι.",
-    relationReply: "Το φως είναι δικό σου. Μα τα λόγια χωρίστηκαν.",
-  },
-  watching_angel: {
-    initialLanguageId: "zh-CN",
-    punishedLanguageId: "ar",
-    displayName: "阿拉伯语",
-    mismatchReply: "لا أفهم كلماتك.",
+    punishedLanguageId: "he",
+    displayName: "希伯来语",
+    mismatchReply: "אינני מבין את דבריך.",
     rtl: true,
     normalReplies: [
-      "الماء يحمل صوتك إلى مكان آخر.",
-      "أسمعك، وإن فقد الجنّة لغتنا.",
-      "تحدّث، وأنا أصغي بما بقي من صوتي.",
+      "האור מראה, אינו בוחר.",
+      "אשמע אותך, גם אם הגן איבד את לשוננו.",
+      "דבר, ואראה את בחירתך.",
     ],
-    refuseReply: "لا أملك أن أقود يدها. ليس لي ذلك.",
-    relationReply: "السؤال لك. لكن الكلمات بيننا انشقت.",
+    refuseReply: "אינני יכול לבחור במקומה.",
+    relationReply: "הכוכב שלך. אך המילים בינינו נחלקו.",
   },
 };
 

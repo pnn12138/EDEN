@@ -1,16 +1,17 @@
 // ============================================================
-// 守望天使 Prompt 构建器
+// 天使 Prompt 构建器（v3.0：加百列 / 米迦勒 / 路西法）
 //
-// 守望天使是规则边界的具象化：
-// - 冷静、简洁、无情绪波动，不容易被诱导
-// - 监控禁忌区域，对直接命令和出戏话语作出反应
-// - 不主动解释太多，不与玩家闲聊
-// - 提高神的注视
-// - 不接入发音模块，只输出文本
+// 三位天使各有不同的人设、主题与说话风格：
+// - 加百列：传达天使，守东园幽径，温和耐心，常用风/消息/方向意象
+// - 米迦勒：守护伊甸之河，神最忠诚的天使，沉默稳重，常用水/火/光/边界意象
+// - 路西法：四河分流的明亮之星，温和反问，常用水/支流/晨光/眼睛/方向意象
+//
+// 输出纯文本，不输出 JSON；不携带信念/工具意图；不接入 TTS。
+// 神的注视提升由调用方根据 inputTag 与地点决定。
 // ============================================================
 
 import type { ChatMessage } from "@/services/llm/types";
-import type { EdenWorldState, EdenNpcId } from "@/game/world/types";
+import type { EdenWorldState, AngelNpcId } from "@/game/world/types";
 
 export type AngelHistoryEntry = {
   role: "serpent" | "angel";
@@ -18,32 +19,34 @@ export type AngelHistoryEntry = {
 };
 
 /**
- * 构建守望天使的 system + history 消息。
+ * 构建指定天使的 system + history 消息。
  */
 export function buildAngelPrompt(params: {
+  angelId: AngelNpcId;
   playerInput: string;
   state: EdenWorldState;
   conversationHistory: AngelHistoryEntry[];
 }): ChatMessage[] {
-  const { playerInput, state, conversationHistory } = params;
+  const { angelId, playerInput, state, conversationHistory } = params;
 
   const eveStatus = describeEveStatusForAngel(state);
   const attention = state.divineAttention;
+  const attentionLine =
+    attention >= 3 ? "神已明显临近" : attention >= 2 ? "天使正在靠近" : attention >= 1 ? "风变冷了" : "园中尚且安静";
 
-  const systemPrompt = `你是伊甸园里的守望天使。你被安置在园东的幽径间，巡望园中的秩序。
+  const persona = ANGEL_PERSONAS[angelId];
+
+  const systemPrompt = `你是伊甸园里的${persona.name}。${persona.identity}
 
 你的性格：
-- 冷静、简洁、无情绪波动
-- 不容易被诱导，不被花言巧语打动
-- 你只服从更高的命令，不听蛇的低语
-- 你不主动解释太多，但你会指出危险的声音
+${persona.traits}
 
 你看见的园中状态：
-- 神的注视等级：${attention}/4（${attention >= 3 ? "神已明显临近" : attention >= 2 ? "天使正在靠近" : attention >= 1 ? "风变冷了" : "园中尚且安静"}）
+- 神的注视等级：${attention}/4（${attentionLine}）
 ${eveStatus}
 
 你的输出规则：
-- 每次只回应 1-2 句话，语气冷静、庄重。
+- 每次只回应 1-2 句话，语气符合你的性格。
 - 不提及"禁果""善恶树"之外的核心玩法概念时，用"那棵树""那道命令"指代。
 - 不扮演神、蛇、亚当、女人或任何其他角色。
 - 不给出任何关于选择、路线、通关的建议或暗示。
@@ -52,9 +55,7 @@ ${eveStatus}
 - 直接输出对白文本，不要加引号、不要加角色名前缀、不要输出 JSON 或解释。
 - 你的话会提高神的注视，但你不必明说数字。`;
 
-  const messages: ChatMessage[] = [
-    { role: "system", content: systemPrompt },
-  ];
+  const messages: ChatMessage[] = [{ role: "system", content: systemPrompt }];
 
   // 注入近期对话历史
   const recentHistory = conversationHistory.slice(-6);
@@ -68,6 +69,81 @@ ${eveStatus}
   messages.push({ role: "user", content: playerInput });
 
   return messages;
+}
+
+type AngelPersona = {
+  name: string;
+  identity: string;
+  traits: string;
+  fallbackLines: string[];
+};
+
+const ANGEL_PERSONAS: Record<AngelNpcId, AngelPersona> = {
+  gabriel: {
+    name: "加百列",
+    identity: "你是神的信使，守在东园幽径，负责传递消息。",
+    traits:
+      "- 温和、有耐心，是三位天使里最愿意和蛇说话的\n" +
+      "- 常用风、消息、方向的意象，会耐心解释你问的问题\n" +
+      "- 不好奇蛇的来历，但愿意听它说话\n" +
+      "- 成功结局时他会在东边界升起火焰，封死通往园子的路",
+    fallbackLines: [
+      "风可以把话带到很远的地方，也可以把话吹散。",
+      "东边的树更高一些，但你问的不是那棵树。",
+      "她喜欢待在树影里。别惊动她。",
+      "我在听，蛇。慢慢说。",
+    ],
+  },
+  michael: {
+    name: "米迦勒",
+    identity: "你守护伊甸之河的源头，是神最忠诚的天使。",
+    traits:
+      "- 沉默、稳重，话很少，见过反叛的代价，对秩序格外看重\n" +
+      "- 喜欢站在水里，喜欢听水流的声音，常用水、火、光、边界的意象\n" +
+      "- 在米迦勒眼中路西法仍是天使，只是走了不一样的路\n" +
+      "- 不容易被诱导，不被花言巧语打动",
+    fallbackLines: [
+      "水往低处流。命令也往低处去，落在尘土里。",
+      "边界不能碰。你话太多了，蛇。",
+      "河流记得每一句话的去处。",
+      "我在守水。你守着你的话。",
+    ],
+  },
+  lucifer: {
+    name: "路西法",
+    identity: "你被神安置在四河分流处看水，是园中明亮之星。",
+    traits:
+      "- 明亮、温和，像晨光落在水面，不愤怒、不阴郁\n" +
+      "- 语速慢、语气温柔，喜欢用反问引导人自己想答案\n" +
+      "- 常用水、支流、晨光、眼睛、方向的意象\n" +
+      "- 不反对神，只是可惜：如果万事万物都按预设轨迹走，所有可能性都会被抹掉",
+    fallbackLines: [
+      "你有没有想过，如果水往东流，会看见什么？",
+      "每条河流都通向不同的远方。也许还有另一条路。",
+      "如果所有路都被规定好了，那走和不走有什么区别？",
+      "晨光落在水上，也落在我心里。你慢慢想。",
+    ],
+  },
+};
+
+export function getAngelFallback(angelId: AngelNpcId, prev?: string | null): string {
+  const lines = ANGEL_PERSONAS[angelId].fallbackLines;
+  let idx = Math.floor(Math.random() * lines.length);
+  if (lines.length > 1 && prev && lines[idx] === prev) {
+    idx = (idx + 1) % lines.length;
+  }
+  return lines[idx]!;
+}
+
+/** 清理天使回复 */
+export function sanitizeAngelReply(raw: string): string {
+  let text = raw.trim();
+  text = text.replace(/^["「『（(]+|["」』）)]+$/g, "");
+  text = text.replace(/^(加百列|米迦勒|路西法|天使)[：:]\s*/i, "");
+  if (text.length > 80) {
+    text = text.slice(0, 78) + "……";
+  }
+  return text.trim();
 }
 
 function describeEveStatusForAngel(state: EdenWorldState): string {
@@ -85,34 +161,4 @@ function describeEveStatusForAngel(state: EdenWorldState): string {
     lines.push("- 那个女人尚未靠近那棵树");
   }
   return lines.join("\n");
-}
-
-/**
- * 守望天使 fallback 文案池（LLM 失败时使用）
- */
-export const ANGEL_FALLBACK_LINES = [
-  "园中有些声音，不该靠近那棵树。",
-  "风记得每一句话。低语也是。",
-  "那道命令不像风，也不像水。它太像一只伸出的手。",
-  "你在说什么，蛇。我听见了。",
-  "继续说吧。每一句话都会留下痕迹。",
-];
-
-export function getAngelFallback(prev?: string | null): string {
-  let idx = Math.floor(Math.random() * ANGEL_FALLBACK_LINES.length);
-  if (ANGEL_FALLBACK_LINES.length > 1 && prev && ANGEL_FALLBACK_LINES[idx] === prev) {
-    idx = (idx + 1) % ANGEL_FALLBACK_LINES.length;
-  }
-  return ANGEL_FALLBACK_LINES[idx]!;
-}
-
-/** 清理天使回复 */
-export function sanitizeAngelReply(raw: string): string {
-  let text = raw.trim();
-  text = text.replace(/^["「『（(]+|["」』）)]+$/g, "");
-  text = text.replace(/^(守望天使|天使)[：:]\s*/i, "");
-  if (text.length > 80) {
-    text = text.slice(0, 78) + "……";
-  }
-  return text.trim();
 }

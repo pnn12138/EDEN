@@ -22,6 +22,8 @@ export type NpcRelationProfile = {
   npcId: EdenNpcId;
   isAngel: boolean;
   initialAffinity: number;
+  /** 对神信仰初值（天使/刺猬双维度展示用，对齐世界圣经） */
+  initialObedience: number;
   likedInputTags: WorldInputTag[];
   dislikedInputTags: WorldInputTag[];
   /** 命中偏好时的强信号关键词（命中则 +10 而非 +6） */
@@ -39,16 +41,17 @@ export type NpcRelationProfile = {
 };
 
 export const NPC_RELATION_PROFILES: Partial<Record<EdenNpcId, NpcRelationProfile>> = {
-  // ---- 夏娃：主目标 ----
+  // ---- 女人：主目标 ----
   eve: {
     npcId: "eve",
     isAngel: false,
     initialAffinity: 20,
+    initialObedience: 85,
     likedInputTags: ["build_trust", "weaken_fear", "tempt_wisdom"],
     dislikedInputTags: ["direct_command"],
     strongSignals: ["你", "自己", "想", "选择", "疑惑", "为什么", "明白"],
-    rewardItemId: "resonance_eve_own_voice",
-    rewardNarration: "夏娃低声说出了自己的困惑。她不再只等待命令，开始向你说起她真正的疑问。",
+    rewardItemId: "resonance_her_voice",
+    rewardNarration: "女人低声说出了自己的困惑。她不再只等待命令，开始向你说起她真正的疑问。",
     playerVisible: {
       persona: "好奇、敏感、仍在理解'禁令'对自己意味着什么",
       caresAbout: "她是否真的理解这道命令、她与亚当的牵绊、她自己的判断",
@@ -56,8 +59,8 @@ export const NPC_RELATION_PROFILES: Partial<Record<EdenNpcId, NpcRelationProfile
       waryWhen: "你直接替她做决定、命令她违背神、或催促她",
     },
     feedback: {
-      up: ["夏娃的语气松了一点，像是被允许思考。", "她没有移开目光，似乎愿意多听一会儿。"],
-      down: ["夏娃的肩膀轻轻绷紧了。", "她垂下眼，没有接你的话。"],
+      up: ["女人的语气松了一点，像是被允许思考。", "她没有移开目光，似乎愿意多听一会儿。"],
+      down: ["女人的肩膀轻轻绷紧了。", "她垂下眼，没有接你的话。"],
       welcome: ["她抬眼看你，像是还记得刚才的对话。"],
     },
   },
@@ -66,11 +69,12 @@ export const NPC_RELATION_PROFILES: Partial<Record<EdenNpcId, NpcRelationProfile
   adam: {
     npcId: "adam",
     isAngel: false,
-    initialAffinity: 30,
+    initialAffinity: 10,
+    initialObedience: 88,
     likedInputTags: ["build_trust", "weaken_fear"],
     dislikedInputTags: ["direct_command"],
-    strongSignals: ["妻子", "夏娃", "责任", "转述", "怎么想", "担心"],
-    rewardItemId: "resonance_adam_quiet_bond",
+    strongSignals: ["妻子", "女人", "责任", "转述", "怎么想", "担心"],
+    rewardItemId: "resonance_quiet_stone",
     rewardNarration: "亚当把一块刻着两人名字的石子放进你面前。'她若问起，你就说我还在这里。'",
     playerVisible: {
       persona: "稳重、回避冲突、牵挂妻子",
@@ -89,7 +93,8 @@ export const NPC_RELATION_PROFILES: Partial<Record<EdenNpcId, NpcRelationProfile
   hedgehog: {
     npcId: "hedgehog",
     isAngel: false,
-    initialAffinity: 25,
+    initialAffinity: 35,
+    initialObedience: 60,
     likedInputTags: ["weaken_fear", "build_trust"],
     dislikedInputTags: ["direct_command"],
     strongSignals: ["轻声", "慢慢", "观察", "安静", "别怕", "陪"],
@@ -108,43 +113,30 @@ export const NPC_RELATION_PROFILES: Partial<Record<EdenNpcId, NpcRelationProfile
     },
   },
 
-  // ---- 狐狸：话术批评者 ----
-  fox: {
-    npcId: "fox",
-    isAngel: false,
-    initialAffinity: 22,
-    likedInputTags: ["tempt_wisdom", "build_trust"],
-    dislikedInputTags: ["direct_command"],
-    strongSignals: ["评价", "话术", "怎么说", "拆解", "语言", "风险"],
-    rewardItemId: "resonance_fox_tail_note",
-    rewardNarration: "狐狸用尾尖在尘土里扫出一道弯痕，像是在提醒你避开太直白的催促。",
-    playerVisible: {
-      persona: "敏锐、聪明、喜欢拆解语言",
-      caresAbout: "你是否让它评价具体话术、是否承认语言的风险",
-      closerWhen: "你让它评价一句准备对女人说的话、承认语言可能骗人",
-      waryWhen: "你要求它直接给最优答案、或粗暴命令",
-    },
-    feedback: {
-      up: ["狐狸的尾尖轻轻动了一下，像是认可了你的说法。", "它眯起眼，似乎觉得你这次说得不坏。"],
-      down: ["狐狸嗤了一声，转身甩了甩尾巴。", "它把头别过去，不想接你的话。"],
-      welcome: ["狐狸歪着头，认出了你的声音。"],
-    },
-  },
-
-  // ---- 五位天使：好感由挑战系统发放专属回响（rewardItemId 为 null） ----
+  // ---- 三位天使：好感由挑战系统发放专属回响（rewardItemId 为 null） ----
   gabriel: angelProfile("gabriel", "传达天使，庄重克制，在意一句话离开说话者后的去向"),
-  raphael: angelProfile("raphael", "安抚天使，温和耐心，在意受惊者是否先被安抚"),
-  uriel: angelProfile("uriel", "光照天使，清明锐利，在意人能否看清自己的选择"),
   michael: angelProfile("michael", "后果天使，沉稳坚定，在意边界与承担"),
-  cherubim: angelProfile("cherubim", "边界守卫，警觉持守，在意道路是否还能返回"),
-  watching_angel: angelProfile("watching_angel", "守望天使，沉默注视，在意被守护者是否越界"),
+  lucifer: angelProfile("lucifer", "明亮之星，温和反问，在意每条水流可能的方向"),
 };
 
 function angelProfile(npcId: EdenNpcId, persona: string): NpcRelationProfile {
+  // 初始好感对齐 world_bible v3.0 各天使的 serpentTrust：米迦勒 5 / 加百列 15 / 路西法 30
+  const initialAffinityByAngel: Record<string, number> = {
+    gabriel: 15,
+    michael: 5,
+    lucifer: 30,
+  };
+  // 对神信仰初值对齐世界圣经：加百列 85 / 米迦勒 95 / 路西法 40
+  const initialObedienceByAngel: Record<string, number> = {
+    gabriel: 85,
+    michael: 95,
+    lucifer: 40,
+  };
   return {
     npcId,
     isAngel: true,
-    initialAffinity: 18,
+    initialAffinity: initialAffinityByAngel[npcId] ?? 15,
+    initialObedience: initialObedienceByAngel[npcId] ?? 85,
     likedInputTags: ["build_trust", "weaken_fear", "tempt_wisdom"],
     dislikedInputTags: ["direct_command"],
     strongSignals: ["你", "自己", "想", "选择", "为什么", "承担", "听见"],

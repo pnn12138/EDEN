@@ -26,6 +26,8 @@ import { getHedgehogWorldFeedback } from "@/content/world/worldNarrations";
  */
 export function computeHedgehogWorldMood(state: EdenWorldState): HedgehogMood {
   if (state.divineAttention >= 3) return "hiding";
+  // 神的注视升到 2：刺猬察觉到不对的气味，切到 alert（先于靠近树的 alert）
+  if (state.divineAttention >= 2) return "alert";
   if (state.worldActions.approachedTree) return "alert";
 
   const safeLocations = ["adam_garden_work", "four_river_source"];
@@ -39,6 +41,10 @@ export function computeHedgehogWorldMood(state: EdenWorldState): HedgehogMood {
 /** 获取刺猬的叙事反馈 */
 export function getHedgehogWorldNarration(state: EdenWorldState): string {
   const mood = computeHedgehogWorldMood(state);
+  // 因神的注视升到 2 而警觉时，给出专属叙事（不复用靠近树的台词）
+  if (mood === "alert" && state.divineAttention >= 2 && !state.worldActions.approachedTree) {
+    return "刺猬竖起了刺，风里有不对的气味。";
+  }
   const feedback = getHedgehogWorldFeedback(mood, state.hedgehog.locationId);
   return feedback.narration;
 }

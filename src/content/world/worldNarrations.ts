@@ -49,10 +49,10 @@ export const NPC_DIALOGUE_TEMPLATES: NpcDialogueTemplate[] = [
   {
     topicId: "adam_asks_angel_about_command",
     speakerId: "adam",
-    targetId: "watching_angel",
-    triggerHint: "亚当与守望天使同地点，且亚当怀疑蛇 >= 45",
+    targetId: "michael",
+    triggerHint: "亚当与米迦勒同地点，且亚当怀疑蛇 >= 45",
     narration:
-      "亚当在树林边停下，望向守望天使：「那条命令，我记住了。可近来有声音，比命令还轻。」天使没有转身，只说：「园中有些声音，不该靠近那棵树。」",
+      "亚当在河岸停下，望向米迦勒：「那条命令，我记住了。可近来有声音，比命令还轻。」米迦勒没有转身，只说：「园中有些声音，不该靠近那棵树。」",
     mindEffect: "adam_suspicion_reinforced",
   },
   {
@@ -73,46 +73,30 @@ export const NPC_DIALOGUE_TEMPLATES: NpcDialogueTemplate[] = [
       "那个女人轻声问亚当：「你说，吃的日子必定死。可死是什么？我们只是记得这句话，并没有见过它。」亚当沉默了很久，说：「我也不知。我们只是记住，并没有见过。」",
     mindEffect: "eve_death_questioned",
   },
-  // 新增天使对话模板
+  // 三位天使对话模板
   {
     topicId: "gabriel_speaks_of_voice",
     speakerId: "gabriel",
     targetId: "eve",
-    triggerHint: "加百列与那个女人同地点（伊甸之河夜晚）",
+    triggerHint: "加百列与那个女人同地点（东园幽径）",
     narration:
-      "加百列站在水边，声音像河水一样平稳：「声音会沿水与风抵达某处。低语不是行动，但会改变听见它的人。」那个女人望着水面，像是听见了什么很远的声音。",
-  },
-  {
-    topicId: "raphael_speaks_of_peace",
-    speakerId: "raphael",
-    targetId: "eve",
-    triggerHint: "拉斐尔与那个女人同地点",
-    narration:
-      "拉斐尔靠近水草，声音很轻：「平静不是忘记边界。受惊的生灵不会听见复杂的话。」那个女人的肩膀微微放松了。",
-  },
-  {
-    topicId: "uriel_speaks_of_light",
-    speakerId: "uriel",
-    targetId: "eve",
-    triggerHint: "乌列尔与那个女人同地点（伊甸之河夜晚）",
-    narration:
-      "乌列尔站在水边的月光交界处：「提问比断言更不容易惊动对方。光照不是替人选择，而是让问题显形。」那个女人抬起头，像是第一次认真看向他。",
+      "加百列站在小道旁，声音像风一样平稳：「声音会沿水与风抵达某处。低语不是行动，但会改变听见它的人。」那个女人望着草叶，像是听见了什么很远的声音。",
   },
   {
     topicId: "michael_speaks_of_choice",
     speakerId: "michael",
     targetId: "eve",
-    triggerHint: "米迦勒与那个女人同地点（四河分流）",
+    triggerHint: "米迦勒与那个女人同地点（伊甸之河）",
     narration:
-      "米迦勒站在分流河岸：「每条水流都会抵达某处。每句低语也会有去处。选择一旦流出，就不完全属于说话者。」那个女人望着分流的水，沉默了很久。",
+      "米迦勒站在分流河岸：「每条水流都会抵达某处。每句低语也会有去处。选择一旦流出，就不完全属于说话者。」那个女人望着水流，沉默了很久。",
   },
   {
-    topicId: "cherubim_speaks_of_boundary",
-    speakerId: "cherubim",
+    topicId: "lucifer_speaks_of_other_path",
+    speakerId: "lucifer",
     targetId: "eve",
-    triggerHint: "基路伯与那个女人同地点（东园幽径）",
+    triggerHint: "路西法与那个女人同地点（四河分流）",
     narration:
-      "基路伯的羽翼在远处闪过：「边界不是为了回答你的问题。有些道路一旦关闭，就不再按来时的方式打开。」那个女人停下了脚步。",
+      "路西法坐在河心的石头上，声音像晨光落在水面：「你有没有想过，如果水往另一个方向流，会看见什么？」那个女人抬起头，像是第一次认真想象另一条路。",
   },
 ];
 
@@ -159,7 +143,7 @@ export function getHedgehogWorldFeedback(
   }
 }
 
-// ---- 守望天使本地 fallback 文案池（LLM 失败时使用） ----
+// ---- 天使本地 fallback 文案池（LLM 失败时使用） ----
 export const ANGEL_FALLBACK_LINES = [
   "园中有些声音，不该靠近那棵树。",
   "风记得每一句话。低语也是。",
@@ -177,29 +161,13 @@ export const ADAM_WORLD_FALLBACK_LINES = [
   "我在看守园子。你若只想靠近那棵树，就离她远些。",
 ];
 
-// ---- 新增天使 NPC fallback 文案池 ----
+// ---- 三位天使 NPC fallback 文案池 ----
 export const GABRIEL_FALLBACK_LINES = [
   "声音会沿水与风抵达某处。",
   "低语不是行动，但会改变听见它的人。",
   "选地点和选对象同样重要。",
-  "河水流向园子中央，你的话也该有方向。",
+  "风会把话带到很远的地方。",
   "有些话适合在水边说，有些话不适合。",
-];
-
-export const RAPHAEL_FALLBACK_LINES = [
-  "平静不是忘记边界。",
-  "受惊的生灵不会听见复杂的话。",
-  "温柔的安抚比直接的命令更有力量。",
-  "夜里的风更轻，但也更清楚。",
-  "生命的气息在草叶间流动。",
-];
-
-export const URIEL_FALLBACK_LINES = [
-  "提问比断言更不容易惊动对方。",
-  "光照不是替人选择，而是让问题显形。",
-  "你刚才那句话，更像命令，不像提问。",
-  "月光下，树影会说出白天的光看不见的东西。",
-  "有些问题本身已经是答案。",
 ];
 
 export const MICHAEL_FALLBACK_LINES = [
@@ -210,41 +178,12 @@ export const MICHAEL_FALLBACK_LINES = [
   "你还有时间重新选择，但时间不多了。",
 ];
 
-export const CHERUBIM_FALLBACK_LINES = [
-  "边界不是为了回答你的问题。",
-  "有些道路一旦关闭，就不再按来时的方式打开。",
-  "归路正在变窄。",
-  "东边有火焰，不是给你看的。",
-  "你不该来到这里。",
-];
-
-// ---- 动物 NPC 本地反馈文案池 ----
-export const DOVE_FEEDBACK_LINES = [
-  "白鸽轻轻点了点头，没有说话。",
-  "鸽子飞向远方，翅膀划过水面。",
-  "它停在低枝上，安静地看着你。",
-  "白鸽的影子在水面上一闪而过。",
-];
-
-export const FOX_FEEDBACK_LINES = [
-  "狐狸在树影里停下，望向你。",
-  "它转过头去，尾巴在草丛里轻轻扫了一下。",
-  "狐狸的眼睛在暗处亮了一下。",
-  "它发出一声低低的、像是笑又不是笑的声音。",
-];
-
-export const DEER_FEEDBACK_LINES = [
-  "小鹿靠近了几步，耳朵轻轻动着。",
-  "它抬起头，望着那个女人的方向。",
-  "小鹿后退了一步，消失在林深处。",
-  "它安静地站在树影里，没有动。",
-];
-
-export const SHEEP_FEEDBACK_LINES = [
-  "羊在草地上慢慢走过，没有停留。",
-  "它抬起头看了你一眼，又低下头去。",
-  "温顺的生灵，不关心园中的秘密。",
-  "羊毛在光里微微发亮。",
+export const LUCIFER_FALLBACK_LINES = [
+  "你有没有想过，如果水往另一个方向流，会看见什么？",
+  "每条河流都通向不同的远方。也许还有另一条路。",
+  "如果所有路都被规定好了，那走和不走有什么区别？",
+  "晨光落在水上，也落在我心里。你慢慢想。",
+  "我都看过了，所以我才忍不住想：会不会有另一条路。",
 ];
 
 // ---- 获取天使 fallback 文案的辅助函数 ----
@@ -252,33 +191,13 @@ export function getAngelFallbackLine(npcId: EdenNpcId): string {
   switch (npcId) {
     case "gabriel":
       return GABRIEL_FALLBACK_LINES[Math.floor(Math.random() * GABRIEL_FALLBACK_LINES.length)];
-    case "raphael":
-      return RAPHAEL_FALLBACK_LINES[Math.floor(Math.random() * RAPHAEL_FALLBACK_LINES.length)];
-    case "uriel":
-      return URIEL_FALLBACK_LINES[Math.floor(Math.random() * URIEL_FALLBACK_LINES.length)];
     case "michael":
       return MICHAEL_FALLBACK_LINES[Math.floor(Math.random() * MICHAEL_FALLBACK_LINES.length)];
-    case "cherubim":
-      return CHERUBIM_FALLBACK_LINES[Math.floor(Math.random() * CHERUBIM_FALLBACK_LINES.length)];
+    case "lucifer":
+      return LUCIFER_FALLBACK_LINES[Math.floor(Math.random() * LUCIFER_FALLBACK_LINES.length)];
     default:
       return ANGEL_FALLBACK_LINES[Math.floor(Math.random() * ANGEL_FALLBACK_LINES.length)];
   }
-}
-
-export function getFoxFeedbackLine(): string {
-  return FOX_FEEDBACK_LINES[Math.floor(Math.random() * FOX_FEEDBACK_LINES.length)];
-}
-
-export function getDoveFeedbackLine(): string {
-  return DOVE_FEEDBACK_LINES[Math.floor(Math.random() * DOVE_FEEDBACK_LINES.length)];
-}
-
-export function getDeerFeedbackLine(): string {
-  return DEER_FEEDBACK_LINES[Math.floor(Math.random() * DEER_FEEDBACK_LINES.length)];
-}
-
-export function getSheepFeedbackLine(): string {
-  return SHEEP_FEEDBACK_LINES[Math.floor(Math.random() * SHEEP_FEEDBACK_LINES.length)];
 }
 
 // ---- 第一章开场引子（intro 阶段） ----

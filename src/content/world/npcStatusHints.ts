@@ -12,10 +12,8 @@ import { NPC_NAMES } from "@/content/world/npcs";
 // ---- 天使类 NPC（使用 guarding / 试炼语义） ----
 const ANGEL_IDS = new Set<EdenNpcId>([
   "gabriel",
-  "raphael",
-  "uriel",
   "michael",
-  "cherubim",
+  "lucifer",
 ]);
 
 // ---- 敬畏 / 对神命令信仰 ----

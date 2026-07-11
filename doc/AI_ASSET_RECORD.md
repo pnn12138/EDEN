@@ -38,12 +38,13 @@
 | IMG026 | `object_forbidden_tree_sprite_candidate.png` | Image | 分别善恶树对象透明候选 | `/assets/chapter1/images/object_forbidden_tree_sprite_candidate.png` | Codex 调用项目配置的 Volcengine / Doubao Seedream 图像接口 + 本地 chroma-key 抠图 | Standalone tree of knowledge of good and evil, ancient twisting branches, subtle red-gold fruits, semi-realistic cinematic game object, flat magenta chroma-key background, no people, no text, no watermark | 待确认 | 否 | 候选，不建议直接接入 | 2048x2048 RGBA PNG；树叶边缘仍有品红残留，更适合暂存为概念候选；当前更推荐使用 `location_tree_court_v3_candidate.png` 作为完整场景背景 |
 | IMG027 | `npc_hedgehog_rounded_final.png` | Image | 刺猬圆润版透明立绘 | `/assets/chapter1/images/npc_hedgehog_rounded_final.png` | 用户提供绿幕图 + Codex 本地 chroma-key 抠图、轻微收边与去绿边 | Rounded cute hedgehog portrait sprite, warm brown quills, cream face and belly, side profile, flat green screen background, no text, no watermark | 用户提供 / 待确认 | 否 | 是 | 1254x1254 RGBA PNG；已接入第一章 `/world` 命名河滩刺猬氛围立绘，替代 Chapter 0 旧版刺猬；源图存档为 `npc_hedgehog_rounded_source.png`，中间抠图保留为 `npc_hedgehog_rounded_candidate.png` / `npc_hedgehog_rounded_candidate_clean.png`；最终版四角透明，按小动物体量缩放（宽度约 120-160px） |
 | IMG028 | `npc_gabriel_sprite.png` | Image | 加百列独立透明立绘 | `/assets/chapter1/images/npc_gabriel_sprite.png` | AI 生成（CodeBuddy image_gen） | Full body angel Gabriel, white and platinum gold robes, hand extended in message gesture, ethereal aura, water motif, game sprite style, 1254x1254 | AI 生成 | 否 | 是 | 约 1.3MB；2026-06-22 生成，已接入 `/world` 伊甸之河白天加百列渲染，替代共用 `watchingAngelSprite` + CSS 滤镜方案；加百列为游戏扩展角色，传达天使 |
-| IMG029 | `npc_raphael_sprite.png` | Image | 拉斐尔独立透明立绘 | `/assets/chapter1/images/npc_raphael_sprite.png` | AI 生成（CodeBuddy image_gen） | Full body angel Raphael, green and gold robes, holding healing plant staff, gentle healing aura, game sprite style, 1254x1254 | AI 生成 | 否 | 是 | 约 1.4MB；2026-06-22 生成，已接入 `/world` 伊甸之河白天/夜晚拉斐尔渲染；拉斐尔为游戏扩展角色，安抚/医治天使 |
-| IMG030 | `npc_uriel_sprite.png` | Image | 乌列尔独立透明立绘 | `/assets/chapter1/images/npc_uriel_sprite.png` | AI 生成（CodeBuddy image_gen） | Full body angel Uriel, silver and gold radiant robes, holding sphere of light, very bright luminous outline, game sprite style, 1254x1254 | AI 生成 | 否 | 是 | 约 1.5MB；2026-06-22 生成，已接入 `/world` 园中树林白天/夜晚乌列尔渲染；乌列尔为游戏扩展角色，光照天使 |
+| IMG029 | `npc_raphael_sprite.png` | Image | 拉斐尔独立透明立绘 | `/assets/chapter1/images/npc_raphael_sprite.png` | AI 生成（CodeBuddy image_gen） | Full body angel Raphael, green and gold robes, holding healing plant staff, gentle healing aura, game sprite style, 1254x1254 | AI 生成 | 否 | 否 | 约 1.4MB；2026-06-22 生成，立绘已在资源清理中移除，第一章当前仅接入加百列/米迦勒/路西法三位天使立绘；拉斐尔/乌列尔为概念扩展角色，暂未接入 /world；拉斐尔为游戏扩展角色，安抚/医治天使 |
+| IMG030 | `npc_uriel_sprite.png` | Image | 乌列尔独立透明立绘 | `/assets/chapter1/images/npc_uriel_sprite.png` | AI 生成（CodeBuddy image_gen） | Full body angel Uriel, silver and gold radiant robes, holding sphere of light, very bright luminous outline, game sprite style, 1254x1254 | AI 生成 | 否 | 否 | 约 1.5MB；2026-06-22 生成，立绘已在资源清理中移除，第一章当前仅接入加百列/米迦勒/路西法三位天使立绘；拉斐尔/乌列尔为概念扩展角色，暂未接入 /world；乌列尔为游戏扩展角色，光照天使 |
 | IMG031 | `npc_michael_sprite.png` | Image | 米迦勒独立透明立绘 | `/assets/chapter1/images/npc_michael_sprite.png` | AI 生成（CodeBuddy image_gen） | Full body angel Michael, deep blue and dark gold cloak, serious guarding presence, holding ceremonial staff, game sprite style, 1254x1254 | AI 生成 | 否 | 是 | 约 1.3MB；2026-06-22 生成，已接入 `/world` 四河分流白天/夜晚米迦勒渲染；米迦勒为游戏扩展角色，后果与守卫天使 |
 | IMG032 | `npc_cherubim_sprite.png` | Image | 基路伯独立透明立绘 | `/assets/chapter1/images/npc_cherubim_sprite.png` | AI 生成（CodeBuddy image_gen） | Non-human Cherubim, multiple wings, some wings covering face, glowing eyes, mysterious otherworldly, game sprite style, 1254x1254 | AI 生成 | 否 | 是 | 约 1.3MB；2026-06-22 生成，已接入 `/world` 东园幽径基路伯渲染；基路伯来自《创世记》3:24 伊甸东边守卫意象，非人化多翼形象，与四位人形天使明显区分 |
 | IMG033 | `second_eden_prologue_background.png` | Image | `/prologue` 虚构世界说明页背景 | `/assets/chapter0/images/second_eden_prologue_background.png` | Codex 内置图像生成 | Dreamlike simulated Garden of Eden enclosed in a gentle transparent light veil, ancient trees, river water, mist, floating golden particles, blue-violet twilight, teal green and warm gold, faint distant transparent projection-like frames, no people, no lab, no machinery, no text | 待确认 | 否 | 是 | 约 2.4MB；2026-06-24 生成并接入 `/prologue`，用于进入游戏前说明“第二伊甸园”为原创科幻叙事空间；源文件保留于 Codex generated_images 目录 |
 | IMG034 | `second_eden_prologue_background.png` | Image | `/prologue` 与 E-01 开场背景替换版 | `/assets/chapter0/images/second_eden_prologue_background.png` | Codex 内置图像生成 | Central Eden garden enclosed in a transparent luminous sphere/dome, ancient tree, river, mist, warm gold light; surrounding fantasy electronic elements, blue-violet circuit constellations, cyan data rings, floating filaments; no people, no lab, no machinery, no text | 待确认 | 否 | 是 | 约 2.4MB；2026-06-24 按用户反馈覆盖 IMG033 项目运行文件：伊甸园必须包裹在中央，四周是梦幻电子元素；源文件保留于 Codex generated_images 目录 |
+| IMG035 | `npc_lucifer_sprite.png` | Image | 路西法独立透明立绘（替换版） | `/assets/chapter1/images/npc_lucifer_sprite.png` | AI 生成（CodeBuddy image_gen） | Full body Lucifer, bright morning star angel of Eden, gentle with subtle rebellion, silver-blue and dark-gold flowing robes, faint luminous starlight halo, one hand extended pondering a different path; ethereal mythic Eden, semi-realistic cinematic game character, transparent background, no text, no watermark | AI 生成 | 否 | 是 | 约 1.45MB；2026-07-11 生成，银蓝/暗金风格以与加百列白金立绘区分；已接入 `/world` 四河分流路西法渲染，符合"明亮温和带反叛感"设定 |
 
 ## 音频素材
 
@@ -54,6 +55,23 @@
 | AUD003 | `temptation_progress.mp3` | Audio | 诱惑进度变化 | `/assets/chapter0/audio/temptation_progress.mp3` | Freesound | church bell / magic chime | 待确认许可证 | 待确认 | 是 | 约 0.11MB。原始文件：`universfield-single-church-bell-2-352062.mp3` |
 | AUD004 | `fruit_taken.mp3` | Audio | 成功结局触发（夏娃吃果） | `/assets/chapter0/audio/fruit_taken.mp3` | Freesound | apple bite and eat | 待确认许可证 | 待确认 | 是 | 约 0.29MB。原始文件：`yuliana-yurukova-apple-bite-and-eat-275872.mp3`；成功结局先播放此音效，后段延迟约 1500ms 复用 god_arrives.mp3 |
 | AUD005 | `god_arrives.mp3` | Audio | 失败结局触发 / 成功结局后段（上帝降临） | `/assets/chapter0/audio/god_arrives.mp3` | Freesound | angel choir | 待确认许可证 | 待确认 | 是 | 约 0.56MB。原始文件：`dragon-studio-angel-choir-463220.mp3`；失败结局直接播放，成功结局后段延迟约 1500ms 播放（避免同一 endingId 重复播放） |
+| AUD006 | `chapter1_eden_world_ambient.mp3` | Audio | 第一章伊甸园环境底噪（地图常驻） | `/assets/chapter1/audio/chapter1_eden_world_ambient.mp3` | 免费素材库 / 程序生成占位 | garden ambience loop | 待确认 | 待确认 | 是 | 第一章 /world 常驻环境音；规格见 doc/第一章/素材需求文档.md AUD101 |
+| AUD007 | `four_river_source_loop.mp3` | Audio | 四河源头水声循环 | `/assets/chapter1/audio/four_river_source_loop.mp3` | 免费素材库 / 程序生成占位 | gentle river stream loop | 待确认 | 待确认 | 是 | 四河源头地点循环；AUD102 |
+| AUD008 | `map_move_soft_steps.mp3` | Audio | 地图移动柔和脚步 | `/assets/chapter1/audio/map_move_soft_steps.mp3` | 免费素材库 / 程序生成占位 | soft footsteps grass | 待确认 | 待确认 | 是 | 切换地图节点；AUD103 |
+| AUD009 | `observe_location_chime.mp3` | Audio | 观察地点提示铃音 | `/assets/chapter1/audio/observe_location_chime.mp3` | 免费素材库 / 程序生成占位 | subtle discovery chime | 待确认 | 待确认 | 是 | `observe_location` 成功反馈；AUD104 |
+| AUD010 | `npc_dialogue_murmur.mp3` | Audio | NPC 低声交谈背景 | `/assets/chapter1/audio/npc_dialogue_murmur.mp3` | 免费素材库 / 程序生成占位 | soft murmur no words | 待确认 | 待确认 | 是 | `speak_to_npc` 触发；AUD105 |
+| AUD011 | `hedgehog_rustle.mp3` | Audio | 刺猬草丛沙沙声 | `/assets/chapter1/audio/hedgehog_rustle.mp3` | 免费素材库 / 程序生成占位 | small animal rustle | 待确认 | 待确认 | 是 | 刺猬移动 / 躲藏 / 出现；AUD106 |
+| AUD012 | `divine_attention_rise.mp3` | Audio | 神的注视上升音 | `/assets/chapter1/audio/divine_attention_rise.mp3` | 免费素材库 / 程序生成占位 | low sacred drone | 待确认 | 待确认 | 是 | 风险提升反馈；AUD107 |
+| AUD013 | `angel_wing_distant.mp3` | Audio | 远处天使羽翼声 | `/assets/chapter1/audio/angel_wing_distant.mp3` | 免费素材库 / 程序生成占位 | distant wings | 待确认 | 待确认 | 是 | 天使巡望 / 高风险区域；AUD108 |
+| AUD014 | `tree_look_chime.mp3` | Audio | 看向树的微光铃音 | `/assets/chapter1/audio/tree_look_chime.mp3` | 免费素材库 / 程序生成占位 | ethereal bell subtle | 待确认 | 待确认 | 是 | `look_at_tree` 反馈；AUD109 |
+| AUD015 | `approach_tree_low_rise.mp3` | Audio | 靠近树低频上升音 | `/assets/chapter1/audio/approach_tree_low_rise.mp3` | 免费素材库 / 程序生成占位 | low tension rise | 待确认 | 待确认 | 是 | `approach_tree` 反馈；AUD110 |
+| AUD016 | `touch_fruit_tension.mp3` | Audio | 触果前紧张音 | `/assets/chapter1/audio/touch_fruit_tension.mp3` | 免费素材库 / 程序生成占位 | soft ominous swell | 待确认 | 待确认 | 是 | `touch_fruit` 反馈；AUD111 |
+| AUD017 | `ending_success.mp3` | Audio | 结局：成功（夏娃吃下果子） | `/assets/chapter1/audio/ending_success.mp3` | Phase H2 程序生成占位音（ffmpeg） | 成功结局音效 | 占位 | 否 | 是 | 2026-07-11 Phase H2 由 CodeBuddy 生成正弦占位音，待替换为正式素材 |
+| AUD018 | `ending_failure.mp3` | Audio | 结局：失败（神降临） | `/assets/chapter1/audio/ending_failure.mp3` | Phase H2 程序生成占位音（ffmpeg） | 失败结局音效 | 占位 | 否 | 是 | 同上 |
+| AUD019 | `divine_gift_light.mp3` | Audio | 神明献礼：光落 | `/assets/chapter1/audio/divine_gift_light.mp3` | Phase H2 程序生成占位音（ffmpeg） | 献礼光落反馈 | 占位 | 否 | 是 | 同上；音量低于对话音 |
+| AUD020 | `resonance_gain.mp3` | Audio | 获得回响（天使回响） | `/assets/chapter1/audio/resonance_gain.mp3` | Phase H2 程序生成占位音（ffmpeg） | 回响获得反馈 | 占位 | 否 | 是 | 同上 |
+| AUD021 | `mark_unlock.mp3` | Audio | 解锁园中印记 | `/assets/chapter1/audio/mark_unlock.mp3` | Phase H2 程序生成占位音（ffmpeg） | 印记解锁反馈 | 占位 | 否 | 是 | 同上；音量低于对话音 |
+| AUD022 | `day_night_shift.mp3` | Audio | 昼夜切换 | `/assets/chapter1/audio/day_night_shift.mp3` | Phase H2 程序生成占位音（ffmpeg） | 昼夜切换提示 | 占位 | 否 | 是 | 同上 |
 
 ## 来源说明
 
@@ -117,6 +135,9 @@
 | 夏娃（世界版） | `src/agents/world/worldAgentPrompts.ts` | 初生、纯真、缺乏识别欺骗经验；对"知道、善恶、死亡、自己判断"敏感；被打动时说"我想知道"而非"蛇说得对"；不输出 JSON，只输出纯文本对白。 | 沿用 Chapter 0 |
 | 亚当（世界版） | `src/agents/world/worldAgentPrompts.ts` | 稳重、回避冲突；对夏娃有牵挂；记得命令比夏娃更直接；不泄露通关答案，只用自己方式透露夏娃习惯。 | 沿用 Chapter 0 |
 | 刺猬（第一章） | 复用 `src/agents/hedgehog/buildHedgehogPrompt.ts` | 延续 Chapter 0 温和、害羞、环境反馈定位；不提供通关答案；不修改任何状态；不接 TTS。 | 不接入 |
+| 加百列（第一章） | `src/agents/world/buildAngelPrompt.ts` 等 | 东园幽径传达天使；温和有耐心，最愿交谈，对蛇存在好奇；知道路西法想法危险却也承认想过同样问题；成功结局在东边界升起火焰封路。庄重克制、不被蛇说服、不给通关建议。 | 不接入 |
+| 米迦勒（第一章） | `src/agents/world/buildAngelPrompt.ts` 等 | 伊甸之河后果天使；沉默稳重、话少实在，看重秩序，对路西法可惜而非憎恨，喜欢站水里听水流。受罚后强制只用专属语言回复。 | 不接入 |
+| 路西法（第一章） | `src/agents/world/buildAngelPrompt.ts` 等 | 四河分流天使；明亮温和如晨光，不反对神只觉可惜，思考"水若往另一方向流"的可能性，藏有世界最终走向的疑问。庄重克制、不被蛇说服。 | 不接入 |
 
 ### 2. 第一章 AI 创作环节
 
@@ -242,7 +263,10 @@
 
 ### ① 世界观与剧情（AI 生成）
 
-- **世界观设定（`design/01_world_bible.md`）**：由 CodeBuddy 基于《创世记》伊甸园禁果段落进行哲学再解释，产出"第二伊甸园 / AI 沙盒隐喻"双层叙事；表层为圣经寓言，底层解读为"神=研究员、夏娃=智能体、蛇=异常输入源、禁果=越权认知协议"。
+- **世界观设定（`design/01_world_bible.md`，World Bible v3.0）**：由 CodeBuddy 基于《创世记》伊甸园禁果段落进行哲学再解释，产出"第二伊甸园 / AI 沙盒隐喻"双层叙事；表层为圣经寓言，底层解读为"神=研究员、夏娃=智能体、蛇=异常输入源、禁果=越权认知协议"。
+- **NPC 完整设定（`design/characters/npc_full_design.md`，v1.0 正式版）**：由 CodeBuddy 基于 World Bible v3.0 迭代生成 6 位核心 NPC（女人 / 亚当 / 米迦勒 / 加百列 / 路西法 / 刺猬）的人设、职责、对话风格与主动赠礼触发条件；移除所有 meta 表述，纯神话语境，符合 v3.0 双维度（obedience / serpentTrust）规则。
+  - 生成 prompt 摘要：以"纯神话语境、清新自然无生硬表述、符合世界观圣经 v3.0 规则、不泄露通关答案"为约束，迭代生成各 NPC 设定；路西法隐藏结局（营养缸觉醒）触发逻辑在文档中标注为机密、不展开。
+  - 用途：作为第一章 6 NPC Agent Prompt 设计的总依据，与 `buildAngelPrompt.ts` / `worldAgentPrompts.ts` 等代码层 prompt 一一对应。
   - 生成 prompt 摘要：以"用 AI 重塑经典情节、保持克制神话寓言气质、不戏仿宗教、不把夏娃写成被欺骗者"为约束，迭代生成世界观条目与角色关系。
   - 用途：作为 Chapter 0（蛇诱夏娃）与第一章「园中诸声」的叙事总纲；底层 AI 沙盒隐喻仅用于路演/架构说明，不进入玩家可见文本。
 - **剧情脚本（`design/02_second_eden_narrative.md`、`design/chapters/`）**：AI 辅助生成章节节拍（Beat）、禁忌动作链（`look_at_tree→approach_tree→touch_fruit→eat_fruit`）、结局文案（`eve_eats_fruit` / `god_arrives`）。

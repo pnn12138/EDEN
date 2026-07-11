@@ -85,15 +85,15 @@ check("/world 时段徽标存在", worldPage.includes("eden-time-slot-badge"));
 
 // ---- 新工具 UI ----
 check("/world 不再显示白鸽传话按钮", !worldPage.includes("让鸽子传话"));
-check("/world 有 judge_whisper_style 按钮", worldPage.includes("评估话术"));
-check("/world 有 handleNewToolCall 函数", worldPage.includes("handleNewToolCall"));
+check("/world 不再显示评估话术按钮", !worldPage.includes("评估话术"));
+check("/world 有 handleToolCall 函数", worldPage.includes("handleToolCall"));
 
 // ---- 新增 NPC 场景渲染 ----
 check("/world 有 gabriel 场景渲染", worldPage.includes('"gabriel"'));
-check("/world 有 raphael 场景渲染", worldPage.includes('"raphael"'));
-check("/world 有 uriel 场景渲染", worldPage.includes('"uriel"'));
+check("/world 有 lucifer 场景渲染", worldPage.includes('"lucifer"'));
 check("/world 有 michael 场景渲染", worldPage.includes('"michael"'));
-check("/world 有 sheep 场景渲染", worldPage.includes('"sheep"'));
+check("/world 有 hedgehog 场景渲染", worldPage.includes('"hedgehog"'));
+check("/world 有 tree_of_life 场景渲染", worldPage.includes('"tree_of_life"'));
 check("/world 有 tree_of_life 场景渲染", worldPage.includes('"tree_of_life"'));
 
 // ---- 五位天使独立立绘接入验收 ----
@@ -103,50 +103,38 @@ function blockAfter(content, marker, length = 900) {
   return index >= 0 ? content.slice(index, index + length) : "";
 }
 
-// assets.ts 包含 5 个新增 sprite 常量
+// assets.ts 包含天使 sprite 常量（v3.0：加百列 / 米迦勒 / 路西法）
 check("assets.ts 包含 gabrielSprite", assets.includes("gabrielSprite"));
-check("assets.ts 包含 raphaelSprite", assets.includes("raphaelSprite"));
-check("assets.ts 包含 urielSprite", assets.includes("urielSprite"));
 check("assets.ts 包含 michaelSprite", assets.includes("michaelSprite"));
-check("assets.ts 包含 cherubimSprite", assets.includes("cherubimSprite"));
+check("assets.ts 包含 luciferSprite", assets.includes("luciferSprite"));
 
-// 5 个 sprite 文件实际存在
+// sprite 文件实际存在
 check("npc_gabriel_sprite.png 存在", exists("public/assets/chapter1/images/npc_gabriel_sprite.png"));
-check("npc_raphael_sprite.png 存在", exists("public/assets/chapter1/images/npc_raphael_sprite.png"));
-check("npc_uriel_sprite.png 存在", exists("public/assets/chapter1/images/npc_uriel_sprite.png"));
 check("npc_michael_sprite.png 存在", exists("public/assets/chapter1/images/npc_michael_sprite.png"));
-check("npc_cherubim_sprite.png 存在", exists("public/assets/chapter1/images/npc_cherubim_sprite.png"));
+check("npc_lucifer_sprite.png 存在", exists("public/assets/chapter1/images/npc_lucifer_sprite.png"));
 
 // 每位天使引用自己的 sprite 常量
 const gabrielBlock = blockAfter(worldPage, 'currentNpcs.includes("gabriel")');
-const raphaelBlock = blockAfter(worldPage, 'currentNpcs.includes("raphael")');
-const urielBlock = blockAfter(worldPage, 'currentNpcs.includes("uriel")');
 const michaelBlock = blockAfter(worldPage, 'currentNpcs.includes("michael")');
-const cherubimBlock = blockAfter(worldPage, 'currentNpcs.includes("cherubim")');
+const luciferBlock = blockAfter(worldPage, 'currentNpcs.includes("lucifer")');
 
 check("gabriel 使用独立立绘", gabrielBlock.includes("CHAPTER1_IMAGES.gabrielSprite"));
-check("raphael 使用独立立绘", raphaelBlock.includes("CHAPTER1_IMAGES.raphaelSprite"));
-check("uriel 使用独立立绘", urielBlock.includes("CHAPTER1_IMAGES.urielSprite"));
 check("michael 使用独立立绘", michaelBlock.includes("CHAPTER1_IMAGES.michaelSprite"));
-check("cherubim 使用独立立绘", cherubimBlock.includes("CHAPTER1_IMAGES.cherubimSprite"));
+check("lucifer 使用独立立绘", luciferBlock.includes("CHAPTER1_IMAGES.luciferSprite"));
 
-// 五位天使的渲染块不得引用 watchingAngelSprite
+// 三位天使的渲染块不得引用 watchingAngelSprite
 check("gabriel 不复用守望天使立绘", !gabrielBlock.includes("CHAPTER1_IMAGES.watchingAngelSprite"));
-check("raphael 不复用守望天使立绘", !raphaelBlock.includes("CHAPTER1_IMAGES.watchingAngelSprite"));
-check("uriel 不复用守望天使立绘", !urielBlock.includes("CHAPTER1_IMAGES.watchingAngelSprite"));
 check("michael 不复用守望天使立绘", !michaelBlock.includes("CHAPTER1_IMAGES.watchingAngelSprite"));
-check("cherubim 不复用守望天使立绘", !cherubimBlock.includes("CHAPTER1_IMAGES.watchingAngelSprite"));
+check("lucifer 不复用守望天使立绘", !luciferBlock.includes("CHAPTER1_IMAGES.watchingAngelSprite"));
 
 // 5 个 sprite 路径互不相同
 const spritePaths = [
   "npc_gabriel_sprite.png",
-  "npc_raphael_sprite.png",
-  "npc_uriel_sprite.png",
   "npc_michael_sprite.png",
-  "npc_cherubim_sprite.png",
+  "npc_lucifer_sprite.png",
 ];
 const uniquePaths = new Set(spritePaths);
-check("5 个 sprite 文件名互不相同", uniquePaths.size === 5);
+check("3 位天使 sprite 文件名互不相同", uniquePaths.size === 3);
 
 // ---- 地图详情框 NPC 列表 ----
 check("/world 地图详情框包含 NPC 列表", worldPage.includes("eden-map-npc-list"));
@@ -159,14 +147,13 @@ check("/world 可低语 NPC 不过滤", !worldPage.includes('disabled={!meta.can
 
 // ---- 天使分布验收（伊甸之河不再三天使同屏） ----
 const fourRiverSourceLoc = locations.split("four_river_source:")[1]?.split("},")[0] ?? "";
-check("伊甸之河白天只含 gabriel", fourRiverSourceLoc.includes('dayNpcs: ["gabriel"]'));
-check("伊甸之河夜晚只含 raphael", fourRiverSourceLoc.includes('nightNpcs: ["raphael"]'));
+check("伊甸之河白天只含 michael", fourRiverSourceLoc.includes('dayNpcs: ["michael"]'));
+check("伊甸之河夜晚只含 michael", fourRiverSourceLoc.includes('nightNpcs: ["michael"]'));
 check("伊甸之河不再包含 uriel", !fourRiverSourceLoc.includes("uriel"));
 check("伊甸之河夜晚不含 dove", !fourRiverSourceLoc.includes("dove"));
 
 const treeCourtLoc = locations.split("tree_court:")[1]?.split("},")[0] ?? "";
 check("园中树林含 eve", treeCourtLoc.includes("eve"));
-check("园中树林含 deer", treeCourtLoc.includes("deer"));
 check("园中树林不含 uriel（无天使）", !treeCourtLoc.includes("uriel"));
 check("园中树林不含 gabriel（无天使）", !treeCourtLoc.includes("gabriel"));
 check("园中树林不含 raphael（无天使）", !treeCourtLoc.includes("raphael"));
@@ -175,14 +162,18 @@ check("园子中央允许动态显示 eve", centralMeadowLoc.includes("eve"));
 check("/world 地图详情按动态位置显示 NPC", worldPage.includes("getVisibleNpcsAtLocation(state, selectedMapLocationId)") && !worldPage.includes("const timeNpcs = state.timeOfDay"));
 
 const namingStoneBankLoc = locations.split("naming_stone_bank:")[1]?.split("},")[0] ?? "";
-check("四河分流含 michael", namingStoneBankLoc.includes("michael"));
+check("四河分流含 lucifer", namingStoneBankLoc.includes("lucifer"));
 check("四河分流不含 dove", !namingStoneBankLoc.includes("dove"));
 
 const eastGardenPathLoc = locations.split("east_garden_path:")[1]?.split("},")[0] ?? "";
-check("东园幽径白天含 cherubim 与 fox", eastGardenPathLoc.includes('dayNpcs: ["cherubim", "fox"]'));
-check("东园幽径夜晚含 uriel 与 fox", eastGardenPathLoc.includes('nightNpcs: ["uriel", "fox"]'));
-check("东园幽径含 fox", eastGardenPathLoc.includes("fox"));
-check("东园幽径白天不含 hedgehog", !eastGardenPathLoc.includes('dayNpcs: ["cherubim", "fox", "hedgehog"]'));
+check("东园幽径白天只含 gabriel（加百列独占）", eastGardenPathLoc.includes('dayNpcs: ["gabriel"]'));
+check("东园幽径夜晚只含 gabriel（加百列独占）", eastGardenPathLoc.includes('nightNpcs: ["gabriel"]'));
+check("东园幽径不再含 hedgehog（刺猬主活动区已改为万物受名处）", !eastGardenPathLoc.includes("hedgehog"));
+check("东园幽径不再含 cherubim", !eastGardenPathLoc.includes("cherubim"));
+
+// 刺猬主活动区：万物受名处（adam_garden_work）应含 hedgehog
+const adamWorkLocForHedgehog = locations.split("adam_garden_work:")[1]?.split("},")[0] ?? "";
+check("万物受名处含 hedgehog", adamWorkLocForHedgehog.includes("hedgehog"));
 
 check("NPC 时段结算只移动本轮低语过的 NPC", npcScheduleRules.includes("whisperedNpcIds") && npcScheduleRules.includes("spokenNpcIds"));
 check("女人低语后可去找亚当或去园子中央", npcScheduleRules.includes('state.npcLocations.eve = "adam_garden_work"') && npcScheduleRules.includes('state.npcLocations.eve = "central_meadow"'));
@@ -225,7 +216,7 @@ check("/world 线索 Tab 合并为线索与记录", worldPage.includes('["clues"
 check("/world 引入 sceneActions 内容", worldPage.includes("getSceneActionsByLocation"));
 check("/world 引入 achievements 内容", worldPage.includes("ACHIEVEMENTS") && worldPage.includes("getAchievementById"));
 check("/world 属性Tab有此处可见", worldPage.includes("此处可见"));
-check("/world 属性收敛为神明信仰和蛇信任", worldPage.includes("对神明的信仰") && worldPage.includes("对你（蛇）的信任"));
+check("/world 属性收敛为神明信仰和蛇信任", worldPage.includes("对神信仰") && worldPage.includes("对玩家好感"));
 check("/world 属性面板不再显示旧四轴标签",
   !worldPage.includes('label: "想知道"') &&
   !worldPage.includes('label: "仍顺从"') &&
@@ -353,9 +344,9 @@ const allWorldContent = [cluesContent, itemsContent, npcsContent, narrationsCont
 check("items.ts 含静息之叶", itemsContent.includes("静息之叶"));
 check("items.ts 含借来的名字", itemsContent.includes("借来的名字"));
 check("items.ts 含无声草", itemsContent.includes("无声草"));
-check("items.ts 含白羽回声", itemsContent.includes("白羽回声"));
+check("items.ts 含传令白羽", itemsContent.includes("传令白羽"));
 check("items.ts 至少包含 4 个角色来源回响", (itemsContent.match(/sourceType: "character"/g) || []).length >= 4);
-check("items.ts 包含 NPC 给予的回响", ["刺草信任", "鹿目余光", "狐尾评语"].every((name) => itemsContent.includes(name)));
+check("items.ts 包含 NPC 给予的回响", ["借来的名字", "刺猬之针", "她自己的声音"].every((name) => itemsContent.includes(name)));
 check("src/content/world + agents/world 不再出现'园中两树'", !allWorldContent.includes("园中两树"));
 check("src/content/world + agents/world 不再出现'四河分源'", !allWorldContent.includes("四河分源"));
 check("src/content/world + agents/world 不再出现'守园圃地'", !allWorldContent.includes("守园圃地"));

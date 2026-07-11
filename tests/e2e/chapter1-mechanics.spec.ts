@@ -2,18 +2,43 @@ import { expect, test, type Page } from "@playwright/test";
 
 const WORLD_STATE_STORAGE_KEY = "eden:chapter1:world-state:v2";
 
+// 推进引言直到进入 explore：末拍会弹出「神明献礼三选一」，选定一份才进入 explore。
+// 用正向循环稳健推进，避免快点时漏点导致卡在引言末拍。
+async function enterExplore(page: Page): Promise<void> {
+  const objectiveHint = page.getByTestId("world-objective-hint");
+  const giftCard = page.getByTestId("gift-choice-card").first();
+  const advance = page.locator(".eden-btn--beat-advance");
+
+  for (let step = 0; step < 12; step += 1) {
+    if (await objectiveHint.isVisible().catch(() => false)) break;
+    if (await giftCard.isVisible().catch(() => false)) {
+      await giftCard.click();
+      break;
+    }
+    if (await advance.isVisible().catch(() => false)) {
+      await advance.click();
+      await page.waitForTimeout(150);
+    } else {
+      break;
+    }
+  }
+
+  await expect(objectiveHint).toBeVisible();
+  // 选定献礼后会弹出「神明献礼」提示 toast（约 6s 自动消失），等待其消失后再关闭目标提示，
+  // 避免 toast 遮挡 close 按钮导致点击超时。
+  await page
+    .waitForSelector(".eden-divine-gift-toast", { state: "detached", timeout: 10000 })
+    .catch(() => {});
+  await page.getByTestId("world-objective-hint-close").click();
+}
+
 async function startFreshChapter(page: Page): Promise<void> {
   await page.goto("/world");
   await page.evaluate((storageKey) => {
     window.localStorage.removeItem(storageKey);
   }, WORLD_STATE_STORAGE_KEY);
   await page.reload();
-  const advance = page.locator(".eden-btn--beat-advance");
-  for (let index = 0; index < 5; index += 1) {
-    await advance.click();
-  }
-  await expect(page.getByTestId("world-objective-hint")).toBeVisible();
-  await page.getByTestId("world-objective-hint-close").click();
+  await enterExplore(page);
 }
 
 async function moveTo(page: Page, locationId: string): Promise<void> {
@@ -56,7 +81,7 @@ test.describe("第一章机制：伊甸之河 / NPC 重开 / 刻名石自由文�
     // 再次点击同一 NPC 重新打开，且保留历史
     await adam.click();
     await expect(page.locator(".eden-world-panel")).toBeVisible();
-    await expect(page.getByText("亚当")).toBeVisible();
+    await expect(page.getByText("对 亚当 低语")).toBeVisible();
   });
 
   test("刻名石自由文本：提交中文理解可成功并获得回响", async ({ page }) => {
@@ -75,5 +100,25 @@ test.describe("第一章机制：伊甸之河 / NPC 重开 / 刻名石自由文�
 
     await expect(page.getByTestId("scene-puzzle-feedback")).toBeVisible();
     await expect(page.getByText("万物名录", { exact: true })).toBeVisible();
+  });
+
+  test("园中之声引导面板：首次可见、可收起、刷新保持", async ({ page }) => {
+    await startFreshChapter(page);
+
+    const guide = page.getByTestId("world-guide-panel");
+    await expect(guide).toBeVisible();
+    // 默认展开（可见教学条目）
+    await expect(page.getByText("十二段时间过去，神便会在园中行走。")).toBeVisible();
+
+    // 收起
+    await page.getByTestId("world-guide-toggle").click();
+    await expect(guide).toHaveClass(/eden-voice-guide--collapsed/);
+    await expect(page.getByText("十二段时间过去，神便会在园中行走。")).toHaveCount(0);
+
+    // 刷新后保持收起（guide-collapsed 为独立 localStorage 键，跨刷新保留；
+    // 刷新后 world-state 回到引言，需重新进入 explore 才能再次看到引导面板）
+    await page.reload();
+    await enterExplore(page);
+    await expect(page.getByTestId("world-guide-panel")).toHaveClass(/eden-voice-guide--collapsed/);
   });
 });

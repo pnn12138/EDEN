@@ -18,6 +18,7 @@ import type {
   EdenNpcId,
   TimeSlot,
   DayIndex,
+  DivineAttentionLevel,
 } from "@/game/world/types";
 import { resolveNpcSlotBehaviors } from "@/game/world/npcScheduleRules";
 import { checkAndUnlockAchievements } from "@/game/world/achievementRules";
@@ -131,11 +132,38 @@ export function advanceToNextSlot(state: EdenWorldState): {
     state.dayIndex = (nextSlot / 2) as DayIndex;
   }
 
+  // §4.2 注视降低：进入下一时段自然冷却 -1（最低 0）
+  // §4.1 第三层：每跨一天（偶数→奇数时段，即进入新的一天）被动累积 +1
+  // 净效果：日内 -1 降温；日界 -1+1=0 持平（对齐 INTERACTION_LOGIC §五）
+  const isNewDay = nextSlot % 2 === 1 && nextSlot > 1;
+  let attentionDelta = -1;
+  if (isNewDay) attentionDelta += 1;
+  state.divineAttention = Math.max(
+    0,
+    Math.min(4, state.divineAttention + attentionDelta),
+  ) as DivineAttentionLevel;
+
+  // §2.3 第一层：死因内化提示（无感知）
+  // 第 6 时段仍未看向禁树：刺猬轻推，不显式说"你卡住了"。
+  // 第 9 时段仍未靠近禁树：亚当轻推。提示走园内叙事语言，仅触发一次。
+  const deathCauseHints: string[] = [];
+  if (state.timeSlot === 6 && !state.worldActions.lookedAtTree) {
+    deathCauseHints.push(
+      "草叶下的小东西探出头，轻轻嗅了嗅：「她还没真正望向那棵树呢。你是不是还没和她聊够？」",
+    );
+  }
+  if (state.timeSlot === 9 && !state.worldActions.approachedTree) {
+    deathCauseHints.push(
+      "不远处的亚当望向那棵树的方向，低声说：「她好像总在想那棵树的事。你要不要引她再近一些？」",
+    );
+  }
+
   // 恢复 AP，并用上一时段行动记录结算 NPC 行为。
   restoreActionPoints(state);
   const resolutions = resolveNpcSlotBehaviors(state);
   const slotNarrations = [
     ...passiveNarrations,
+    ...deathCauseHints,
     ...resolutions.map((r) => r.narration),
   ];
 

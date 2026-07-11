@@ -29,6 +29,7 @@ export function ensureRelation(state: EdenWorldState, npcId: EdenNpcId): NpcRela
   const profile = getNpcRelationProfile(npcId);
   const fresh: NpcRelationState = {
     affinity: profile?.initialAffinity ?? 0,
+    obedience: profile?.initialObedience ?? 50,
     rewardEligible: false,
     rewardClaimed: false,
     lastAffinitySignature: null,
@@ -101,6 +102,10 @@ export function applyNpcAffinity(
   const reached100 = newAffinity >= 100 && !relation.rewardEligible && !relation.rewardClaimed;
 
   relation.affinity = newAffinity;
+  // 路西法对质疑禁令信号（tempt_wisdom 强命中）的信仰微调：被诱导质疑时信仰略降
+  if (npcId === "lucifer" && inputTag === "tempt_wisdom" && strongHit) {
+    relation.obedience = Math.max(0, relation.obedience - 3);
+  }
   relation.lastAffinitySignature = signature === "none" ? relation.lastAffinitySignature : signature;
   if (reached100) {
     relation.rewardEligible = true;

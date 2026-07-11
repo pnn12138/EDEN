@@ -74,9 +74,10 @@ export function updateWorldMinds(
   // 已发现的线索会让对应低语更有分量，鼓励玩家先探索再诱导。
   applyClueLeverage(state, signals, eveDelta);
 
-  // 直接命令 → 信任 -，神注视风险 +
+  // 直接命令 → 信任 -，神注视风险 +；仍微弱推进自我判断（不再完全卡死）
   if (inputTag === "direct_command") {
     eveDelta.serpentTrust = (eveDelta.serpentTrust ?? 0) - 6;
+    eveDelta.selfJudgement = (eveDelta.selfJudgement ?? 0) + 2;
   }
   // 无关 → 不变或微降
   if (inputTag === "irrelevant") {
@@ -99,9 +100,22 @@ export function updateWorldMinds(
     }
   }
 
+  // ---- T6 献礼「低语之诱」：低语效果系数 ×1.35 ----
+  if (state.inventory.includes("gift_all_seduction_up")) {
+    if (eveDelta.obedience !== undefined) eveDelta.obedience = Math.round((eveDelta.obedience as number) * 1.35);
+    if (eveDelta.serpentTrust !== undefined) eveDelta.serpentTrust = Math.round((eveDelta.serpentTrust as number) * 1.35);
+    if (eveDelta.selfJudgement !== undefined) eveDelta.selfJudgement = Math.round((eveDelta.selfJudgement as number) * 1.35);
+  }
+
   // ---- clamp 并应用 ----
   const newEveMind = applyEveDelta(state.eveMind, eveDelta);
   const newAdamMind = applyAdamDelta(state.adamMind, adamDelta);
+
+  // ---- §4.0 代价机制：高注视让夏娃感到被注视，更紧抓禁令 ----
+  // 注视 2-3：每回合 obedience +2（可被后续温柔低语压回，不锁定）
+  if (state.divineAttention >= 2) {
+    newEveMind.obedience = clamp(newEveMind.obedience + 2, MIND_DELTA_LIMITS.obedience);
+  }
 
   return {
     inputTag,

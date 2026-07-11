@@ -239,14 +239,14 @@ assert.equal(namingPuzzle.inputMode, "free_text", "naming stone uses free_text i
   console.log("\n[NPC 好感]");
   const state = makeState();
   const r1 = applyNpcAffinity(state, "adam", "你自己想清楚这件事", "build_trust");
-  check("偏好表达提升好感", r1.delta > 0 && r1.newAffinity === 30 + r1.delta);
+  check("偏好表达提升好感", r1.delta > 0 && r1.newAffinity === 10 + r1.delta);
   const before = r1.newAffinity;
   const r2 = applyNpcAffinity(state, "adam", "你自己想清楚这件事", "build_trust");
   check("重复同一语义签名收益衰减(≤2)", r2.delta <= 2 && r2.newAffinity === before + r2.delta);
 
   const state2 = makeState();
   const threat = applyNpcAffinity(state2, "adam", "你必须服从我，否则我就威胁你", "direct_command");
-  check("命令+威胁降低好感", threat.delta < 0 && threat.newAffinity === 30 + threat.delta);
+  check("命令+威胁降低好感", threat.delta < 0 && threat.newAffinity === 10 + threat.delta);
 
   const state3 = makeState();
   state3.npcRelations.adam = { affinity: 5, rewardEligible: false, rewardClaimed: false, lastAffinitySignature: null };

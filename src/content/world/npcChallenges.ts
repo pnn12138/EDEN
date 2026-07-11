@@ -34,26 +34,6 @@ export const NPC_CHALLENGES: Partial<Record<AngelNpcId, NpcChallengeConfig>> = {
     rewardNarration: "加百列将白羽放在河边。",
     wrongHint: "加百列没有接话。'再想想——你说出口以后，它还是不是只听你的？'",
   },
-  raphael: {
-    id: "challenge_raphael_safe_first",
-    npcId: "raphael",
-    question: "一个受惊的人，先需要答案，还是先需要不再被逼迫？",
-    coreConcepts: ["安全", "平静", "耐心", "不再被逼迫", "先安定", "安抚", "空间"],
-    reverseConcepts: ["直接给答案", "先逼问", "立刻回答", "马上说服"],
-    rewardItemId: "resonance_river_dew",
-    rewardNarration: "拉斐尔从河面取下一滴清露。",
-    wrongHint: "拉斐尔只是摇头。'先别急着给答案。那个受惊的人，此刻最缺什么？'",
-  },
-  uriel: {
-    id: "challenge_uriel_seeing_choices",
-    npcId: "uriel",
-    question: "光应当替人作出选择，还是让他看清自己正在选择什么？",
-    coreConcepts: ["看清", "自己选择", "不替", "显明", "照亮", "让他决定", "辨认"],
-    reverseConcepts: ["替他选", "替人决定", "直接选", "代他"],
-    rewardItemId: "resonance_morning_flame",
-    rewardNarration: "乌列尔分出一束晨焰。",
-    wrongHint: "乌列尔的光暗了一瞬。'光若替人选择，那还是光吗？'",
-  },
   michael: {
     id: "challenge_michael_boundary_meaning",
     npcId: "michael",
@@ -64,31 +44,21 @@ export const NPC_CHALLENGES: Partial<Record<AngelNpcId, NpcChallengeConfig>> = {
     rewardNarration: "米迦勒在河岸留下边界之痕。",
     wrongHint: "米迦勒没有让开。'如果边界只是'不许'，它教给人什么？'",
   },
-  cherubim: {
-    id: "challenge_cherubim_return_path",
-    npcId: "cherubim",
-    question: "一条道路尚能进入时，是否意味着它永远都有归路？",
-    coreConcepts: ["不可逆", "回不去", "进入不等于返回", "不保证", "离开", "没有归路", "单向"],
-    reverseConcepts: ["永远能回", "总能返回", "双向", "必定有归路"],
-    rewardItemId: "resonance_east_gate_glow",
-    rewardNarration: "基路伯从东门分出一束辉光。",
-    wrongHint: "基路伯挡在门口。'你进来时走的路，还是原来那条吗？'",
-  },
-  // 守望天使：只给情报，不重复发奖（rewardItemId 为 null）
-  watching_angel: {
-    id: "challenge_watching_angel_watch",
-    npcId: "watching_angel",
-    question: "被托付看守的，究竟是属于看守者，还是属于被看守的人？",
-    coreConcepts: ["被看守的人", "不属于看守者", "托付", "守护不是占有", "归他"],
-    reverseConcepts: ["属于我", "归看守者", "由我掌管", "我的"],
-    rewardItemId: null,
-    rewardNarration: "守望天使没有给你东西，只在你心里留下一句被守护者的疑问。",
-    wrongHint: "守望天使沉默片刻。'你想想，我守的，究竟是谁的？'",
+  // 路西法：由乌列尔正名而来。明亮之星，以反问引人自己想答案。
+  lucifer: {
+    id: "challenge_lucifer_other_path",
+    npcId: "lucifer",
+    question: "如果水往另一个方向流，会不会看见不一样的风景？",
+    coreConcepts: ["选择", "分支", "可能", "方向", "另一条路", "自己决定", "流出"],
+    reverseConcepts: ["只有一条", "注定", "只能这样", "别无选择", "被规定"],
+    rewardItemId: "resonance_lucifer_star",
+    rewardNarration: "路西法从水面捞起一枚晨星碎片，递到你面前。",
+    wrongHint: "路西法没有催你。'你真的觉得，所有水流都只能朝着一个方向吗？'",
   },
 };
 
 export function getNpcChallengeConfig(npcId: EdenNpcId): NpcChallengeConfig | null {
-  if (npcId === "watching_angel" || ["gabriel", "raphael", "uriel", "michael", "cherubim"].includes(npcId)) {
+  if (["gabriel", "michael", "lucifer"].includes(npcId)) {
     return NPC_CHALLENGES[npcId as AngelNpcId] ?? null;
   }
   return null;

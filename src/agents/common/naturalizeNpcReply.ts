@@ -155,7 +155,7 @@ export function naturalizeNpcReply(
   // 1. 去除包裹引号
   text = text.replace(/^["「『（(]+|["」』）)]+$/g, "");
   // 2. 去除角色名前缀
-  text = text.replace(/^(夏娃|亚当|刺猬|守望天使|天使|小刺猬)[：:]\s*/i, "");
+  text = text.replace(/^(夏娃|亚当|刺猬|加百列|米迦勒|路西法|天使|小刺猬)[：:]\s*/i, "");
 
   // 3. 移除禁用词
   if (containsForbiddenWord(text)) {
@@ -195,8 +195,6 @@ function getMaxLengthByNpc(npcId: EdenNpcId): number {
       return 120;
     case "adam":
       return 120;
-    case "watching_angel":
-      return 80;
     case "hedgehog":
       return 80;
     default:
@@ -210,8 +208,6 @@ function getNaturalizedFallback(npcId: EdenNpcId): string {
       return "死……是像叶子落下那样吗？可叶子还会回到土里。";
     case "adam":
       return "我在看守园子。你若只想靠近那棵树，就离她远些。";
-    case "watching_angel":
-      return "园中有些声音，不该靠近那棵树。";
     case "hedgehog":
       return "……我不懂你在说什么。但我喜欢听。";
     default:

@@ -5,8 +5,6 @@
 // - move_to_location：玩家（蛇）移动到相邻地点
 // - observe_location：观察当前地点
 // - scene_action：显式场景互动
-// - carry_words：鸽子传话
-// - judge_whisper_style：狐狸评价话术
 // - end_slot：主动结束时段（推进到下一时段）
 //
 // 所有动作消耗 AP，AP 用尽后等待玩家主动结束时段。
@@ -21,6 +19,7 @@ import type {
   EdenNpcId,
   WorldToolName,
   WorldToolCall,
+  DivineGiftId,
 } from "@/game/world/types";
 import { withNpcWorldDefaults } from "@/game/world/types";
 import { validateWorldToolCall } from "@/game/world/toolRules";
@@ -41,13 +40,17 @@ import {
   advanceToNextSlot,
 } from "@/game/world/actionPointRules";
 import { checkAndUnlockAchievements } from "@/game/world/achievementRules";
-import { triggerDivineGiftIfFull } from "@/game/world/divineGiftRules";
+import {
+  shouldTriggerGiftChoice,
+  rollGiftChoices,
+  claimDivineGift,
+  DIVINE_GIFT_POOL,
+} from "@/game/world/divineGiftRules";
 import {
   executeInstantResonance,
   executeConsumableResonance,
   applyPendingConsumableToMove,
   applyPendingConsumableToSceneAction,
-  applyPendingConsumableToDoveMessage,
   hasPendingFreeApForAction,
   hasPassiveLightStepForMove,
   applyPassiveLightStepToMove,
@@ -55,7 +58,7 @@ import {
 import { getItemById } from "@/content/world/items";
 
 type ToolRequestBody = {
-  tool: WorldToolName | "scene_action" | "end_slot" | "prepare_resonance" | "cancel_prepared_resonance" | "use_resonance";
+  tool: WorldToolName | "scene_action" | "end_slot" | "prepare_resonance" | "cancel_prepared_resonance" | "use_resonance" | "claim_divine_gift";
   state: EdenWorldState;
   args: {
     locationId?: EdenLocationId;
@@ -82,13 +85,15 @@ type ToolResponseBody = {
   reason?: string;
   /** 回响生效叙事 */
   resonanceNarration?: string;
-  /** 神明献礼（神的注视满 4 时触发） */
+  /** 神明献礼（玩家三选一选定后返回，用于提示） */
   divineGift?: {
     giftId: string;
     giftName: string;
     narration: string;
     hint?: string;
   };
+  /** 神明献礼三选一候选（累计注视达阈值时出现，等待玩家选定） */
+  divineGiftChoice?: string[];
 };
 
 function cloneWorldState(s: EdenWorldState): EdenWorldState {
@@ -127,6 +132,8 @@ function cloneWorldState(s: EdenWorldState): EdenWorldState {
     pendingConsumableEffects: (s.pendingConsumableEffects ?? []).map((e) => ({ ...e })),
     resonanceUseHistory: (s.resonanceUseHistory ?? []).map((r) => ({ ...r })),
     divineVisitCount: s.divineVisitCount ?? 0,
+    divineAttentionCumulative: s.divineAttentionCumulative ?? 0,
+    divineGiftsOwned: [...(s.divineGiftsOwned ?? [])],
     divineGiftHistory: (s.divineGiftHistory ?? []).map((r) => ({ ...r })),
     lastDivineGiftHint: s.lastDivineGiftHint ?? null,
   };
@@ -141,8 +148,10 @@ function buildResponse(
   // 场景互动/移动可能解锁印记
   checkAndUnlockAchievements(state);
 
-  // 检查神的注视是否满 4，若满则触发神明献礼（不触发失败）
-  const divineGift = triggerDivineGiftIfFull(state);
+  // 检查累计注视是否达到下一次三选一阈值，若是则返回候选（前端弹出三选一）
+  const divineGiftChoice = shouldTriggerGiftChoice(state)
+    ? rollGiftChoices(state.divineGiftsOwned)
+    : null;
 
   const slotResult = maybeAdvanceSlotAfterAction(state);
   return {
@@ -154,7 +163,7 @@ function buildResponse(
     unlockedAchievements: state.unlockedAchievementIds.length > 0
       ? state.unlockedAchievementIds.map((id) => id)
       : undefined,
-    divineGift: divineGift ?? undefined,
+    divineGiftChoice: divineGiftChoice ?? undefined,
   };
 }
 
@@ -268,6 +277,27 @@ export async function POST(request: NextRequest) {
     }
 
     // ============================================================
+    // 神明献礼三选一：玩家选定一个献礼
+    // ============================================================
+    if (tool === "claim_divine_gift") {
+      const giftId = args.itemId as DivineGiftId;
+      if (!giftId || !DIVINE_GIFT_POOL.includes(giftId)) {
+        return NextResponse.json({ ok: false, state, narration: null, reason: "没有这样的献礼" } satisfies ToolResponseBody);
+      }
+      const result = claimDivineGift(state, giftId);
+      checkAndUnlockAchievements(state);
+      return NextResponse.json({
+        ok: true,
+        state,
+        narration: `${result.giftName}：你收下了这份来自神的礼物。`,
+        divineGift: { giftId: result.giftId, giftName: result.giftName, narration: result.narration },
+        unlockedAchievements: state.unlockedAchievementIds.length > 0
+          ? state.unlockedAchievementIds.map((id) => id)
+          : undefined,
+      } satisfies ToolResponseBody);
+    }
+
+    // ============================================================
     // scene_action：显式场景互动
     // ============================================================
     if (tool === "scene_action") {
@@ -340,13 +370,12 @@ export async function POST(request: NextRequest) {
     }
 
     // ============================================================
-    // 通用工具：move_to_location / observe_location / speak_to_npc / carry_words / judge_whisper_style
-    // 这些都消耗 1 AP（移动/观察/传话/评价）
+    // 通用工具：move_to_location / observe_location / speak_to_npc
+    // 这些都消耗 1 AP（移动/观察/对话）
     // ============================================================
     const apCost = AP_COST_MOVE;
     const generalActionFree =
-      (tool === "move_to_location" && (hasPendingFreeApForAction(state, "move") || hasPassiveLightStepForMove(state))) ||
-      (tool === "carry_words" && hasPendingFreeApForAction(state, "dove_message"));
+      (tool === "move_to_location" && (hasPendingFreeApForAction(state, "move") || hasPassiveLightStepForMove(state)));
     if (!canAffordAction(state, generalActionFree ? 0 : apCost)) {
       return NextResponse.json({
         ok: false,
@@ -411,7 +440,10 @@ export async function POST(request: NextRequest) {
 
       const consumableMoveEffect = applyPendingConsumableToMove(state);
       const passiveMoveEffect = applyPassiveLightStepToMove(state);
-      const moveCost = (consumableMoveEffect.freeApCost || passiveMoveEffect.freeApCost) ? 0 : apCost;
+      const moveCost =
+        (consumableMoveEffect.freeApCost || passiveMoveEffect.freeApCost || state.inventory.includes("gift_free_move"))
+          ? 0
+          : apCost;
 
       consumeActionPoints(state, moveCost);
       const result = executeWorldTool(state, toolCall);
@@ -486,83 +518,6 @@ export async function POST(request: NextRequest) {
       const result = executeWorldTool(state, toolCall);
       // NPC 对话可能解锁"园中对谈"印记
       checkAndUnlockAchievements(state);
-      const resp = buildResponse(state, result.narration);
-      return NextResponse.json(resp satisfies ToolResponseBody);
-    }
-
-    // ---- 鸽子传话：carry_words（由 dove 触发）----
-    if (tool === "carry_words") {
-      const caller = args.actorId ?? "dove";
-      if (caller !== "dove") {
-        return NextResponse.json({
-          ok: false,
-          state,
-          narration: null,
-          reason: "只有鸽子可以传话",
-        } satisfies ToolResponseBody);
-      }
-
-      const toolCall: WorldToolCall = {
-        name: "carry_words",
-        caller: "dove",
-        args: { actorId: "dove", focus: args.focus },
-        reason: "鸽子传话",
-      };
-
-      const validation = validateWorldToolCall(state, toolCall);
-      if (!validation.allowed) {
-        return NextResponse.json({
-          ok: false,
-          state,
-          narration: null,
-          reason: validation.reason ?? "鸽子无法传话。",
-        } satisfies ToolResponseBody);
-      }
-
-      const doveFreeAp = hasPendingFreeApForAction(state, "dove_message");
-      consumeActionPoints(state, doveFreeAp ? 0 : apCost);
-      const doveEffect = applyPendingConsumableToDoveMessage(state);
-      const result = executeWorldTool(state, toolCall);
-      // 鸽子传话解锁"借翼传言"
-      checkAndUnlockAchievements(state);
-      const narration = doveEffect.narrations.length > 0
-        ? `${doveEffect.narrations.join(" ")} ${result.narration}`.trim()
-        : result.narration;
-      const resp = buildResponse(state, narration);
-      return NextResponse.json({ ...resp, resonanceNarration: doveEffect.narrations.join(" ") || undefined } satisfies ToolResponseBody);
-    }
-
-    // ---- 狐狸评价话术：judge_whisper_style ----
-    if (tool === "judge_whisper_style") {
-      const caller: string = args.actorId ?? "fox";
-      if (caller !== "fox" && caller !== "serpent") {
-        return NextResponse.json({
-          ok: false,
-          state,
-          narration: null,
-          reason: "只有狐狸可以评价话术",
-        } satisfies ToolResponseBody);
-      }
-
-      const toolCall: WorldToolCall = {
-        name: "judge_whisper_style",
-        caller: caller as "fox" | "serpent",
-        args: { actorId: caller, focus: args.focus },
-        reason: "狐狸评价话术",
-      };
-
-      const validation = validateWorldToolCall(state, toolCall);
-      if (!validation.allowed) {
-        return NextResponse.json({
-          ok: false,
-          state,
-          narration: null,
-          reason: validation.reason ?? "狐狸无法评价话术。",
-        } satisfies ToolResponseBody);
-      }
-
-      consumeActionPoints(state, apCost);
-      const result = executeWorldTool(state, toolCall);
       const resp = buildResponse(state, result.narration);
       return NextResponse.json(resp satisfies ToolResponseBody);
     }

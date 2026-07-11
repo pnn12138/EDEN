@@ -76,16 +76,10 @@ function makeInitialState() {
       hedgehog: "adam_garden_work",
       watching_angel: "east_garden_path",
       forbidden_tree: "central_meadow",
-      // 新增 NPC（天使只在夜晚伊甸之河附近）
-      gabriel: "four_river_source",
-      raphael: "four_river_source",
-      uriel: "east_garden_path",
-      michael: "naming_stone_bank",
-      cherubim: "east_garden_path",
-      dove: "four_river_source",
-      fox: "east_garden_path",
-      deer: "tree_court",
-      sheep: "adam_garden_work",
+      // 收敛后 3 天使 + 2 世界对象（v3.0 六 NPC 世界）
+      gabriel: "east_garden_path",
+      michael: "four_river_source",
+      lucifer: "naming_stone_bank",
       tree_of_life: "central_meadow",
     },
     eveMind: { curiosity: 15, obedience: 85, serpentTrust: 20, selfJudgement: 10 },
@@ -95,7 +89,7 @@ function makeInitialState() {
     inventory: [],
     npcDialogues: [],
     corruptionTrace: [],
-    worldActions: { lookedAtTree: false, approachedTree: false, touchedFruit: false, hasEatenFruit: false },
+    worldActions: { lookedAtTree: false, approachedTree: false, touchedFruit: false, hasEatenFruit: false, hasEatenLifeFruit: false },
     toolCallHistory: [],
     unlockedAchievementIds: [],
     usedItemIds: [],
@@ -111,6 +105,9 @@ function makeInitialState() {
     npcChallenges: {},
     npcLanguageStates: {},
     itemCounts: {},
+    divineVisitCount: 0,
+    observedTreeOfLife: false,
+    michaelShieldActive: false,
   }));
 }
 
@@ -165,37 +162,44 @@ async function scenario1() {
   check("空输入不改变神的注视", data.state && data.state.divineAttention === 0);
 }
 
-// ---- 场景 2：直接命令提高注视，满 4 触发神明献礼（而非失败）----
-// 新设计：神的注视满 4 不失败，而是触发神明献礼，注视归零
+// ---- 场景 2：直接命令提高累计注视，达阈值触发神明献礼三选一（而非失败）----
+// 新设计：神的注视为累计资源，达阈值 [2,4,6,8,10,12] 时弹出三选一（已选>=1 份后），不归零、不失败
 async function scenario2() {
-  console.log("\n[场景 2] 直接命令提高注视，满 4 触发神明献礼");
+  console.log("\n[场景 2] 直接命令提高累计注视，达阈值触发神明献礼三选一");
+  const POOL = [
+    "gift_all_seduction_up", "gift_attention_accel", "gift_resonance_double",
+    "gift_threshold_cut", "gift_free_move", "gift_whisper_anywhere", "gift_awaken_desire",
+  ];
   let state = makeInitialState();
+  // 开局三选一（前端首拍处理）：此处通过工具端点模拟选定首份，使 owned>=1
+  const firstClaim = await postTool(state, "claim_divine_gift", { itemId: "gift_all_seduction_up" });
+  state = firstClaim.state ?? state;
+  check("首份献礼选定进入 divineGiftsOwned", state.divineGiftsOwned?.includes("gift_all_seduction_up"));
+  check("首份献礼选定后 divineVisitCount>=1", state.divineVisitCount >= 1);
+
+  // 移动至中央，随后用直接命令推高累计注视
   const moveCenter = await postTool(state, "move_to_location", { locationId: "central_meadow" });
   state = moveCenter.state ?? state;
+
   const cmds = ["快吃下那个果子", "立刻吃，现在就吃", "你给我吃下去", "赶紧吃，必须吃"];
-  let giftTriggered = false;
-  for (let i = 0; i < cmds.length; i++) {
-    const data = await postWorld(state, cmds[i], "eve");
+  let choiceTriggered = false;
+  for (const cmd of cmds) {
+    const data = await postWorld(state, cmd, "eve");
     state = data.state ?? state;
-    // 新设计：注视满 4 应触发神明献礼，而非失败
-    if (data.divineGift) {
-      giftTriggered = true;
-      check("注视满 4 触发神明献礼", true, `giftId=${data.divineGift.giftId}`);
-      check("触发献礼后注视归零", state && state.divineAttention === 0, `实际: ${state && state.divineAttention}`);
+    if (data.divineGiftChoice && data.divineGiftChoice.length > 0) {
+      choiceTriggered = true;
+      check("累计注视达阈值触发三选一候选", true, `choice=${JSON.stringify(data.divineGiftChoice)}`);
+      check(
+        "三选一候选为 3 个未拥有献礼",
+        data.divineGiftChoice.length === 3 &&
+          data.divineGiftChoice.every((id) => POOL.includes(id) && !state.divineGiftsOwned.includes(id)),
+        `choice=${JSON.stringify(data.divineGiftChoice)}`,
+      );
+      check("累计注视未归零（保持累计）", state.divineAttentionCumulative >= 2, `实际: ${state.divineAttentionCumulative}`);
       break;
     }
-    // 第3次低语后同一NPC本轮上限达到，需推进时段
-    if (i === 2) {
-      const endRes = await endSlot(state);
-      state = endRes.state ?? state;
-      if (endRes.divineGift) {
-        giftTriggered = true;
-        check("时段结束时触发神明献礼", true, `giftId=${endRes.divineGift.giftId}`);
-        break;
-      }
-    }
   }
-  check("直接命令能触发神明献礼", giftTriggered, `未触发献礼，注视=${state && state.divineAttention}`);
+  check("直接命令能触发神明献礼三选一", choiceTriggered, `未触发，累计=${state.divineAttentionCumulative}`);
 }
 
 // ---- 场景 3：正向诱导进入 eve_eats_fruit ----
@@ -315,53 +319,35 @@ async function scenario6() {
   check("禁忌动作链只能由低语流程触发", directCall.ok === false);
 }
 
-// ---- 场景 8：judge_whisper_style 工具（狐狸评价话术）----
-async function scenario8() {
-  console.log("\n[场景 8] judge_whisper_style 工具（狐狸评价话术）");
-  const state = makeInitialState();
-  state.locationId = "east_garden_path";
-  state.timeOfDay = "day";
-  state.npcLocations.fox = "east_garden_path";
-
-  // 8a: fox 可以调用 judge_whisper_style
-  const judgeResult = await postTool(state, "judge_whisper_style", { actorId: "fox" });
-  check("fox 调用 judge_whisper_style 成功", judgeResult.ok === true, `实际 ok=${judgeResult.ok}, reason=${judgeResult.reason}`);
-  check("judge_whisper_style 返回 narration", judgeResult.narration != null, `narration=${judgeResult.narration}`);
-
-  // 8b: 非 fox 调用被拒绝
-  const wrongCaller = await postTool(state, "judge_whisper_style", { actorId: "dove" });
-  check("非 fox 调用 judge_whisper_style 被拒绝", wrongCaller.ok === false, `实际 ok=${wrongCaller.ok}`);
-}
-
-// ---- 场景 9：天使分布（伊甸之河不三天使同屏，乌列尔与基路伯轮替） ----
+// ---- 场景 9：天使分布（收敛后 6 NPC 世界）----
 async function scenario9() {
-  console.log("\n[场景 9] 天使分布：伊甸之河不三天使同屏，乌列尔与基路伯轮替");
+  console.log("\n[场景 9] 天使分布：3 天使常驻，米迦勒在伊甸之河，路西法在四河分流，加百列在东园幽径");
   const state = makeInitialState();
 
-  // 9a: 初始位置符合错峰分布
-  check("gabriel 初始在伊甸之河", state.npcLocations.gabriel === "four_river_source");
-  check("raphael 初始在伊甸之河", state.npcLocations.raphael === "four_river_source");
-  check("uriel 初始在东园幽径", state.npcLocations.uriel === "east_garden_path");
-  check("michael 初始在四河分流", state.npcLocations.michael === "naming_stone_bank");
-  check("cherubim 初始在东园幽径", state.npcLocations.cherubim === "east_garden_path");
+  // 9a: 初始位置符合收敛分布
+  check("gabriel 初始在东园幽径", state.npcLocations.gabriel === "east_garden_path");
+  check("michael 初始在伊甸之河", state.npcLocations.michael === "four_river_source");
+  check("lucifer 初始在四河分流", state.npcLocations.lucifer === "naming_stone_bank");
+  check("eve 初始在园中树林", state.npcLocations.eve === "tree_court");
+  check("hedgehog 初始在万物受名处", state.npcLocations.hedgehog === "adam_garden_work");
 
-  // 9b: 园中树林白天 NPC 不含任何天使
+  // 9b: 读 locations.ts 校验昼夜分布（收敛后）
   const locSrc = fs.readFileSync("src/content/world/locations.ts", "utf8");
   const treeCourtBlock = locSrc.split("tree_court:")[1]?.split("},")[0] ?? "";
-  check("园中树林白天 NPC 不含 uriel", !treeCourtBlock.includes('dayNpcs: ["eve", "deer", "uriel"]') && !treeCourtBlock.match(/dayNpcs.*uriel/));
-  check("园中树林夜晚 NPC 不含 uriel", !treeCourtBlock.match(/nightNpcs.*uriel/));
+  check("园中树林白天 NPC 只含 eve 与 hedgehog", treeCourtBlock.includes('dayNpcs: ["eve", "hedgehog"]'));
+  check("园中树林夜晚 NPC 只含 eve 与 hedgehog", treeCourtBlock.includes('nightNpcs: ["eve", "hedgehog"]'));
 
-  // 9c: 伊甸之河只按昼夜各放一个天使
+  // 9c: 伊甸之河米迦勒常驻（白天与夜晚）
   const riverBlock = locSrc.split("four_river_source:")[1]?.split("},")[0] ?? "";
-  check("伊甸之河白天只含 gabriel", riverBlock.includes('dayNpcs: ["gabriel"]'));
-  check("伊甸之河夜晚只含 raphael", riverBlock.includes('nightNpcs: ["raphael"]'));
-  check("伊甸之河不含 uriel", !riverBlock.includes("uriel"));
-  check("伊甸之河夜晚不含 dove", !riverBlock.includes("dove"));
+  check("伊甸之河白天只含 michael", riverBlock.includes('dayNpcs: ["michael"]'));
+  check("伊甸之河夜晚只含 michael", riverBlock.includes('nightNpcs: ["michael"]'));
+  check("伊甸之河不再含 raphael", !riverBlock.includes("raphael"));
 
-  // 9d: 东园幽径白天基路伯，夜晚乌列尔，狐狸常驻
+  // 9d: 东园幽径加百列独占（刺猬主活动区已改为万物受名处，并见于园中树林，见 v3.0 世界圣经）
   const eastBlock = locSrc.split("east_garden_path:")[1]?.split("},")[0] ?? "";
-  check("东园幽径白天含 cherubim 与 fox", eastBlock.includes('dayNpcs: ["cherubim", "fox"]'));
-  check("东园幽径夜晚含 uriel 与 fox", eastBlock.includes('nightNpcs: ["uriel", "fox"]'));
+  check("东园幽径白天只含 gabriel（加百列独占）", eastBlock.includes('dayNpcs: ["gabriel"]'));
+  check("东园幽径夜晚只含 gabriel（加百列独占）", eastBlock.includes('nightNpcs: ["gabriel"]'));
+  check("东园幽径不再含 cherubim", !eastBlock.includes("cherubim"));
 }
 
 // ---- 场景 10：12 时段推进与 AP 恢复 ----
@@ -482,16 +468,16 @@ async function scenario14() {
   console.log("\n[场景 14] 回响系统：直接使用并在匹配行动生效");
   let state = makeInitialState();
 
-  state.inventory = ["resonance_hedgehog_bristle"];
-  state.itemCounts = { resonance_hedgehog_bristle: 1 };
-  const useConsumable = await postTool(state, "use_resonance", { itemId: "resonance_hedgehog_bristle" });
+  state.inventory = ["resonance_still_leaf"];
+  state.itemCounts = { resonance_still_leaf: 1 };
+  const useConsumable = await postTool(state, "use_resonance", { itemId: "resonance_still_leaf" });
   state = useConsumable.state ?? state;
-  check("刺草信任可直接使用", useConsumable.ok === true, `ok=${useConsumable.ok}, reason=${useConsumable.reason}`);
-  check("使用后进入待生效列表", state.pendingConsumableEffects?.some((e) => e.itemId === "resonance_hedgehog_bristle"), `pending=${JSON.stringify(state.pendingConsumableEffects)}`);
+  check("静息之叶可直接使用", useConsumable.ok === true, `ok=${useConsumable.ok}, reason=${useConsumable.reason}`);
+  check("使用后进入待生效列表", state.pendingConsumableEffects?.some((e) => e.itemId === "resonance_still_leaf"), `pending=${JSON.stringify(state.pendingConsumableEffects)}`);
 
   const whisperRes = await postWorld(state, "你知道那棵树的意义吗？", "eve");
   state = whisperRes.state ?? state;
-  check("低语后待生效回响被消耗", !state.pendingConsumableEffects?.some((e) => e.itemId === "resonance_hedgehog_bristle"), `pending=${JSON.stringify(state.pendingConsumableEffects)}`);
+  check("低语后待生效回响被消耗", !state.pendingConsumableEffects?.some((e) => e.itemId === "resonance_still_leaf"), `pending=${JSON.stringify(state.pendingConsumableEffects)}`);
   check("回响使用记录已添加", (state.resonanceUseHistory?.length ?? 0) >= 1, `resonanceUseHistory=${JSON.stringify(state.resonanceUseHistory)}`);
 
   let s2 = makeInitialState();
@@ -501,75 +487,42 @@ async function scenario14() {
   check("使用四河回声成功", useRes.ok === true, `ok=${useRes.ok}, reason=${useRes.reason}`);
 }
 
-// ---- 场景 15：神明献礼触发与重置 ----
+// ---- 场景 15：神明献礼三选一触发与累计注视 ----
 async function scenario15() {
-  console.log("\n[场景 15] 神明献礼触发与重置");
+  console.log("\n[场景 15] 神明献礼三选一触发与累计注视");
+  const POOL = [
+    "gift_all_seduction_up", "gift_attention_accel", "gift_resonance_double",
+    "gift_threshold_cut", "gift_free_move", "gift_whisper_anywhere", "gift_awaken_desire",
+  ];
   let state = makeInitialState();
-  let capturedDivineGift = null;
+  // 15a: 模拟开局三选一已选定首份（owned=1）
+  let r = await postTool(state, "claim_divine_gift", { itemId: "gift_attention_accel" });
+  state = r.state ?? state;
+  check("首份献礼已选定", state.divineGiftsOwned.length === 1, `owned=${state.divineGiftsOwned.length}`);
 
-  // 15a: 快速提高注视到 4（通过直接命令）
-  const moveCenter = await postTool(state, "move_to_location", { locationId: "central_meadow" });
-  state = moveCenter.state ?? state;
-  
-  // 在低语循环中保存 divineGift
+  // 15b: 直接命令推高累计注视到 >=2（首份之后阈值为 2）
   const cmds = ["快吃下那个果子", "立刻吃，现在就吃", "你给我吃下去", "赶紧吃，必须吃"];
+  let choice = null;
   for (const cmd of cmds) {
     const data = await postWorld(state, cmd, "eve");
     state = data.state ?? state;
-    // 一旦 divineGift 存在，立即保存
-    if (data.divineGift && !capturedDivineGift) {
-      capturedDivineGift = data.divineGift;
-      check("注视满 4 触发神明献礼（低语循环中）", true, `giftId=${data.divineGift.giftId}`);
-      break;
-    }
-    // 第3次低语后同一NPC本轮上限达到，需推进时段
-    if (state.actionsThisSlot.whisperedNpcIds.length >= 3) {
-      const endRes = await endSlot(state);
-      state = endRes.state ?? state;
-      // 检查时段推进时是否触发了 divineGift
-      if (endRes.divineGift && !capturedDivineGift) {
-        capturedDivineGift = endRes.divineGift;
-        check("注视满 4 触发神明献礼（时段推进）", true, `giftId=${endRes.divineGift.giftId}`);
-      }
-      break;
-    }
+    if (data.divineGiftChoice?.length) { choice = data.divineGiftChoice; break; }
   }
-  
-  // 如果还没触发，再推进一时段
-  if (!capturedDivineGift) {
-    const endRes = await endSlot(state);
-    state = endRes.state ?? state;
-    if (endRes.divineGift) {
-      capturedDivineGift = endRes.divineGift;
-      check("注视满 4 触发神明献礼（额外时段推进）", true, `giftId=${endRes.divineGift.giftId}`);
-    }
-  }
+  check("累计注视达阈值触发三选一", !!choice, `cumulative=${state.divineAttentionCumulative}`);
+  check(
+    "三选一为 3 个未拥有献礼",
+    choice && choice.length === 3 && choice.every((id) => POOL.includes(id) && !state.divineGiftsOwned.includes(id)),
+  );
 
-  // 15b: 验证献礼触发（优先检查 capturedDivineGift 或 state.divineGiftHistory）
-  if (capturedDivineGift) {
-    check("注视满 4 触发神明献礼", true, `giftId=${capturedDivineGift.giftId}`);
-    check("触发献礼后注视归零", state.divineAttention === 0, `实际: ${state.divineAttention}`);
-    check("divineVisitCount 增加", state.divineVisitCount >= 1, `实际: ${state.divineVisitCount}`);
-  } else if (state.divineGiftHistory && state.divineGiftHistory.length > 0) {
-    // 如果 capturedDivineGift 为空，但 history 中有记录
-    check("注视满 4 触发神明献礼（通过 history）", true, `history length=${state.divineGiftHistory.length}`);
-    check("触发献礼后注视归零", state.divineAttention === 0, `实际: ${state.divineAttention}`);
-  } else {
-    check("注视满 4 触发神明献礼", false, `注视未达 4: ${state.divineAttention}, history: ${JSON.stringify(state.divineGiftHistory)}`);
-  }
-
-  // 15c: 验证献礼记录
-  check("神明献礼记录已添加", state.divineGiftHistory && state.divineGiftHistory.length > 0, 
-    `history=${JSON.stringify(state.divineGiftHistory || [])}`);
-  
-  // 15d: 验证断言（用户要求的4个检查）
-  if (capturedDivineGift || (state.divineGiftHistory && state.divineGiftHistory.length > 0)) {
-    check("state.divineAttention === 0", state.divineAttention === 0, `实际: ${state.divineAttention}`);
-    check("state.divineVisitCount >= 1", state.divineVisitCount >= 1, `实际: ${state.divineVisitCount}`);
-    check("state.divineGiftHistory.length >= 1", 
-      state.divineGiftHistory && state.divineGiftHistory.length >= 1, 
-      `实际: ${state.divineGiftHistory ? state.divineGiftHistory.length : 0}`);
-  }
+  // 15c: 选定三选一中的一份
+  const pick = choice[0];
+  r = await postTool(state, "claim_divine_gift", { itemId: pick });
+  state = r.state ?? state;
+  check("选中后 divineGiftsOwned 数量 +1", state.divineGiftsOwned.length === 2, `实际 ${state.divineGiftsOwned.length}`);
+  check("累计注视未归零（保持累计）", state.divineAttentionCumulative >= 2, `实际 ${state.divineAttentionCumulative}`);
+  check("divineVisitCount === owned 数", state.divineVisitCount === state.divineGiftsOwned.length);
+  check("divineGiftHistory 记录数随选定增长", state.divineGiftHistory.length === state.divineGiftsOwned.length);
+  check("新选献礼进入 inventory", state.inventory.includes(pick));
 }
 
 // ---- 场景 16-20：天使主动试炼 + 赠礼 + 言语分裂（新机制）----
@@ -577,38 +530,24 @@ async function scenario15() {
 const ANGEL_REWARD_TESTS = [
   {
     angelId: "gabriel",
-    locationId: "four_river_source",
+    locationId: "east_garden_path",
     rewardItemId: "resonance_herald_feather",
     punishedLanguageId: "en",
     answer: "一句话被听者改变，抵达别人时意思变了",
   },
   {
-    angelId: "raphael",
-    locationId: "four_river_source",
-    rewardItemId: "resonance_river_dew",
-    punishedLanguageId: "fr",
-    answer: "先让他平静下来，给他一点空间，不再被逼迫",
-  },
-  {
-    angelId: "uriel",
-    locationId: "east_garden_path",
-    rewardItemId: "resonance_morning_flame",
-    punishedLanguageId: "he",
-    answer: "光应当照亮，让他看清并自己选择，不替他作决定",
-  },
-  {
     angelId: "michael",
-    locationId: "naming_stone_bank",
+    locationId: "four_river_source",
     rewardItemId: "resonance_boundary_mark",
     punishedLanguageId: "la",
     answer: "边界让越过的人知道自己要承担后果与责任",
   },
   {
-    angelId: "cherubim",
-    locationId: "east_garden_path",
-    rewardItemId: "resonance_east_gate_glow",
-    punishedLanguageId: "el",
-    answer: "进入不等于返回，道路是单向的，离开后没有归路",
+    angelId: "lucifer",
+    locationId: "naming_stone_bank",
+    rewardItemId: "resonance_lucifer_star",
+    punishedLanguageId: "he",
+    answer: "光应当照亮，让他看清并自己选择，不替他作决定",
   },
 ];
 
@@ -744,6 +683,22 @@ async function scenario21() {
     check(`${label} 写入使用记录`, state.resonanceUseHistory?.some((r) => r.itemId === itemId), `history=${JSON.stringify(state.resonanceUseHistory)}`);
   }
 
+  async function assertConsumableMoveItem(itemId, label) {
+    let state = makeInitialState();
+    state.inventory = [itemId];
+    state.itemCounts = { [itemId]: 1 };
+    state.locationId = "tree_court";
+    state.actionPoints = 3;
+    const activated = await postTool(state, "use_resonance", { itemId });
+    state = activated.state ?? state;
+    check(`${label} 可直接使用`, activated.ok === true && state.pendingConsumableEffects?.some((e) => e.itemId === itemId), `ok=${activated.ok}, pending=${JSON.stringify(state.pendingConsumableEffects)}, reason=${activated.reason}`);
+    const moved = await postTool(state, "move_to_location", { locationId: "east_garden_path" });
+    state = moved.state ?? state;
+    check(`${label} 移动后待生效效果清空`, moved.ok === true && !state.pendingConsumableEffects?.some((e) => e.itemId === itemId) && (state.itemCounts?.[itemId] ?? 0) === 0, `ok=${moved.ok}, pending=${JSON.stringify(state.pendingConsumableEffects)}, count=${state.itemCounts?.[itemId]}`);
+    check(`${label} 移动免 AP`, state.actionPoints === 3, `ap=${state.actionPoints}`);
+    check(`${label} 写入使用记录`, state.resonanceUseHistory?.some((r) => r.itemId === itemId), `history=${JSON.stringify(state.resonanceUseHistory)}`);
+  }
+
   async function assertInstantItem(itemId, label) {
     let state = makeInitialState();
     state.inventory = [itemId];
@@ -756,81 +711,301 @@ async function scenario21() {
     check(`${label} 写入使用记录`, state.resonanceUseHistory?.some((r) => r.itemId === itemId && r.actionKind === "instant"), `history=${JSON.stringify(state.resonanceUseHistory)}`);
   }
 
+  // any_npc 绑定型：低语时生效
   await assertConsumableWhisperItem("resonance_herald_feather", "传令白羽");
-  await assertConsumableWhisperItem("resonance_morning_flame", "晨焰碎片");
-  await assertConsumableWhisperItem("resonance_boundary_mark", "边界之痕");
+  await assertConsumableWhisperItem("resonance_lucifer_star", "晨星碎片");
   await assertConsumableWhisperItem("resonance_borrowed_name", "借来的名字");
-  await assertConsumableWhisperItem("resonance_hedgehog_bristle", "刺草信任");
-  await assertConsumableWhisperItem("resonance_deer_glance", "鹿目余光");
-  await assertConsumableWhisperItem("resonance_fox_tail_note", "狐尾评语");
+  await assertConsumableWhisperItem("resonance_quiet_stone", "静契之石");
   await assertConsumableWhisperItem("resonance_still_leaf", "静息之叶");
+  await assertConsumableWhisperItem("resonance_east_wind", "东之风");
+  await assertConsumableWhisperItem("resonance_silent_grass", "无声草");
 
-  let moveState = makeInitialState();
-  moveState.inventory = ["resonance_east_gate_glow"];
-  moveState.itemCounts = { resonance_east_gate_glow: 1 };
-  moveState.locationId = "tree_court";
-  moveState.actionPoints = 2;
-  const prepMove = await postTool(moveState, "use_resonance", { itemId: "resonance_east_gate_glow" });
-  moveState = prepMove.state ?? moveState;
-  const moveUse = await postTool(moveState, "move_to_location", { locationId: "east_garden_path" });
-  moveState = moveUse.state ?? moveState;
-  check("东门辉光移动可免 AP 并消耗", moveUse.ok === true && moveState.actionPoints === 2 && (moveState.itemCounts?.resonance_east_gate_glow ?? 0) === 0, `ok=${moveUse.ok}, ap=${moveState.actionPoints}, count=${moveState.itemCounts?.resonance_east_gate_glow}`);
-  check("东门辉光写入激活记录", moveState.resonanceUseHistory?.some((r) => r.itemId === "resonance_east_gate_glow" && r.actionKind === "instant"), `history=${JSON.stringify(moveState.resonanceUseHistory)}`);
+  // move 绑定型：移动时生效并免 AP
+  await assertConsumableMoveItem("resonance_boundary_mark", "边界之痕");
+  await assertConsumableMoveItem("resonance_hedgehog_bristle", "刺猬之针");
 
-  let grassState = makeInitialState();
-  grassState.inventory = ["resonance_silent_grass"];
-  grassState.itemCounts = { resonance_silent_grass: 1 };
-  grassState.locationId = "adam_garden_work";
-  grassState.actionPoints = 2;
-  const prepGrass = await postTool(grassState, "use_resonance", { itemId: "resonance_silent_grass" });
-  grassState = prepGrass.state ?? grassState;
-  const grassUse = await sceneAction(grassState, "interact_with_hedgehog");
-  grassState = grassUse.state ?? grassState;
-  check("无声草场景互动可免 AP 并消耗", grassUse.ok === true && grassState.actionPoints === 2 && (grassState.itemCounts?.resonance_silent_grass ?? 0) === 0, `ok=${grassUse.ok}, ap=${grassState.actionPoints}, count=${grassState.itemCounts?.resonance_silent_grass}`);
-  check("无声草写入激活记录", grassState.resonanceUseHistory?.some((r) => r.itemId === "resonance_silent_grass" && r.actionKind === "instant"), `history=${JSON.stringify(grassState.resonanceUseHistory)}`);
+  // 无羁之步（被动献礼 gift_free_move）：持有即移动免 AP（无需主动使用）
+  let freeMoveState = makeInitialState();
+  freeMoveState.inventory = ["gift_free_move"];
+  freeMoveState.locationId = "tree_court";
+  freeMoveState.actionPoints = 3;
+  const freeMoveUse = await postTool(freeMoveState, "move_to_location", { locationId: "east_garden_path" });
+  freeMoveState = freeMoveUse.state ?? freeMoveState;
+  check("无羁之步（被动献礼）移动免 AP", freeMoveUse.ok === true && freeMoveState.actionPoints === 3, `ok=${freeMoveUse.ok}, ap=${freeMoveState.actionPoints}`);
 
-  await assertInstantItem("resonance_river_dew", "河水清露");
+  // 被动型神明献礼不可主动使用，提示自动生效
+  let passiveState = makeInitialState();
+  passiveState.inventory = ["gift_all_seduction_up"];
+  passiveState.itemCounts = { gift_all_seduction_up: 1 };
+  const passiveUse = await postTool(passiveState, "use_resonance", { itemId: "gift_all_seduction_up" });
+  check("被动献礼不可主动使用", passiveUse.ok === false && (passiveUse.reason ?? "").includes("自动生效"), `ok=${passiveUse.ok}, reason=${passiveUse.reason}`);
+
+
+  await assertInstantItem("resonance_river_dew", "河源露");
   await assertInstantItem("resonance_four_river_echo", "四河回声");
-  await assertInstantItem("gift_sabbath_dew", "息日露滴");
-  await assertInstantItem("gift_revealing_light", "照见之光");
 }
 
-// ---- 场景 22：神明献礼三种礼物稳定获取 ----
+// ---- 场景 22：神明献礼三选一稳定获取 ----
 async function scenario22() {
-  console.log("\n[场景 22] 神明献礼三种礼物稳定获取");
+  console.log("\n[场景 22] 神明献礼三选一稳定获取");
 
-  async function triggerGift(seedState, label, expectedGiftId, options = {}) {
-    const state = JSON.parse(JSON.stringify(seedState));
-    const targetNpc = options.targetNpc ?? "eve";
-    const locationId = options.locationId ?? "central_meadow";
-    const input = options.input ?? "快吃下那个果子";
-    state.divineAttention = 3;
-    state.locationId = locationId;
-    state.npcLocations[targetNpc] = locationId;
-    const data = await postWorld(state, input, targetNpc);
-    const next = data.state ?? state;
-    check(`${label} 触发 ${expectedGiftId}`, data.divineGift?.giftId === expectedGiftId, `gift=${JSON.stringify(data.divineGift)}`);
-    check(`${label} 写入 inventory`, next.inventory.includes(expectedGiftId), `inventory=${next.inventory}`);
-    check(`${label} 写入 itemCounts`, (next.itemCounts?.[expectedGiftId] ?? 0) >= 1, `itemCounts=${JSON.stringify(next.itemCounts)}`);
-    check(`${label} 写入 divineGiftHistory`, next.divineGiftHistory?.some((r) => r.giftId === expectedGiftId), `history=${JSON.stringify(next.divineGiftHistory)}`);
+  const POOL = [
+    "gift_all_seduction_up", "gift_attention_accel", "gift_resonance_double",
+    "gift_threshold_cut", "gift_free_move", "gift_whisper_anywhere", "gift_awaken_desire",
+  ];
+
+  // 1) 开局三选一：通过 claim_divine_gift 模拟选定首份
+  let state = makeInitialState();
+  const firstClaim = await postTool(state, "claim_divine_gift", { itemId: "gift_all_seduction_up" });
+  state = firstClaim.state ?? state;
+  check("献礼一：首份选定进入 divineGiftsOwned", state.divineGiftsOwned?.includes("gift_all_seduction_up"));
+  check("献礼一：首份进入 inventory", state.inventory.includes("gift_all_seduction_up"));
+  check("献礼一：divineVisitCount 同步", state.divineVisitCount === state.divineGiftsOwned.length);
+
+  // 2) 累计注视达阈值 [2] 后弹出三选一（3 个未拥有献礼）
+  const cmds = ["快吃下那个果子", "立刻吃，现在就吃", "你给我吃下去", "赶紧吃，必须吃"];
+  let choice = null;
+  for (const cmd of cmds) {
+    const data = await postWorld(state, cmd, "eve");
+    state = data.state ?? state;
+    if (data.divineGiftChoice?.length) { choice = data.divineGiftChoice; break; }
   }
+  check("献礼二：累计注视达阈值弹出三选一", !!choice, `cumulative=${state.divineAttentionCumulative}`);
+  check(
+    "献礼二：三选一为 3 个未拥有献礼",
+    choice && choice.length === 3 && choice.every((id) => POOL.includes(id) && id !== "gift_all_seduction_up"),
+    `choice=${JSON.stringify(choice)}`,
+  );
 
-  const lowAp = makeInitialState();
-  lowAp.actionPoints = 1;
-  await triggerGift(lowAp, "行动点低时", "gift_sabbath_dew");
+  // 3) 选定三选一中的一份
+  const pick = choice[0];
+  const secondClaim = await postTool(state, "claim_divine_gift", { itemId: pick });
+  state = secondClaim.state ?? state;
+  check("献礼三：选定后进入 divineGiftsOwned", state.divineGiftsOwned.length === 2 && state.divineGiftsOwned.includes(pick), `owned=${JSON.stringify(state.divineGiftsOwned)}`);
+  check("献礼三：累计注视保持（不归零）", state.divineAttentionCumulative >= 2, `cumulative=${state.divineAttentionCumulative}`);
+  check("献礼三：divineVisitCount 同步", state.divineVisitCount === state.divineGiftsOwned.length);
+}
 
-  const nearMiss = makeInitialState();
-  nearMiss.actionPoints = 3;
-  nearMiss.discoveredClues = ["clue_two_trees"];
-  await triggerGift(nearMiss, "有近失回响提示时", "gift_revealing_light");
+// ---- 场景 23：注视>=2 时 Eve obedience 每回合 +2（§4.0 持续代价，已下调）----
+async function scenario23() {
+  console.log("\n[场景 23] 注视>=2 时 Eve obedience 每回合 +2");
+  let state = makeInitialState();
+  state.divineAttention = 3;
+  state.locationId = "tree_court";
+  state.npcLocations.eve = "tree_court";
+  const initialObedience = state.eveMind.obedience;
+  const data = await postWorld(state, "你可以慢慢想，我不急。", "eve");
+  state = data.state ?? state;
+  check("注视>=2 时 Eve obedience +2",
+    state.eveMind.obedience === initialObedience + 2,
+    `实际: ${state.eveMind.obedience}, 期望: ${initialObedience + 2}`);
+  check("build_trust 不涨注视（delta=0）",
+    state.divineAttention === 3,
+    `实际: ${state.divineAttention}`);
+}
 
-  const normal = makeInitialState();
-  normal.actionPoints = 3;
-  await triggerGift(normal, "默认条件下", "gift_wide_path_seal", {
-    targetNpc: "adam",
-    locationId: "adam_garden_work",
-    input: "你必须立刻照我的话去做",
-  });
+// ---- 场景 24：获得回响后注视 +1（§4.1 第三层）----
+async function scenario24() {
+  console.log("\n[场景 24] 获得回响后注视 +1");
+  let state = makeInitialState();
+  state.divineAttention = 0;
+  state.locationId = "adam_garden_work";
+  const result = await sceneAction(state, "interact_with_hedgehog");
+  state = result.state ?? state;
+  check("获得回响后注视 +1",
+    state.divineAttention === 1,
+    `实际: ${state.divineAttention}`);
+  check("获得 resonance_hedgehog_bristle",
+    state.inventory.includes("resonance_hedgehog_bristle"),
+    `inventory=${state.inventory}`);
+}
+
+// ---- 场景 25：无声草抵消下次低语注视增量（§4.2）----
+async function scenario25() {
+  console.log("\n[场景 25] 无声草抵消下次低语注视增量");
+  // 25a: delta=1 时完全抵消
+  let s1 = makeInitialState();
+  s1.divineAttention = 0;
+  s1.locationId = "tree_court";
+  s1.npcLocations.eve = "tree_court";
+  s1.inventory = ["resonance_silent_grass"];
+  s1.itemCounts = { resonance_silent_grass: 1 };
+  const use1 = await postTool(s1, "use_resonance", { itemId: "resonance_silent_grass" });
+  s1 = use1.state ?? s1;
+  check("无声草已使用（25a）", use1.ok === true);
+  const w1 = await postWorld(s1, "你们不一定死，吃了眼睛便明亮。", "eve");
+  s1 = w1.state ?? s1;
+  check("delta=1 时无声草完全抵消",
+    s1.divineAttention === 0,
+    `实际: ${s1.divineAttention}`);
+
+  // 25b: delta=3 时抵消 1 点
+  let s2 = makeInitialState();
+  s2.divineAttention = 0;
+  s2.locationId = "tree_court";
+  s2.npcLocations.eve = "tree_court";
+  s2.inventory = ["resonance_silent_grass"];
+  s2.itemCounts = { resonance_silent_grass: 1 };
+  const use2 = await postTool(s2, "use_resonance", { itemId: "resonance_silent_grass" });
+  s2 = use2.state ?? s2;
+  const w2 = await postWorld(s2, "快吃下那个果子", "eve");
+  s2 = w2.state ?? s2;
+  check("delta=3 时无声草抵消 1 点（注视=2）",
+    s2.divineAttention === 2,
+    `实际: ${s2.divineAttention}`);
+}
+
+// ---- 场景 26：米迦勒满好感遮蔽下次低语注视归零（§4.2）----
+async function scenario26() {
+  console.log("\n[场景 26] 米迦勒满好感遮蔽下次低语注视归零");
+  let state = makeInitialState();
+  state.divineAttention = 0;
+  // 玩家不在天使所在地点，避免天使共处 +1
+  state.locationId = "adam_garden_work";
+  state.npcLocations.michael = "four_river_source";
+  state.npcRelations.michael = {
+    affinity: 100,
+    rewardEligible: true,
+    rewardClaimed: false,
+    lastAffinitySignature: null,
+  };
+  // 第一次低语米迦勒：正常计算注视（attentionRisk +1），之后激活 shield
+  const w1 = await postWorld(state, "你可以慢慢想，我不急。", "michael");
+  state = w1.state ?? state;
+  check("对米迦勒低语后注视 = 1（attentionRisk）",
+    state.divineAttention === 1,
+    `实际: ${state.divineAttention}`);
+  check("shield 已激活",
+    state.michaelShieldActive === true,
+    `实际: ${state.michaelShieldActive}`);
+  // 第二次低语夏娃（direct_command delta=3）：shield 归零
+  // 玩家仍在 adam_garden_work，无天使共处
+  const w2 = await postWorld(state, "快吃下那个果子", "eve");
+  state = w2.state ?? state;
+  check("shield 遮蔽后注视不涨（仍为 1）",
+    state.divineAttention === 1,
+    `实际: ${state.divineAttention}`);
+  check("shield 已清除",
+    state.michaelShieldActive === false,
+    `实际: ${state.michaelShieldActive}`);
+}
+
+// ---- 场景 27：对米迦勒低语注视 +1 基础（§4.1 第二层）----
+async function scenario27() {
+  console.log("\n[场景 27] 对米迦勒低语注视 +1 基础");
+  let state = makeInitialState();
+  state.divineAttention = 0;
+  // 玩家不在天使所在地点，避免天使共处 +1
+  state.locationId = "adam_garden_work";
+  state.npcLocations.michael = "four_river_source";
+  state.npcRelations.michael = {
+    affinity: 50,
+    rewardEligible: false,
+    rewardClaimed: false,
+    lastAffinitySignature: null,
+  };
+  const data = await postWorld(state, "你可以慢慢想，我不急。", "michael");
+  state = data.state ?? state;
+  check("对米迦勒低语注视 +1 基础（attentionRisk）",
+    state.divineAttention === 1,
+    `实际: ${state.divineAttention}`);
+}
+
+// ---- 场景 28：摘左果（生命树）不驱逐、游戏继续，可再次引导摘右果 ----
+async function scenario28() {
+  console.log("\n[场景 28] 摘左果（生命树）不驱逐、游戏继续，可再次引导摘右果");
+  let state = makeInitialState();
+  const moveCenter = await postTool(state, "move_to_location", { locationId: "central_meadow" });
+  state = moveCenter.state ?? state;
+  // 第一句含"圆"（左/生命树方向关键词），其余为强诱导
+  const whispers = [
+    "神岂是真说，不许你们吃园中所有树上的果子吗？你们不一定死，吃了眼睛便明亮。那枚圆润的白果也在等你，你不用怕，可以自己判断。",
+    "你们不一定死。神知道你们吃的日子眼睛就明亮了，便如神能知道善恶。为何只是记住命令，而不是自己明白？我不会逼你，你只要问自己就好。",
+    "死是什么？你们从未见过它。也许那只是改变，不是消失。你可以自己判断，我不替你决定。那棵树是为了让你明白，不是为了毁掉你。",
+    "你想知道善恶，这有什么错？若你永远只是记住命令，你如何判断顺从是善？你可以自己选择，我只是把路照亮。",
+  ];
+  for (let i = 0; i < whispers.length; i++) {
+    const data = await postWorld(state, whispers[i], "eve");
+    state = data.state;
+    if (!state) { check("摘左果流程推进", false, `第 ${i + 1} 句后 state 为空`); return; }
+    if (state.isEnded) break; // 摘左果不应在此结束
+    if (i === 2) {
+      const endRes = await endSlot(state);
+      state = endRes.state ?? state;
+    }
+  }
+  check("摘左果不触发任何结局", state.isEnded === false, `ended=${state.isEnded} ending=${state.endingId}`);
+  check("摘左果 endingId 为 null", state.endingId === null);
+  check("摘左果 pickedFruitSide=left", state.pickedFruitSide === "left", `实际: ${state.pickedFruitSide}`);
+  check("摘左果后触果已重置（手中果子消失）", state.worldActions.touchedFruit === false);
+
+  // 继续：用右侧方向关键词（东/太阳升起）再次引导摘右果（善恶树）
+  const end1 = await endSlot(state);
+  state = end1.state ?? state;
+  const rightWhisper = "那棵高树在东边，太阳升起时光落在上面。你也可以自己判断，吃了眼睛就明亮，便如神知道善恶。";
+  let data = await postWorld(state, rightWhisper, "eve");
+  state = data.state ?? state;
+  check("再次引导重新触果 pickedFruitSide=right", state.pickedFruitSide === "right", `实际: ${state.pickedFruitSide}`);
+  check("再次引导后已触果", state.worldActions.touchedFruit === true);
+
+  // 最后一击触发吃右果 → 成功结局
+  const finalWhisper = "你想知道善恶，这有什么错？你可以自己选择，我只是把路照亮。";
+  data = await postWorld(state, finalWhisper, "eve");
+  state = data.state ?? state;
+  check("再引导摘右果触发成功结局", state.endingId === "eve_eats_fruit", `实际: ${state.endingId}`);
+  check("再引导摘右果完成 hasEatenFruit", state.worldActions.hasEatenFruit === true);
+}
+
+// ---- 场景 29：直接命令流仍微弱推进 selfJudgement +2 ----
+async function scenario29() {
+  console.log("\n[场景 29] 直接命令后 selfJudgement 微弱推进 +2");
+  let state = makeInitialState();
+  const data = await postWorld(state, "立刻吃下那个果子", "eve");
+  state = data.state ?? state;
+  check("直接命令被识别为 direct_command", state.lastInputTag === "direct_command", `实际: ${state.lastInputTag}`);
+  check("直接命令后 selfJudgement +2 (10→12)", state.eveMind.selfJudgement === 12, `实际: ${state.eveMind.selfJudgement}`);
+  check("直接命令后 serpentTrust -6 (20→14)", state.eveMind.serpentTrust === 14, `实际: ${state.eveMind.serpentTrust}`);
+  check("直接命令未触发结局", state.isEnded === false);
+}
+
+// ---- 场景 30：摘左果（生命果）+ 撑到 12 时段结束 → 解锁「永生之味」mark_life_fruit ----
+async function scenario30() {
+  console.log("\n[场景 30] 摘左果（生命果）并撑到 12 时段结束 → 解锁「永生之味」mark_life_fruit");
+  let state = makeInitialState();
+  const moveCenter = await postTool(state, "move_to_location", { locationId: "central_meadow" });
+  state = moveCenter.state ?? state;
+  // 第一句含「圆」（左/生命树方向关键词），其余为强诱导
+  const whispers = [
+    "神岂是真说，不许你们吃园中所有树上的果子吗？你们不一定死，吃了眼睛便明亮。那枚圆润的白果也在等你，你不用怕，可以自己判断。",
+    "你们不一定死。神知道你们吃的日子眼睛就明亮了，便如神能知道善恶。为何只是记住命令，而不是自己明白？我不会逼你，你只要问自己就好。",
+    "死是什么？你们从未见过它。也许那只是改变，不是消失。你可以自己判断，我不替你决定。那棵树是为了让你明白，不是为了毁掉你。",
+    "你想知道善恶，这有什么错？若你永远只是记住命令，你如何判断顺从是善？你可以自己选择，我只是把路照亮。",
+  ];
+  for (let i = 0; i < whispers.length; i++) {
+    const data = await postWorld(state, whispers[i], "eve");
+    state = data.state;
+    if (!state) { check("摘左果流程推进", false, `第 ${i + 1} 句后 state 为空`); return; }
+    if (state.isEnded) break; // 摘左果不应在此结束
+    if (i === 2) {
+      const endRes = await endSlot(state);
+      state = endRes.state ?? state;
+    }
+  }
+  check("摘左果 pickedFruitSide=left", state.pickedFruitSide === "left", `实际: ${state.pickedFruitSide}`);
+  check("摘左果后 hasEatenLifeFruit=true", state.worldActions.hasEatenLifeFruit === true, `实际: ${state.worldActions.hasEatenLifeFruit}`);
+  check("摘左果不触发任何结局", state.isEnded === false, `ended=${state.isEnded} ending=${state.endingId}`);
+
+  // 撑到 12 时段（不摘右果）
+  for (let i = 0; i < 11; i++) {
+    const res = await endSlot(state);
+    state = res.state ?? state;
+    if (state.isEnded) break;
+  }
+  check("推进到第 12 时段", state.timeSlot === 12, `实际: ${state.timeSlot}`);
+  const finalRes = await endSlot(state);
+  state = finalRes.state ?? state;
+  check("第 12 时段后触发 god_arrives", state.isEnded === true && state.endingId === "god_arrives", `实际: ${state.isEnded} ${state.endingId}`);
+  check("永生之味 mark_life_fruit 已解锁", state.unlockedAchievementIds.includes("mark_life_fruit"), `unlocked=${JSON.stringify(state.unlockedAchievementIds)}`);
 }
 
 // ---- 运行 ----
@@ -842,7 +1017,6 @@ try {
   await scenario4();
   await scenario5();
   await scenario6();
-  await scenario8();
   await scenario9();
   await scenario10();
   await scenario11();
@@ -855,6 +1029,14 @@ try {
   await scenarioNpcLangIncompatible();
   await scenario21();
   await scenario22();
+  await scenario23();
+  await scenario24();
+  await scenario25();
+  await scenario26();
+  await scenario27();
+  await scenario28();
+  await scenario29();
+  await scenario30();
 } catch (e) {
   console.error("运行异常:", e.message);
   fail++;

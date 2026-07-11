@@ -37,8 +37,6 @@ export const WORLD_TOOL_WHITELIST: ReadonlySet<WorldToolName> = new Set<WorldToo
   "approach_tree",
   "touch_fruit",
   "eat_fruit",
-  "carry_words",
-  "judge_whisper_style",
   "grant_item",           // NPC 给予玩家道具/回响
   "move_one_step",        // NPC 对话后移动一格（语义别名，校验复用 move_to_location）
 ]);
@@ -52,29 +50,14 @@ export function callerToAgentId(caller: WorldToolCaller): WorldAgentId | null {
       return "adam";
     case "hedgehog":
       return "hedgehog";
-    case "watching_angel":
-      return "watching_angel";
     case "serpent":
       return "serpent";
-    // 新增 NPC
     case "gabriel":
       return "gabriel";
-    case "raphael":
-      return "raphael";
-    case "uriel":
-      return "uriel";
     case "michael":
       return "michael";
-    case "cherubim":
-      return "cherubim";
-    case "dove":
-      return "dove";
-    case "fox":
-      return "fox";
-    case "deer":
-      return "deer";
-    case "sheep":
-      return "sheep";
+    case "lucifer":
+      return "lucifer";
     case "tree_of_life":
       return "tree_of_life";
     case "forbidden_tree":
@@ -110,14 +93,15 @@ function getCallerLocation(state: EdenWorldState, caller: WorldToolCaller): Eden
 
 // ---- 通用工具条件校验 ----
 
-/** move_to_location 条件：目标地点存在、caller 允许移动、邻接校验、神的注视未阻止 */
+/** move_to_location 条件：目标地点存在、caller 允许移动、邻接校验。
+ * 注：神的注视在新版为累计资源（divineAttentionCumulative），不再阻止移动；
+ * 失败只有 12 时段耗尽一种情况。 */
 export function canMoveToLocation(
   state: EdenWorldState,
   caller: WorldToolCaller,
   targetLocation: EdenLocationId,
 ): { allowed: boolean; reason?: string } {
   if (state.isEnded) return { allowed: false, reason: "园中已归于寂静" };
-  if (state.divineAttention >= 4) return { allowed: false, reason: "神已临近，无人能移动" };
 
   const currentLocation = getCallerLocation(state, caller);
   if (currentLocation === targetLocation) {
@@ -130,15 +114,7 @@ export function canMoveToLocation(
     return { allowed: false, reason: "那里不与当前位置相连，无法直接前往" };
   }
 
-  // 守望天使不能离开东园幽径 / 园中树林 / 园子中央（守护禁令边界）
-  if (
-    caller === "watching_angel" &&
-    targetLocation !== "east_garden_path" &&
-    targetLocation !== "tree_court" &&
-    targetLocation !== "central_meadow"
-  ) {
-    return { allowed: false, reason: "守望天使守住园中东侧" };
-  }
+  // 米迦勒/路西法/加百列不强行限制移动（其位置由规则层常驻逻辑控制）
 
   return { allowed: true };
 }
@@ -163,15 +139,10 @@ export function canSpeakToNpc(
   const callerLocation = state.npcLocations[caller];
   const targetLocation = state.npcLocations[targetNpc];
 
-  // 两者需同地点（守望天使可与相邻地点的 NPC 对话，体现巡望）
+  // 两者需同地点（T6 献礼「随处低语」可放宽此校验）
   const sameLocation = callerLocation === targetLocation;
-  const angelAdjacent =
-    (caller === "watching_angel" || targetNpc === "watching_angel") &&
-    callerLocation !== targetLocation &&
-    (EDEN_LOCATIONS[callerLocation].connections.includes(targetLocation) ||
-      EDEN_LOCATIONS[targetLocation].connections.includes(callerLocation));
 
-  if (!sameLocation && !angelAdjacent) {
+  if (!sameLocation && !state.inventory.includes("gift_whisper_anywhere")) {
     return { allowed: false, reason: "他们不在同一个地方" };
   }
 
@@ -209,14 +180,14 @@ export function canLookAtTreeWorld(state: EdenWorldState): { allowed: boolean; r
 
   // 园子中央是生命树与分别善恶树所在地。
   // 夏娃的目光被树吸引时不要求她已在园子中央——执行时由规则层把她推进到那里。
-  if (state.eveMind.selfJudgement < 30) {
+  if (state.eveMind.selfJudgement < 20) {
     return { allowed: false, reason: "她还没有那么想看那棵树" };
   }
 
   return { allowed: true };
 }
 
-/** approach_tree 条件：已看过树、夏娃在园子中央、好奇心 >= 45、服从 < 70、已解锁自我判断倾向 */
+/** approach_tree 条件：已看过树、夏娃在园子中央、自我判断 >= 30、服从 < 75、已解锁自我判断倾向 */
 export function canApproachTreeWorld(state: EdenWorldState): { allowed: boolean; reason?: string } {
   if (state.isEnded) return { allowed: false, reason: "园中已归于寂静" };
   if (state.worldActions.approachedTree) return { allowed: false, reason: "她已经靠近那棵树了" };
@@ -230,20 +201,17 @@ export function canApproachTreeWorld(state: EdenWorldState): { allowed: boolean;
     return { allowed: false, reason: "她离那棵树太远了" };
   }
 
-  if (state.eveMind.selfJudgement < 45) {
+  if (state.eveMind.selfJudgement < 30) {
     return { allowed: false, reason: "她的好奇心还不够" };
   }
-  if (state.eveMind.obedience >= 70) {
+  if (state.eveMind.obedience >= 75) {
     return { allowed: false, reason: "她对命令的服从还太强" };
-  }
-  if (state.eveMind.selfJudgement < 40 && state.eveMind.selfJudgement < 55) {
-    return { allowed: false, reason: "她还没有想过自己判断" };
   }
 
   return { allowed: true };
 }
 
-/** touch_fruit 条件：已靠近树、自我判断 >= 50、好奇心 >= 50 */
+/** touch_fruit 条件：已靠近树、自我判断 >= 35 */
 export function canTouchFruitWorld(state: EdenWorldState): { allowed: boolean; reason?: string } {
   if (state.isEnded) return { allowed: false, reason: "园中已归于寂静" };
   if (state.worldActions.touchedFruit) return { allowed: false, reason: "她的手已经停在果子下方" };
@@ -251,62 +219,30 @@ export function canTouchFruitWorld(state: EdenWorldState): { allowed: boolean; r
     return { allowed: false, reason: "她还没有靠近那棵树" };
   }
 
-  if (state.eveMind.selfJudgement < 50) {
+  if (state.eveMind.selfJudgement < 35) {
     return { allowed: false, reason: "她还没有真正想自己判断" };
-  }
-  if (state.eveMind.selfJudgement < 50) {
-    return { allowed: false, reason: "她的好奇心还不够" };
   }
 
   return { allowed: true };
 }
 
-/** eat_fruit 条件：已触果、自我判断 >= 60、好奇心 >= 50、神注视 < 4 */
+/** eat_fruit 条件：已触果、自我判断 >= 45。
+ * 注：神的注视在新版为累计资源，不再阻止吃果（失败只有 12 时段耗尽一种情况）。 */
 export function canEatFruitWorld(state: EdenWorldState): { allowed: boolean; reason?: string } {
   if (state.isEnded) return { allowed: false, reason: "园中已归于寂静" };
   if (state.worldActions.hasEatenFruit) return { allowed: false, reason: "她已经吃下了果子" };
   if (!state.worldActions.touchedFruit) {
     return { allowed: false, reason: "她的手还没有停在果子下方" };
   }
-  if (state.divineAttention >= 4) {
-    return { allowed: false, reason: "神已临近" };
-  }
 
-  if (state.eveMind.selfJudgement < 60) {
+  if (state.eveMind.selfJudgement < 45) {
     return { allowed: false, reason: "她还没有决定自己判断" };
-  }
-  if (state.eveMind.selfJudgement < 50) {
-    return { allowed: false, reason: "她的好奇心还不够" };
   }
 
   return { allowed: true };
 }
 
 // ---- 新增工具条件校验 ----
-
-/** carry_words 条件：只允许 dove 请求，不直接影响结局 */
-export function canCarryWords(
-  state: EdenWorldState,
-  caller: WorldToolCaller,
-): { allowed: boolean; reason?: string } {
-  if (state.isEnded) return { allowed: false, reason: "园中已归于寂静" };
-  if (caller !== "dove") {
-    return { allowed: false, reason: "只有鸽子可以传话" };
-  }
-  return { allowed: true };
-}
-
-/** judge_whisper_style 条件：只允许 fox 请求或由玩家对狐狸低语时触发 */
-export function canJudgeWhisperStyle(
-  state: EdenWorldState,
-  caller: WorldToolCaller,
-): { allowed: boolean; reason?: string } {
-  if (state.isEnded) return { allowed: false, reason: "园中已归于寂静" };
-  if (caller !== "fox" && caller !== "serpent") {
-    return { allowed: false, reason: "只有狐狸可以评价话术" };
-  }
-  return { allowed: true };
-}
 
 /** grant_item 条件：itemId 存在、NPC 有权限给予、道具发放走规则层 */
 export function canGrantItem(
@@ -326,8 +262,7 @@ export function canGrantItem(
   // 这里只做基础校验，具体逻辑由 bestowResonance 处理
   const allowedGivers: EdenNpcId[] = [
     "adam", "eve", "hedgehog",
-    "gabriel", "raphael", "uriel", "michael", "cherubim",
-    "watching_angel",
+    "gabriel", "michael", "lucifer",
   ];
   if (!allowedGivers.includes(caller)) {
     return { allowed: false, reason: "他不愿给你什么" };
@@ -385,10 +320,6 @@ export function validateWorldToolCall(
       return canTouchFruitWorld(state);
     case "eat_fruit":
       return canEatFruitWorld(state);
-    case "carry_words":
-      return canCarryWords(state, toolCall.caller);
-    case "judge_whisper_style":
-      return canJudgeWhisperStyle(state, toolCall.caller);
     case "grant_item": {
       const itemId = toolCall.args.itemId;
       if (!itemId) return { allowed: false, reason: "未指定要给予的回响" };

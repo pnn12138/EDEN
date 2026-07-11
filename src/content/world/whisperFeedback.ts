@@ -82,6 +82,13 @@ export function computeWhisperFeedback(
     lines.push("风又恢复了流动");
   }
 
+  // 2.5 神的注视可见反馈（叙事化，不显示数值）：注视升到 2 / 3 时注入线索
+  if (next.divineAttention >= 3) {
+    lines.push("树影投在她身上，她下意识地往禁令那边靠了靠。");
+  } else if (next.divineAttention === 2) {
+    lines.push("风里多了一丝凉意，她好像感觉到了什么，神色更紧。");
+  }
+
   // 3. 当前低语对象的好感变化
   if (npcId) {
     const before = getTrust(prev, npcId);

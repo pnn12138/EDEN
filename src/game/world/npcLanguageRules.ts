@@ -18,7 +18,7 @@ import type {
 } from "@/game/world/types";
 import { getAngelLanguageConfig } from "@/content/world/npcLanguages";
 
-const ANGEL_IDS: AngelNpcId[] = ["gabriel", "raphael", "uriel", "michael", "cherubim", "watching_angel"];
+const ANGEL_IDS: AngelNpcId[] = ["gabriel", "michael", "lucifer"];
 
 export function isAngel(npcId: EdenNpcId): npcId is AngelNpcId {
   return (ANGEL_IDS as EdenNpcId[]).includes(npcId);
@@ -174,11 +174,8 @@ function buildPunishmentNarration(angelId: AngelNpcId, displayName: string): str
 
 const ANGEL_DISPLAY_NAME: Record<AngelNpcId, string> = {
   gabriel: "加百列",
-  raphael: "拉斐尔",
-  uriel: "乌列尔",
   michael: "米迦勒",
-  cherubim: "基路伯",
-  watching_angel: "守望天使",
+  lucifer: "路西法",
 };
 
 export function getLanguageFallbackLine(angelId: AngelNpcId, kind: "normal" | "refuse" | "relation" | "mismatch"): string {

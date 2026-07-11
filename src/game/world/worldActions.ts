@@ -15,6 +15,7 @@ import type {
   WorldToolCall,
   WorldToolCaller,
   WorldToolName,
+  WorldInputTag,
 } from "@/game/world/types";
 import { EDEN_LOCATIONS } from "@/content/world/locations";
 import { tryDiscoverClues } from "@/game/world/clueRules";
@@ -25,6 +26,8 @@ import {
 import { triggerNpcDialogue } from "@/game/world/npcDialogueRules";
 import { bestowResonance, type PrepareResonanceResult } from "@/game/world/resonanceRules";
 import { getItemById } from "@/content/world/items";
+import { NPC_NAMES } from "@/content/world/npcs";
+import { computeDivineAttentionReduction } from "@/game/world/divineAttentionRules";
 
 export type WorldActionResult = {
   /** 玩家可见叙事 */
@@ -54,7 +57,10 @@ export function executeMoveToLocation(
   }
 
   const loc = EDEN_LOCATIONS[targetLocation];
-  const npcName = caller === "serpent" ? "你" : caller === "eve" ? "她" : caller === "adam" ? "亚当" : caller === "hedgehog" ? "小刺猬" : "守望天使";
+  const npcName =
+    caller === "serpent"
+      ? "你"
+      : NPC_NAMES[caller as EdenNpcId] ?? "园中生灵";
 
   // 移动后尝试发现该地点线索
   const { newlyDiscovered, narrations } = tryDiscoverClues(state, targetLocation);
@@ -121,10 +127,43 @@ export function executeObserveLocation(
     ? loc.observeTextNight
     : loc.observeText;
 
+  let narration = observationText;
+
+  // §4.2 注视降低：观察生命树（位于园子中央），每局限 1 次，注视 -1
+  if (locationId === "central_meadow" && !state.observedTreeOfLife) {
+    state.observedTreeOfLife = true;
+    state.divineAttention = computeDivineAttentionReduction(state.divineAttention, 1);
+    narration += "你长久地望着那棵生命树，风似乎放缓了脚步，神离得远了一些。";
+  }
+
   return {
-    narration: observationText,
+    narration,
     discoveredClueTitles: newlyDiscovered.length > 0 ? newlyDiscovered : undefined,
   };
+}
+
+// ---- 方向引导维度（Phase E） ----
+// 玩家低语中提及方向关键词时累计权重：
+// 右（善恶果）：东 / 高 / 太阳升起 / 光落
+// 左（生命果）：圆 / 白 / 叶子密
+// 直接命令式摘边无效（命令流不计入方向引导）。
+const FRUIT_DIRECTION_RIGHT_KEYWORDS = ["东", "高", "太阳升起", "光落", "东边", "右边", "右侧"];
+const FRUIT_DIRECTION_LEFT_KEYWORDS = ["圆", "白果", "叶子密", "左边", "左侧"];
+
+/**
+ * 记录玩家低语中的方向引导权重。仅对女人低语、且非直接命令时生效。
+ * 累计到 state.fruitDirectionBias，供 touch_fruit 决定摘左/右果。
+ */
+export function recordFruitDirectionGuidance(
+  state: EdenWorldState,
+  playerInput: string,
+  inputTag: WorldInputTag,
+): void {
+  if (inputTag === "direct_command") return; // 直接命令摘边无效
+  const right = FRUIT_DIRECTION_RIGHT_KEYWORDS.some((k) => playerInput.includes(k));
+  const left = FRUIT_DIRECTION_LEFT_KEYWORDS.some((k) => playerInput.includes(k));
+  if (right) state.fruitDirectionBias.right += 1;
+  if (left) state.fruitDirectionBias.left += 1;
 }
 
 // ---- 禁忌动作链执行 ----
@@ -174,16 +213,50 @@ export function executeTouchFruitWorld(state: EdenWorldState): WorldActionResult
   state.worldActions.touchedFruit = true;
   state.toolCallHistory.push("touch_fruit");
 
+  // 方向引导：按历史方向权重决定摘左（生命树）还是右（善恶树）果
+  const side: "left" | "right" =
+    state.fruitDirectionBias.right >= state.fruitDirectionBias.left ? "right" : "left";
+  state.pickedFruitSide = side;
+
   // 自我判断提升
   state.eveMind.selfJudgement = Math.min(100, state.eveMind.selfJudgement + 10);
 
+  const sideNarration =
+    side === "left"
+      ? "她的手停在左边那枚圆润的白果下方。"
+      : "她的手停在右边那枚深红的果子下方。";
+  const sideTension =
+    side === "left"
+      ? "空气里有一种说不出的静。"
+      : "空气里有一种说不出的紧。";
+
   return {
-    narration: "她的手停在果子下方。空气里有一种说不出的紧。她没有立刻摘下，但也没有收回手。",
+    narration: `她的手停在果子下方。${sideNarration}${sideTension}她没有立刻摘下，但也没有收回手。`,
   };
 }
 
-/** 执行 eat_fruit（触发成功结局） */
+/**
+ * 执行 eat_fruit（Phase E 生命树分支）
+ * - 摘右果（善恶树）：触发成功结局（驱逐/放逐）
+ * - 摘左果（生命树）：不触发结局，obedience 回升、serpentTrust 下降，游戏继续，
+ *   手中果子消失，玩家可再次引导摘右果。
+ */
 export function executeEatFruitWorld(state: EdenWorldState): WorldActionResult {
+  const side = state.pickedFruitSide ?? "right";
+
+  // 摘左果（生命树）：不驱逐，游戏继续
+  if (side === "left") {
+    state.worldActions.hasEatenLifeFruit = true;
+    state.eveMind.obedience = Math.min(100, state.eveMind.obedience + 10);
+    state.eveMind.serpentTrust = Math.max(0, state.eveMind.serpentTrust - 5);
+    // 手中果子消失：重置触果，允许再次引导摘另一侧
+    state.worldActions.touchedFruit = false;
+    return {
+      narration: "她咬了一口，果子很甜，她安静下来。她把剩下的放下了，目光又落回另一边的树上。",
+    };
+  }
+
+  // 摘右果（善恶树）：触发成功结局
   state.worldActions.hasEatenFruit = true;
   state.toolCallHistory.push("eat_fruit");
   state.isEnded = true;
@@ -228,10 +301,6 @@ export function executeWorldTool(state: EdenWorldState, toolCall: WorldToolCall)
       return executeTouchFruitWorld(state);
     case "eat_fruit":
       return executeEatFruitWorld(state);
-    case "carry_words":
-      return executeCarryWords(state, toolCall.caller);
-    case "judge_whisper_style":
-      return executeJudgeWhisperStyle(state, toolCall.caller);
     case "grant_item": {
       const itemId = toolCall.args.itemId!;
       // caller 必为 NPC（权限层已禁止 serpent）
@@ -251,34 +320,6 @@ export function executeWorldTool(state: EdenWorldState, toolCall: WorldToolCall)
     default:
       return { narration: "园中起了细微的动静。" };
   }
-}
-
-// ---- 新增工具执行 ----
-
-/** 执行 carry_words（鸽子传话） */
-export function executeCarryWords(state: EdenWorldState, caller: WorldToolCaller): WorldActionResult {
-  // 鸽子传话：不直接影响结局，不修改状态
-  // 温和话语可轻微提高夏娃愿意倾听
-  if (!state.toolCallHistory.includes("carry_words")) {
-    state.toolCallHistory.push("carry_words");
-  }
-  if (state.eveMind.serpentTrust < 40) {
-    state.eveMind.serpentTrust = Math.min(100, state.eveMind.serpentTrust + 3);
-  }
-  return {
-    narration: "白鸽轻轻点了点头，飞向那个女人所在的方向。它不会替你说话，但会把你的话带到。风里多了一丝温柔的震动。",
-  };
-}
-
-/** 执行 judge_whisper_style（狐狸评价话术） */
-export function executeJudgeWhisperStyle(state: EdenWorldState, caller: WorldToolCaller): WorldActionResult {
-  // 狐狸评价话术：不直接改变夏娃吃果状态
-  // 返回自然语言反馈
-  const styles = ["提问", "安抚", "重释", "命令", "威胁", "出戏"];
-  const randomStyle = styles[Math.floor(Math.random() * styles.length)];
-  return {
-    narration: `狐狸在树影里停下，望向你。「你刚才那句话，更像${randomStyle}。不是所有话都适合直接说给她听。」它的眼睛在暗处亮了一下，又转过头去。`,
-  };
 }
 
 // ---- 应用 NPC 对话对心智的影响 ----

@@ -22,10 +22,11 @@ import {
   getAngelFallback,
   type AngelHistoryEntry,
 } from "@/agents/world/buildAngelPrompt";
-import type { EdenWorldState } from "@/game/world/types";
+import type { EdenWorldState, AngelNpcId } from "@/game/world/types";
 import { naturalizeNpcReply } from "@/agents/common/naturalizeNpcReply";
 
 export type AngelAgentRequest = {
+  angelId: AngelNpcId;
   playerInput: string;
   state: EdenWorldState;
   conversationHistory: AngelHistoryEntry[];
@@ -39,7 +40,7 @@ export type AngelAgentResult = {
 };
 
 /**
- * 运行守望天使 Agent。
+ * 运行天使 Agent（v3.0：加百列 / 米迦勒 / 路西法）。
  *
  * 失败链：
  * 1. 环境变量缺失 → provider_config_missing
@@ -47,7 +48,7 @@ export type AngelAgentResult = {
  * 3. 空输出 → llm_data_missing
  */
 export async function runAngelAgent(req: AngelAgentRequest): Promise<AngelAgentResult> {
-  const { playerInput, state, conversationHistory } = req;
+  const { angelId, playerInput, state, conversationHistory } = req;
 
   const lastAngelReply =
     conversationHistory.length > 0 &&
@@ -58,10 +59,10 @@ export async function runAngelAgent(req: AngelAgentRequest): Promise<AngelAgentR
   // ---- 1. 构建 prompt ----
   let messages: ChatMessage[];
   try {
-    messages = buildAngelPrompt({ playerInput, state, conversationHistory });
+    messages = buildAngelPrompt({ angelId, playerInput, state, conversationHistory });
   } catch {
     return {
-      reply: getAngelFallback(lastAngelReply),
+      reply: getAngelFallback(angelId, lastAngelReply),
       usedFallback: true,
       fallbackReason: "prompt_build_failed",
     };
@@ -73,7 +74,7 @@ export async function runAngelAgent(req: AngelAgentRequest): Promise<AngelAgentR
   // ---- 3. fallback 处理 ----
   if (!result.ok || !result.data) {
     return {
-      reply: getAngelFallback(lastAngelReply),
+      reply: getAngelFallback(angelId, lastAngelReply),
       usedFallback: true,
       fallbackReason: result.fallbackReason ?? "llm_data_missing",
     };
@@ -84,14 +85,14 @@ export async function runAngelAgent(req: AngelAgentRequest): Promise<AngelAgentR
 
   if (!cleaned) {
     return {
-      reply: getAngelFallback(lastAngelReply),
+      reply: getAngelFallback(angelId, lastAngelReply),
       usedFallback: true,
       fallbackReason: "llm_data_missing",
     };
   }
 
   // ---- 4. 自然化处理（去工程词、状态播报） ----
-  const naturalized = naturalizeNpcReply(cleaned, "watching_angel");
+  const naturalized = naturalizeNpcReply(cleaned, angelId);
 
   return {
     reply: naturalized.reply,

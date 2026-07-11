@@ -47,7 +47,7 @@ export type GlobalAchievementSnapshot = {
   maxDivineAttention: number;
 };
 
-/** 普通结局集合（生命果结局在代码中以 worldActions.hasEatenFruit + 时段结束表示） */
+/** 普通结局集合（生命果结局在代码中以 worldActions.hasEatenLifeFruit 表示，需撑到时段结束） */
 export const NORMAL_ENDING_IDS = ["eve_eats_fruit", "god_arrives", "life_fruit"] as const;
 
 /**
@@ -149,7 +149,7 @@ export function syncFromWorldState(state: EdenWorldState): AchievementId[] {
       data.triggeredEndingIds.push(state.endingId);
     }
   }
-  if (state.worldActions?.hasEatenFruit && !data.triggeredEndingIds.includes("life_fruit")) {
+  if (state.worldActions?.hasEatenLifeFruit && !data.triggeredEndingIds.includes("life_fruit")) {
     data.triggeredEndingIds.push("life_fruit");
   }
 

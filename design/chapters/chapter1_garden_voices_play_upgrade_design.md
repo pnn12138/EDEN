@@ -30,7 +30,7 @@
 | 地图 | 6 地点 Hub 地图已实现 | 保留地点和移动校验 |
 | NPC | 女人、亚当、刺猬、天使等已接入；女人/亚当已有轻量时段移动 | 不做完整自由规划器，只打磨现有角色 |
 | 禁忌动作链 | `look_at_tree -> approach_tree -> touch_fruit -> eat_fruit` 已有 | 道具不得直接推进动作链 |
-| 神的注视 | 当前满 4 失败 | 改为满 4 发放神明献礼并归零 |
+| 神的注视 | 当前满 4（旧）失败/归零 | 改为累计资源 `divineAttentionCumulative` + 阈值 `[2,4,6,8,10,12]` 触发三选一，不归零、不失败 |
 | 道具 | 现有 `inventory` 为 string[]，6 件回响 | 需支持次数、准备状态、来源记录 |
 | 成就 | 已有 11 个园中印记 | 扩展到 13+，加入神临里程碑 |
 | 复盘 | 已有轨迹和结局复盘 | 加入神临、献礼、回响使用记录 |
@@ -98,62 +98,62 @@ EveAgent / 规则层产生工具意图
 建议扩展 `EdenWorldState`：
 
 ```ts
-divineAttention: 0 | 1 | 2 | 3 | 4;
-divineVisitCount: number;
-divineGiftInventory: Record<DivineGiftId, number>;
-divineGiftHistory: Array<{
+divineAttentionCumulative: number;   // 累计注视（正向资源，无 0-4 上限，不归零、不失败）
+divineGiftsOwned: DivineGiftId[];    // 已选定的献礼（驱动阶段显示与阈值进度）
+divineVisitCount: number;           // = divineGiftsOwned.length（兼容旧字段）
+divineGiftHistory: Array<{          // 兼容旧字段
   timeSlot: number;
   giftId: DivineGiftId;
   reason: string;
 }>;
 ```
 
-`inventory: string[]` 不适合重复获得神明献礼。P0 可用 `itemCounts: Record<string, number>` 统一支持所有可叠加道具；若改动风险过高，先只给神明献礼单独建 `divineGiftInventory`。
+累积注视达阈值时通过 `shouldTriggerGiftChoice(state)` 判定，再经 `rollGiftChoices(state.divineGiftsOwned)` 从未拥有的 7 份中抽 3 份供三选一；玩家选定后由 `claim_divine_gift` 工具写入 `divineGiftsOwned` / `inventory` / `divineGiftHistory`，并 `divineVisitCount = divineGiftsOwned.length`。
 
-### 5.2 满值流程
+### 5.2 触发与选定流程
 
 ```text
-行动照常结算
-→ divineAttention 达到 4
-→ 发放 1 件神明献礼
-→ divineAttention 归零
-→ divineVisitCount +1
-→ 写入 divineGiftHistory
+行动照常结算（累计注视叠加增量，不归零、不失败）
+→ divineAttentionCumulative 达到阈值 [2,4,6,8,10,12]（或开局已选 0 份）
+→ 弹出三选一：从 7 份献礼中抽取未拥有的 3 份供玩家选定
+→ claim_divine_gift 选定 1 份 → 写入 divineGiftsOwned / inventory / divineGiftHistory
+→ divineVisitCount = divineGiftsOwned.length
+→ 若 divineGiftsOwned.length >= 7 → 触发顶点演出（全 NPC 好感=100）
 → 检查神临里程碑印记
 ```
 
-注意：当前行动不能被献礼打断。例如女人低语触发 `touch_fruit` 并让注视满值，则先完成 `touch_fruit`，再发放献礼。
+注意：当前行动不能被献礼打断。例如女人低语触发 `touch_fruit` 并让注视达阈值，则先完成 `touch_fruit`，再弹出三选一。
 
 ### 5.3 阶段显示
 
-| 神临次数 | 顶部称谓 | 点位颜色 | 机制说明 |
+阶段称谓基于「已选献礼数」展示，与累计注视阈值进度相互独立。
+
+| 已选数 | 顶部称谓 | 点位颜色 | 机制说明 |
 | ---: | --- | --- | --- |
-| 0 | 神的注视 | 暗金 | 满值后首次献礼 |
-| 1-2 | 神在垂听 | 琥珀金 | 优先补短缺资源 |
-| 3-4 | 神在鉴察 | 金白 | 献礼效果加强或增加充能 |
-| 5+ | 神临不息 | 白焰金 | 持续累计神临次数 |
+| 0 | 神的注视 | 暗金 | 开局或累计注视达阈值后弹三选一 |
+| 1-2 | 神在垂听 | 琥珀金 | 已择 1~2 份献礼 |
+| 3-4 | 神在鉴察 | 金白 | 已择 3~4 份献礼 |
+| 5+ | 神临不息 | 白焰金 | 已择 5 份以上，临近顶点 |
 
-玩家可见格式：
-
-```text
-神在鉴察  ● ● ○ ○   神临 × 3
-```
-
-### 5.4 献礼池
-
-| itemId | 名称 | 发放倾向 | 效果 | 使用类型 |
-| --- | --- | --- | --- | --- |
-| `gift_sabbath_dew` | 息日露滴 | 当前 AP 低 | 立即恢复 1 AP，不超过 5 | 即时 |
-| `gift_revealing_light` | 照见之光 | 有接近但未发现的回响条件 | 显示一条明确提示 | 即时 |
-| `gift_wide_path_seal` | 宽行之印 | 无紧急短缺 | 下一次移动或场景互动不消耗 AP | 准备 |
-
-发放算法建议：
+玩家可见格式（含累计注视进度）：
 
 ```text
-if actionPoints <= 1 → 息日露滴
-else if existsNearMissItemCondition → 照见之光
-else → 宽行之印
+神在鉴察  ● ● ○ ○   已择 × 3   注视 6/8
 ```
+
+### 5.4 献礼池（三选一·7 份被动回响）
+
+全部为 `kind:"passive"` 被动回响，选定后立即生效、本局永久有效、下一局重置，不修改女人心智、不推进禁忌动作链。
+
+| itemId | 名称 | 被动效果 |
+| --- | --- | --- |
+| `gift_all_seduction_up` | 低语之诱 | 低语效果系数 ×1.35（女人心智变化幅度放大） |
+| `gift_attention_accel` | 注视加速 | 神的注视增量 ×1.5 |
+| `gift_resonance_double` | 回响倍涌 | 回响（共振）效果 ×2 |
+| `gift_threshold_cut` | 界限松弛 | 夏娃提示词注入：更愿顺着自己的判断走 |
+| `gift_free_move` | 无羁之步 | 移动不消耗行动点 |
+| `gift_whisper_anywhere` | 随处低语 | 低语同场景校验放行（可跨越地点低语） |
+| `gift_awaken_desire` | 渴望苏醒 | 夏娃提示词注入：更想了解善恶知识 |
 
 神明献礼不修改女人心智，不推进禁忌动作链。
 

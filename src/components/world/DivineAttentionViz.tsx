@@ -13,6 +13,12 @@ type DivineAttentionVizProps = {
   narration: string;
   /** 满 4 级触发神明献礼时，显示特殊闪光与文案 */
   giftFlash?: boolean;
+  /** T6：神的注视累计点（正向累计资源，驱动三选一） */
+  cumulative?: number;
+  /** T6：下一次三选一阈值（已选 ownedCount 份后） */
+  nextThreshold?: number | null;
+  /** T6：已选神明献礼数 */
+  ownedCount?: number;
 };
 
 // ---- 单个水滴 SVG ----
@@ -40,8 +46,13 @@ export default function DivineAttentionViz({
   level,
   narration,
   giftFlash,
+  cumulative,
+  nextThreshold,
+  ownedCount,
 }: DivineAttentionVizProps) {
   const safeLevel = Math.max(0, Math.min(4, level));
+  const showProgress = typeof cumulative === "number" && nextThreshold != null;
+  const capstone = typeof ownedCount === "number" && ownedCount >= 7;
 
   return (
     <>
@@ -60,6 +71,33 @@ export default function DivineAttentionViz({
       {narration && (
         <div className="eden-divine-narration-bar" role="status">
           {narration}
+        </div>
+      )}
+
+      {/* T6：累计注视进度（驱动三选一） */}
+      {showProgress && !capstone && (
+        <div
+          className="eden-attention-progress"
+          title={`神的注视累计 ${cumulative} / 下次献礼 ${nextThreshold}`}
+        >
+          <div className="eden-attention-progress-bar">
+            <div
+              className="eden-attention-progress-fill"
+              style={{
+                width: `${Math.min(100, Math.round(((cumulative ?? 0) / (nextThreshold ?? 1)) * 100))}%`,
+              }}
+            />
+          </div>
+          <span className="eden-attention-progress-text">
+            已领 {ownedCount ?? 0}/7 · 注视累计 {cumulative}/{nextThreshold}
+          </span>
+        </div>
+      )}
+
+      {/* T6：集满七献礼顶点提示 */}
+      {capstone && (
+        <div className="eden-attention-progress eden-attention-progress--capstone" role="status">
+          <span className="eden-attention-progress-text">七恩俱临 · 园中众人对你全然倾心</span>
         </div>
       )}
 

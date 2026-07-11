@@ -64,9 +64,9 @@ function isDialogueConditionMet(state: EdenWorldState, template: NpcDialogueTemp
         state.eveMind.selfJudgement >= 35
       );
     case "adam_asks_angel_about_command":
-      // 亚当与守望天使同地点或相邻（天使在东园幽径，邻接园中树林/四河分流），且亚当怀疑蛇 >= 45
+      // 亚当与米迦勒同地点或相邻（米迦勒守四河分流），且亚当怀疑蛇 >= 45
       return (
-        areLocationsAdjacent(state.npcLocations.adam, state.npcLocations.watching_angel) &&
+        areLocationsAdjacent(state.npcLocations.adam, state.npcLocations.michael) &&
         state.adamMind.suspicionTowardSerpent >= 45
       );
     case "hedgehog_signals_adam":

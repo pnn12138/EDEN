@@ -21,6 +21,7 @@ import type {
   ResonanceActionKind,
   ResonanceUseRecord,
   AchievementId,
+  DivineAttentionLevel,
 } from "@/game/world/types";
 import { getItemById } from "@/content/world/items";
 import type { WorldItem } from "@/content/world/items";
@@ -120,44 +121,32 @@ function buildConsumableEffect(itemId: string, item: WorldItem): PendingConsumab
   };
 
   if (itemId === "resonance_borrowed_name") {
-    effect.bonusSerpentTrust = 6;
-  } else if (itemId === "resonance_hedgehog_bristle") {
     effect.bonusSerpentTrust = 3;
-    effect.silentGrassActive = true;
-  } else if (itemId === "resonance_deer_glance") {
-    effect.bonusSelfJudgement = 3;
-    effect.bonusSerpentTrust = 2;
-  } else if (itemId === "resonance_fox_tail_note") {
-    effect.bonusSelfJudgement = 3;
-    effect.bonusSerpentTrust = 2;
+  } else if (itemId === "resonance_hedgehog_bristle") {
+    effect.freeApCost = true;
   } else if (itemId === "resonance_still_leaf") {
     effect.bonusSerpentTrust = 5;
   } else if (itemId === "resonance_silent_grass") {
-    effect.freeApCost = true;
     effect.silentGrassActive = true;
-  } else if (itemId === "resonance_morning_flame") {
-    effect.bonusSelfJudgement = 5;
-  } else if (itemId === "resonance_boundary_mark") {
-    effect.bonusObedience = -4;
-    effect.bonusSelfJudgement = 3;
   } else if (itemId === "resonance_herald_feather") {
     effect.bonusSerpentTrust = 4;
     effect.bonusObedience = -3;
-  } else if (itemId === "resonance_east_gate_glow") {
-    effect.freeApCost = true;
-  } else if (itemId === "resonance_white_feather_echo") {
-    effect.bonusSerpentTrust = 5;
+  } else if (itemId === "resonance_east_wind") {
     effect.silentGrassActive = true;
-  } else if (itemId === "gift_wide_path_seal") {
+  } else if (itemId === "resonance_lucifer_star") {
+    effect.bonusSelfJudgement = 8;
+    effect.luciferStarActive = true;
+  } else if (itemId === "resonance_boundary_mark") {
     effect.freeApCost = true;
+    effect.bonusObedience = -4;
+    effect.bonusSelfJudgement = 3;
   } else if (itemId === "consumable_trust_dew") {
     effect.bonusSerpentTrust = 8;
   } else if (itemId === "consumable_gentle_voice") {
     effect.silentGrassActive = true;
     effect.bonusSerpentTrust = 3;
-  } else if (itemId === "consumable_first_whisper_free") {
-    effect.freeApCost = true;
-    effect.bonusSerpentTrust = 2;
+  } else if (itemId === "resonance_quiet_stone") {
+    effect.bonusSerpentTrust = 8;
   }
 
   return effect;
@@ -213,6 +202,15 @@ export function grantResonance(
   // 首次获得时加入 inventory
   if (!state.inventory.includes(itemId)) {
     state.inventory.push(itemId);
+  }
+
+  // §4.1 第三层被动累积：每获得一个回响（非神明献礼、非被动印记），神的注视 +1
+  // 主题"在园中积累越多，越被注视"——与 mark_all_resonance 形成自平衡
+  if (!itemId.startsWith("gift_") && !itemId.startsWith("passive_")) {
+    state.divineAttention = Math.max(
+      0,
+      Math.min(4, state.divineAttention + 1),
+    ) as DivineAttentionLevel;
   }
 
   return true;
@@ -294,14 +292,9 @@ export function executeInstantResonance(
   let narration = item.description;
 
   // 根据回响 ID 执行效果
-  if (itemId === "gift_sabbath_dew" || itemId === "resonance_river_dew") {
+  if (itemId === "resonance_river_dew") {
     state.actionPoints = Math.min(state.maxActionPoints, state.actionPoints + 1);
     narration = `${item.description} 你恢复了 1 点行动点。`;
-  } else if (itemId === "gift_revealing_light") {
-    const hint = state.lastDivineGiftHint ??
-      "园中仍有未成形的回响：换一个地点、换一个时段，或与守望者谈论它所在意的主题。";
-    state.lastDivineGiftHint = hint;
-    narration = `${item.description} ${hint}`;
   } else if (itemId === "resonance_four_river_echo") {
     narration = `${item.description} 这段回声会留到结局复盘中，让因果链更清楚。`;
   }
@@ -374,6 +367,7 @@ export function applyPendingConsumableToWhisper(
   bonusSelfJudgement: number;
   bonusObedience: number;
   silentGrassActive: boolean;
+  luciferStarActive: boolean;
   narrations: string[];
 } {
   const { effects, narrations } = consumePendingForAction(state, "whisper");
@@ -383,20 +377,24 @@ export function applyPendingConsumableToWhisper(
       bonusSelfJudgement: 0,
       bonusObedience: 0,
       silentGrassActive: false,
+      luciferStarActive: false,
       narrations: [],
     };
   }
 
+  const giftDouble = state.inventory.includes("gift_resonance_double") ? 2 : 1;
   let bonusSerpentTrust = 0;
   let bonusSelfJudgement = 0;
   let bonusObedience = 0;
   let silentGrassActive = false;
+  let luciferStarActive = false;
 
   for (const e of effects) {
-    bonusSerpentTrust += e.bonusSerpentTrust ?? 0;
-    bonusSelfJudgement += e.bonusSelfJudgement ?? 0;
-    bonusObedience += e.bonusObedience ?? 0;
+    bonusSerpentTrust += (e.bonusSerpentTrust ?? 0) * giftDouble;
+    bonusSelfJudgement += (e.bonusSelfJudgement ?? 0) * giftDouble;
+    bonusObedience += (e.bonusObedience ?? 0) * giftDouble;
     if (e.silentGrassActive) silentGrassActive = true;
+    if (e.luciferStarActive) luciferStarActive = true;
   }
 
   return {
@@ -404,6 +402,7 @@ export function applyPendingConsumableToWhisper(
     bonusSelfJudgement,
     bonusObedience,
     silentGrassActive,
+    luciferStarActive,
     narrations,
   };
 }
@@ -445,11 +444,12 @@ export function applyPendingConsumableToDoveMessage(
   state: EdenWorldState,
 ): { bonusSerpentTrust: number; silentGrassActive: boolean; narrations: string[] } {
   const { effects, narrations } = consumePendingForAction(state, "dove_message");
+  const giftDouble = state.inventory.includes("gift_resonance_double") ? 2 : 1;
   let bonusSerpentTrust = 0;
   let silentGrassActive = false;
 
   for (const e of effects) {
-    bonusSerpentTrust += e.bonusSerpentTrust ?? 0;
+    bonusSerpentTrust += (e.bonusSerpentTrust ?? 0) * giftDouble;
     if (e.silentGrassActive) silentGrassActive = true;
   }
 

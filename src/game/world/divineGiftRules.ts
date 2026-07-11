@@ -1,14 +1,20 @@
 // ============================================================
-// 第一章神明献礼规则层
+// 第一章神明献礼规则层（T6：7 献礼三选一 + 累计注视驱动）
 //
 // 职责：
-// - 管理神的注视阶段显示
-// - 决定神明献礼类型
-// - 发放神明献礼
-// - 触发条件：神的注视满 4 时触发献礼并归零，不触发失败
+// - 神的注视等级显示（基于已选献礼数）
+// - 累计注视阈值决定下一次三选一
+// - 三选一候选抽取（rollGiftChoices）
+// - 玩家选定献礼（claimDivineGift）
+// - 集满 7 献礼的顶点演出（applyGiftCapstone）
 // ============================================================
 
-import type { DivineGiftId, EdenWorldState, TimeSlot } from "@/game/world/types";
+import type {
+  DivineGiftId,
+  EdenWorldState,
+  EdenNpcId,
+  TimeSlot,
+} from "@/game/world/types";
 
 // ---- 神的注视阶段 ----
 export type DivineAttentionStage = {
@@ -24,148 +30,149 @@ export type DivineGiftResult = {
   hint?: string;
 };
 
-// ---- 神的注视阶段显示 ----
-export function getDivineAttentionStage(divineVisitCount: number): DivineAttentionStage {
-  if (divineVisitCount <= 0) return { title: "神的注视", tone: "dark_gold" };
-  if (divineVisitCount <= 2) return { title: "神在垂听", tone: "amber_gold" };
-  if (divineVisitCount <= 4) return { title: "神在鉴察", tone: "white_gold" };
+// ---- 神的注视阶段显示（基于已选献礼数） ----
+export function getDivineAttentionStage(ownedCount: number): DivineAttentionStage {
+  if (ownedCount <= 0) return { title: "神的注视", tone: "dark_gold" };
+  if (ownedCount <= 2) return { title: "神在垂听", tone: "amber_gold" };
+  if (ownedCount <= 4) return { title: "神在鉴察", tone: "white_gold" };
   return { title: "神临不息", tone: "white_flame" };
 }
 
-// ---- 决定神明献礼类型 ----
-export function resolveDivineGift(state: EdenWorldState): DivineGiftId {
-  // 优先：行动点 ≤ 1 时给予息日露滴
-  if (state.actionPoints <= 1) return "gift_sabbath_dew";
-  // 其次：有可获得的回响提示时给予照见之光
-  if (getNearMissResonanceHint(state)) return "gift_revealing_light";
-  // 默认：给予宽行之印
-  return "gift_wide_path_seal";
+// ---- 累计注视阈值（第 2~7 个三选一的触发点） ----
+export const DIVINE_GIFT_THRESHOLDS = [2, 4, 6, 8, 10, 12];
+
+// ---- 7 献礼池 ----
+export const DIVINE_GIFT_POOL: DivineGiftId[] = [
+  "gift_all_seduction_up",
+  "gift_attention_accel",
+  "gift_resonance_double",
+  "gift_threshold_cut",
+  "gift_free_move",
+  "gift_whisper_anywhere",
+  "gift_awaken_desire",
+];
+
+// ---- 献礼元数据（前端展示 + 回响被动接入） ----
+export const DIVINE_GIFT_META: Record<
+  DivineGiftId,
+  { name: string; description: string; shortEffect: string; icon: string }
+> = {
+  gift_all_seduction_up: {
+    name: "低语之诱",
+    description: "神使你的话语更柔软动人，低语更易打动听者。",
+    shortEffect: "低语效果系数 ×1.35",
+    icon: "🗨️",
+  },
+  gift_attention_accel: {
+    name: "注视加速",
+    description: "神更留意园中的动静，你的每一次试探都更被看见。",
+    shortEffect: "神的注视增量 ×1.5",
+    icon: "👁️",
+  },
+  gift_resonance_double: {
+    name: "回响倍涌",
+    description: "你拾得的回响更浓，效果翻倍。",
+    shortEffect: "回响效果 ×2",
+    icon: "🌊",
+  },
+  gift_threshold_cut: {
+    name: "界限松弛",
+    description: "神在夏娃心中松动了一道界限，她更易走向自己的判断。",
+    shortEffect: "夏娃提示词注入：更愿自我判断",
+    icon: "✂️",
+  },
+  gift_free_move: {
+    name: "无羁之步",
+    description: "神准你自由穿行园中，移动不再消耗行动。",
+    shortEffect: "移动不消耗行动点",
+    icon: "👣",
+  },
+  gift_whisper_anywhere: {
+    name: "随处低语",
+    description: "你的声音能越过距离，同场景的校验被放宽。",
+    shortEffect: "低语同场景校验放行",
+    icon: "🌀",
+  },
+  gift_awaken_desire: {
+    name: "渴望苏醒",
+    description: "神在夏娃心里点起一丝对知识的渴望。",
+    shortEffect: "夏娃提示词注入：更想了解善恶",
+    icon: "🔥",
+  },
+};
+
+export function getGiftMeta(giftId: DivineGiftId) {
+  return DIVINE_GIFT_META[giftId];
 }
 
-// ---- 获取回响提示（P0 简化版） ----
-export function getNearMissResonanceHint(state: EdenWorldState): string | null {
-  // 根据已有线索/地点/未拥有回响返回明确提示
-  // 不随机，不剧透全部条件
-
-  // 传令白羽：位于伊甸之河时与加百列谈论传话/声音
-  if (
-    !state.inventory.includes("resonance_herald_feather") &&
-    state.locationId === "four_river_source" &&
-    state.timeOfDay === "day"
-  ) {
-    return "加百列在河源守望。与他谈论传话与声音，或许能获得一片白羽。";
+// ---- 从未选过的献礼中随机抽 3 个供三选一（不足 3 个则全展示） ----
+export function rollGiftChoices(owned: DivineGiftId[]): DivineGiftId[] {
+  const remain = DIVINE_GIFT_POOL.filter((g) => !owned.includes(g));
+  // Fisher–Yates 洗牌
+  for (let i = remain.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [remain[i], remain[j]] = [remain[j], remain[i]];
   }
-
-  // 晨焰碎片：需要 clue_two_trees 且未拥有 resonance_morning_flame
-  if (
-    !state.inventory.includes("resonance_morning_flame") &&
-    state.discoveredClues.includes("clue_two_trees")
-  ) {
-    return "乌列尔在幽径守望夜晚。与他谈论分辨与善恶，光会分出一束火焰。";
-  }
-
-  // 边界之痕：神已注视或曾临在，位于四河分流
-  if (
-    !state.inventory.includes("resonance_boundary_mark") &&
-    (state.divineAttention > 0 || state.divineVisitCount > 0) &&
-    state.locationId === "naming_stone_bank"
-  ) {
-    return "米迦勒在分流处守望。对他谈论边界与选择，他会留下一道震颤的痕迹。";
-  }
-
-  // 东门辉光：位于东园幽径，尚未对女人低语，与基路伯谈论路/门
-  if (
-    !state.inventory.includes("resonance_east_gate_glow") &&
-    state.locationId === "east_garden_path" &&
-    !state.actionsThisSlot.whisperedNpcIds.includes("eve")
-  ) {
-    return "基路伯守望着东门。在靠近女人之前，与他谈论道路与方向，辉光会为你让路。";
-  }
-
-  // 借来的名字：需要 clue_naming_stones 且未拥有 resonance_borrowed_name
-  if (
-    !state.inventory.includes("resonance_borrowed_name") &&
-    state.discoveredClues.includes("clue_naming_stones")
-  ) {
-    return "名字的痕迹尚未完全沉默。查看刻名石后，一段借来的名字会留在你的回响中。";
-  }
-
-  // 信任之露：中央草地，未拥有
-  if (
-    !state.inventory.includes("consumable_trust_dew") &&
-    state.locationId === "central_meadow"
-  ) {
-    return "园子中央的草地被两棵树守护。停在这里感受它的静，或许能拾起一滴信任的露水。";
-  }
-
-  return null;
+  return remain.slice(0, Math.min(3, remain.length));
 }
 
-// ---- 发放神明献礼 ----
-export function grantDivineGift(
+// ---- 是否达到下一次三选一阈值（开局后第 N 个，N=owned.length） ----
+export function shouldTriggerGiftChoice(state: EdenWorldState): boolean {
+  const owned = state.divineGiftsOwned.length;
+  if (owned >= 7) return false;
+  if (owned === 0) return false; // 开局单独触发
+  const threshold = DIVINE_GIFT_THRESHOLDS[owned - 1];
+  return state.divineAttentionCumulative >= threshold;
+}
+
+// ---- 玩家三选一选定一个献礼 ----
+export function claimDivineGift(
   state: EdenWorldState,
-  giftId: DivineGiftId
+  giftId: DivineGiftId,
 ): DivineGiftResult {
-  // 增加道具次数
-  state.itemCounts[giftId] = (state.itemCounts[giftId] ?? 0) + 1;
-
-  // 如果首次获得，加入 inventory
-  if (!state.inventory.includes(giftId)) {
-    state.inventory.push(giftId);
+  if (!state.divineGiftsOwned.includes(giftId)) {
+    state.divineGiftsOwned.push(giftId);
   }
-
-  // 记录神临次数
-  state.divineVisitCount += 1;
-
-  // 记录献礼历史
+  state.divineVisitCount = state.divineGiftsOwned.length;
   state.divineGiftHistory.push({
     timeSlot: state.timeSlot,
     giftId,
-    reason: "神的注视满盈后留下献礼",
+    reason: "三选一",
   });
+  // 作为被动回响发放（自动生效，无需主动使用）
+  if (!state.inventory.includes(giftId)) {
+    state.inventory.push(giftId);
+  }
+  state.itemCounts[giftId] = (state.itemCounts[giftId] ?? 0) + 1;
 
-  // 根据 giftId 返回结果
-  if (giftId === "gift_sabbath_dew") {
-    return {
-      giftId,
-      giftName: "息日露滴",
-      narration: "光落在草尖，留下一滴安静的露。它留在你的回响中，可在行动紧张时恢复一点余地。",
-    };
+  // 集满顶点：全 NPC 对玩家好感 = 100
+  if (state.divineGiftsOwned.length >= 7) {
+    applyGiftCapstone(state);
   }
 
-  if (giftId === "gift_revealing_light") {
-    // 照见之光：提供回响提示
-    const hint =
-      getNearMissResonanceHint(state) ??
-      "园中有一段回响将要成形，只差一次合适的对话或行动。";
-    state.lastDivineGiftHint = hint;
-    return {
-      giftId,
-      giftName: "照见之光",
-      narration: "一束光照过叶影，使一条尚未走完的路短暂显明。",
-      hint,
-    };
-  }
-
-  // 宽行之印：无额外效果，只是标记
+  const meta = DIVINE_GIFT_META[giftId];
   return {
     giftId,
-    giftName: "宽行之印",
-    narration: "草叶向两侧伏下，像有一条路暂时被宽恕。",
+    giftName: meta.name,
+    narration: meta.description,
   };
 }
 
-// ---- 触发神明献礼（如果神的注视满 4） ----
-export function triggerDivineGiftIfFull(state: EdenWorldState): DivineGiftResult | null {
-  // 条件：神的注视 < 4 或已结束，不触发
-  if (state.divineAttention < 4 || state.isEnded) return null;
-
-  // 决定献礼类型
-  const giftId = resolveDivineGift(state);
-
-  // 归零神的注视
-  state.divineAttention = 0;
-
-  // 发放献礼
-  return grantDivineGift(state, giftId);
+// ---- 集满 7：强制全 NPC 对玩家好感 = 100（obedience 不变） ----
+export function applyGiftCapstone(state: EdenWorldState): void {
+  state.eveMind.serpentTrust = 100;
+  state.adamMind.suspicionTowardSerpent = 0; // =>100 好感
+  for (const npc of ["gabriel", "michael", "lucifer", "hedgehog"] as EdenNpcId[]) {
+    const r =
+      state.npcRelations[npc] ??
+      (state.npcRelations[npc] = {
+        affinity: 0,
+        obedience: 50,
+        rewardEligible: false,
+        rewardClaimed: false,
+        lastAffinitySignature: null,
+      });
+    r.affinity = 100;
+    r.rewardEligible = true;
+  }
 }
