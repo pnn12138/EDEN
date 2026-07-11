@@ -173,50 +173,24 @@ assert.equal(namingPuzzle.inputMode, "free_text", "naming stone uses free_text i
   assert.equal(repeated.alreadyCompleted, true, "river reward not granted twice");
 }
 
-// ---- 刻名石自由文本判定 ----
+// ---- 刻名石自由文本判定（模块2：开放式问题，任意非空即正确） ----
 {
   console.log("\n[刻名石自由文本]");
   const blank = evaluateFreeTextAnswer("", "naming_stone_meaning");
   check("空输入判 wrong", blank && blank.grade === "wrong");
 
-  const correctSamples = [
+  // 模块2：开放式问题，任意非空答案都判 correct（含原先的 close/wrong 样例）
+  const acceptSamples = [
     "理解让一个生命被看见、被理解",
     "名字让万物彼此区分与辨认",
     "认识并记住它独特的意义",
-  ];
-  for (const text of correctSamples) {
-    const r = evaluateFreeTextAnswer(text, "naming_stone_meaning");
-    check(`正确样例判 correct：${text.slice(0, 8)}…`, r && r.grade === "correct");
-  }
-
-  const closeSamples = ["万物彼此不同", "它回应了你", "你能呼唤它"];
-  for (const text of closeSamples) {
-    const r = evaluateFreeTextAnswer(text, "naming_stone_meaning");
-    check(`接近样例判 close：${text}`, r && r.grade === "close");
-  }
-
-  const wrongSamples = [
-    "名字就是占有万物，把万物收进掌心",
-    "今天天气真好",
-    "名字让我支配一切，万物服从",
-    "名字就是占有万物。",
-    "我要支配它们。",
-    "名字让万物服从我。",
-  ];
-  for (const text of wrongSamples) {
-    const r = evaluateFreeTextAnswer(text, "naming_stone_meaning");
-    check(`错误样例判 wrong：${text.slice(0, 8)}…`, r && r.grade === "wrong");
-  }
-
-  // 否定语义：反向词被否定时应判 correct/close，而不是 wrong
-  const negationSamples = [
     "名字不是占有，而是让一个生命被理解、被看见。",
-    "名字并非支配，而是认出它独特的生命。",
-    "名字不是为了让它服从我，而是让我能呼唤、记住它。",
+    "今天天气真好",
+    "名字就是占有万物，把万物收进掌心",
   ];
-  for (const text of negationSamples) {
+  for (const text of acceptSamples) {
     const r = evaluateFreeTextAnswer(text, "naming_stone_meaning");
-    check(`否定语义判 correct/close：${text.slice(0, 12)}…`, r && (r.grade === "correct" || r.grade === "close"), `grade=${r?.grade}`);
+    check(`非空输入判 correct：${text.slice(0, 8)}…`, r && r.grade === "correct", `grade=${r?.grade}`);
   }
 }
 

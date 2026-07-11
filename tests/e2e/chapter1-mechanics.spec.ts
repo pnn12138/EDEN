@@ -5,14 +5,19 @@ const WORLD_STATE_STORAGE_KEY = "eden:chapter1:world-state:v2";
 // 推进引言直到进入 explore：末拍会弹出「神明献礼三选一」，选定一份才进入 explore。
 // 用正向循环稳健推进，避免快点时漏点导致卡在引言末拍。
 async function enterExplore(page: Page): Promise<void> {
-  const objectiveHint = page.getByTestId("world-objective-hint");
   const giftCard = page.getByTestId("gift-choice-card").first();
   const advance = page.locator(".eden-btn--beat-advance");
+  const introModal = page.getByTestId("world-intro-modal");
+  const sceneModal = page.getByTestId("world-scene-modal");
 
   for (let step = 0; step < 12; step += 1) {
-    if (await objectiveHint.isVisible().catch(() => false)) break;
+    // 进入 explore 后会出现开场 / 场景切换弹窗，直接关闭即可
+    if (await introModal.isVisible().catch(() => false)) break;
+    if (await sceneModal.isVisible().catch(() => false)) break;
     if (await giftCard.isVisible().catch(() => false)) {
       await giftCard.click();
+      // 选定首份献礼后等待开场弹窗出现
+      await introModal.waitFor({ state: "visible", timeout: 5000 }).catch(() => {});
       break;
     }
     if (await advance.isVisible().catch(() => false)) {
@@ -23,13 +28,15 @@ async function enterExplore(page: Page): Promise<void> {
     }
   }
 
-  await expect(objectiveHint).toBeVisible();
-  // 选定献礼后会弹出「神明献礼」提示 toast（约 6s 自动消失），等待其消失后再关闭目标提示，
-  // 避免 toast 遮挡 close 按钮导致点击超时。
+  // 关闭首次进入时的开场弹窗
+  await page.getByTestId("world-intro-modal-close").click().catch(() => {});
+  // 关闭进入首个场景时的场景切换弹窗
+  await page.getByTestId("world-scene-modal-close").click().catch(() => {});
+
+  // 选定献礼后会弹出「神明献礼」提示 toast（约 6s 自动消失），等待其消失避免遮挡
   await page
     .waitForSelector(".eden-divine-gift-toast", { state: "detached", timeout: 10000 })
     .catch(() => {});
-  await page.getByTestId("world-objective-hint-close").click();
 }
 
 async function startFreshChapter(page: Page): Promise<void> {
@@ -46,6 +53,8 @@ async function moveTo(page: Page, locationId: string): Promise<void> {
   await page.getByTestId(`location-card-${locationId}`).click();
   await page.getByTestId("world-map-enter").click();
   await page.waitForTimeout(600);
+  // 关闭可能弹出的场景切换弹窗，避免遮挡后续点击
+  await page.getByTestId("world-scene-modal-close").click().catch(() => {});
 }
 
 test.describe("第一章机制：伊甸之河 / NPC 重开 / 刻名石自由文本", () => {
@@ -84,22 +93,32 @@ test.describe("第一章机制：伊甸之河 / NPC 重开 / 刻名石自由文�
     await expect(page.getByText("对 亚当 低语")).toBeVisible();
   });
 
-  test("刻名石自由文本：提交中文理解可成功并获得回响", async ({ page }) => {
+  test("刻名石两步弹窗：输入名字后展示一念之间并获得回响", async ({ page }) => {
     await startFreshChapter(page);
 
     const stone = page.getByTestId("scene-action-engraved-stone");
     await expect(stone).toBeVisible();
     await stone.click();
 
+    // 第一步：刻名石
     await expect(page.getByTestId("scene-puzzle-modal")).toBeVisible();
-    const textarea = page.getByTestId("scene-puzzle-textarea");
-    await expect(textarea).toBeVisible();
-
-    await textarea.fill("名字不是占有，而是让一个生命被理解、被看见。");
+    await expect(page.getByTestId("scene-puzzle-title")).toHaveText("刻名石");
+    const nameInput = page.getByTestId("scene-puzzle-input");
+    await expect(nameInput).toBeVisible();
+    await nameInput.fill("低语者");
     await page.getByTestId("scene-puzzle-submit").click();
 
-    await expect(page.getByTestId("scene-puzzle-feedback")).toBeVisible();
-    await expect(page.getByText("万物名录", { exact: true })).toBeVisible();
+    // 回响 Toast 仍出现（万物名录照常发放）
+    await expect(page.locator(".eden-resonance-gained-toast")).toBeVisible();
+
+    // 第二步：仅是一个念头
+    await expect(page.getByTestId("scene-puzzle-title")).toHaveText("仅是一个念头");
+    await expect(page.getByText("石面上浮现出：低语者。")).toBeVisible();
+    await page.getByTestId("scene-puzzle-confirm").click();
+
+    // 弹窗关闭，刻名石标记为已记下
+    await expect(page.getByTestId("scene-puzzle-modal")).toHaveCount(0);
+    await expect(stone).toContainText("已记下");
   });
 
   test("设置浮窗：可打开，含账号态与存档三按钮", async ({ page }) => {

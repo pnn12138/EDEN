@@ -21,6 +21,8 @@ export type EdenLocation = {
   name: string;
   /** 短描述（地图节点） */
   shortDesc: string;
+  /** 进入场景弹窗展示的场景描述（100 字以内） */
+  description: string;
   /** 进入时的环境旁白（白天） */
   enterNarration: string;
   /** 进入时的环境旁白（夜晚） */
@@ -46,6 +48,7 @@ export const EDEN_LOCATIONS: Record<EdenLocationId, EdenLocation> = {
     id: "central_meadow",
     name: "园子中央",
     shortDesc: "环河草地中央，两棵树立在光里",
+    description: "伊甸中心的青草地，生命树与分别善恶树扎根于此，白日阳光洒落，夜间萤火浮动。",
     enterNarration:
       "你来到园子的中央。生命树与分别善恶树都在这里；一棵像丰盛的应许，一棵因命令而显得更安静。果子在枝叶间低垂，风从河边穿过草地。这里没有常驻的人影，只有两棵树和它们之间的静。",
     enterNarrationNight:
@@ -64,6 +67,7 @@ export const EDEN_LOCATIONS: Record<EdenLocationId, EdenLocation> = {
     id: "four_river_source",
     name: "伊甸之河",
     shortDesc: "瀑布与泉源汇成滋润园子的上游，米迦勒守护",
+    description: "四道河流的源头，水流清冽，石子在水底闪着微光，偶有飞鸟掠过水面。",
     enterNarration:
       "有一条河从伊甸流出来滋润那园子。你来到它的源头——瀑布从岩石间落下，水声很轻，却无处不在。米迦勒站在水里，听着水流的声音。这里是上游，水还未分叉。",
     enterNarrationNight:
@@ -83,6 +87,7 @@ export const EDEN_LOCATIONS: Record<EdenLocationId, EdenLocation> = {
     id: "adam_garden_work",
     name: "万物受名处",
     shortDesc: "动物被带到人面前得名的草甸",
+    description: "亚当为飞鸟走兽命名的草甸，散落着刻有古老符号的石痕，风里带着青草与泥土的气息。",
     enterNarration:
       "这里是亚当常在的地方。神把走兽和飞鸟都带到他面前，他就给它们起名。草甸边有几块被命名的石头，名字落在上面，比露水还轻。你从这里进入更深的园子，尚未到两棵树所在的中央。",
     enterNarrationNight:
@@ -101,6 +106,7 @@ export const EDEN_LOCATIONS: Record<EdenLocationId, EdenLocation> = {
     id: "tree_court",
     name: "园中树林",
     shortDesc: "园中的女人在树影与花草之间停留",
+    description: "园中右侧的树林，高大的柏树投下柔影，林下细花盛开，那个女人常在此停留。",
     enterNarration:
       "园子右侧的树林比别处更安静。高大的柏树投下柔和的影子，林下空地开满细花。那个女人常在这里停留，听鸟鸣，看花草。这里不是分别善恶树所在的地方，只是一片安静的林子。",
     enterNarrationNight:
@@ -120,6 +126,7 @@ export const EDEN_LOCATIONS: Record<EdenLocationId, EdenLocation> = {
     id: "east_garden_path",
     name: "东园幽径",
     shortDesc: "灌木与树影遮住的弯曲小道，加百列与刺猬常驻",
+    description: "东侧的弯曲小道，灌木与树影遮蔽天光，加百列在此驻守，不易被园中一眼看见。",
     enterNarration:
       "你沿着树林南缘走上一条弯曲的小道。低矮的灌木和草丛遮住了身形，树影在头顶交错。这里不容易被看见——正适合潜伏和绕行。加百列守在东边，刺猬在草丛里窸窣作响。",
     enterNarrationNight:
@@ -139,6 +146,7 @@ export const EDEN_LOCATIONS: Record<EdenLocationId, EdenLocation> = {
     id: "naming_stone_bank",
     name: "四河分流",
     shortDesc: "主河离开园子后分成多道水流，路西法看水",
+    description: "主河离开园子后分出的多道水流，水声隆隆，路西法坐于石上望着每一道分流的去向。",
     enterNarration:
       "你来到园子下方中央的河岸。主河离开园子后在这里分成多道水流，向四方流去。水声比上游更大，空气中弥漫着湿润的泥土气息。路西法坐在河中央的石头上，望着每一道分流的去向。",
     enterNarrationNight:

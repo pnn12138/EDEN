@@ -141,6 +141,10 @@ export function useWorldSave({
   const reset = useCallback(() => {
     try {
       window.localStorage.removeItem(WORLD_STATE_STORAGE_KEY);
+      // 模块1：重置后重新显示开场弹窗
+      window.localStorage.removeItem("eden:world:global_intro_shown");
+      // 模块4：重置词元统计
+      window.localStorage.removeItem("eden:world:polish-tokens");
     } catch {
       /* noop */
     }

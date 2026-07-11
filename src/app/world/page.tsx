@@ -630,6 +630,47 @@ export default function WorldPage() {
     Number(typeof window !== "undefined" ? localStorage.getItem("eden:world:polish-tokens") ?? 0 : 0));
   const [lastPolishTokens, setLastPolishTokens] = useState<number | null>(null);
 
+  // 词元消耗统计（模块4）
+  const [polishTokensRound, setPolishTokensRound] = useState(0); // 本轮（当前时段）累计消耗
+  const [polishTokensTurn, setPolishTokensTurn] = useState(0); // 本次对话消耗，显示后清零
+  const [showTurnConsumptionTip, setShowTurnConsumptionTip] = useState(false); // 是否显示本次消耗提示
+  const turnConsumptionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // 模块1：首次全局开场弹窗
+  const [showGlobalIntroModal, setShowGlobalIntroModal] = useState(() => {
+    if (typeof window === "undefined") return false;
+    // 只有首次进入游戏显示，刷新不再显示，新游戏重新显示
+    return localStorage.getItem("eden:world:global_intro_shown") !== "1";
+  });
+  // 模块1：场景切换弹窗
+  const [showSceneChangeModal, setShowSceneChangeModal] = useState(false);
+  const [currentSceneModalData, setCurrentSceneModalData] = useState<{ title: string; content: string }>({ title: "", content: "" });
+
+  const handleGlobalIntroClose = useCallback(() => {
+    setShowGlobalIntroModal(false);
+    try {
+      localStorage.setItem("eden:world:global_intro_shown", "1");
+    } catch {
+      /* localStorage 不可用时静默忽略 */
+    }
+  }, []);
+
+  const handleSceneChangeClose = useCallback(() => {
+    setShowSceneChangeModal(false);
+  }, []);
+
+  // 模块1：进入新场景时弹出场景描述弹窗
+  useEffect(() => {
+    if (state.phase !== "explore") return;
+    const location = EDEN_LOCATIONS[state.locationId];
+    if (!location) return;
+    setCurrentSceneModalData({
+      title: `当前位置：${location.name}`,
+      content: location.description || "",
+    });
+    setShowSceneChangeModal(true);
+  }, [state.locationId, state.phase]);
+
   useEffect(() => {
     if (window.matchMedia("(max-width: 720px)").matches) {
       setWorldPanelOpen(false);
@@ -980,9 +1021,19 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
       if (data.ok && data.polished) {
         setPlayerInput(data.polished);
         if (typeof data.tokens === "number") {
-          const next = polishTokensTotal + data.tokens;
+          const consumed = data.tokens;
+          const next = polishTokensTotal + consumed;
           setPolishTokensTotal(next);
-          setLastPolishTokens(data.tokens);
+          setPolishTokensRound((prev) => prev + consumed);
+          setPolishTokensTurn(consumed);
+          setLastPolishTokens(consumed);
+          setShowTurnConsumptionTip(true);
+          // 3 秒后自动隐藏本次消耗提示
+          if (turnConsumptionTimer.current) clearTimeout(turnConsumptionTimer.current);
+          turnConsumptionTimer.current = setTimeout(() => {
+            setShowTurnConsumptionTip(false);
+            setPolishTokensTurn(0);
+          }, 3000);
           try {
             localStorage.setItem("eden:world:polish-tokens", String(next));
           } catch {
@@ -1243,6 +1294,10 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
           }
 
           setState(data.state);
+          // 模块4：进入下一轮时清零本轮词元消耗
+          if (tool === "end_slot") {
+            setPolishTokensRound(0);
+          }
           setToolNarration(data.narration);
           setSlotNarrations(data.slotNarrations ?? null);
           // 第一章：处理回响叙事
@@ -1384,15 +1439,6 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
     setPuzzleResult(null);
   }, [activePuzzle, puzzleResult]);
 
-  const handleDismissObjectiveHint = useCallback(() => {
-    setState((prev) => ({
-      ...prev,
-      hasDismissedObjectiveHint: true,
-    }));
-  }, []);
-
-
-
   // ---- 地图热点点击处理：只选中地点，不直接移动 ----
     const handleMapLocationClick = useCallback((locId: EdenLocationId) => {
       setSelectedMapLocationId(locId);
@@ -1429,6 +1475,17 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
     setSuppressedAutoPuzzleIds(new Set());
     setActiveTab("dialogue");
     setSceneFocusMode("browse");
+    // 模块4：重置词元统计
+    setPolishTokensTotal(0);
+    setPolishTokensRound(0);
+    setPolishTokensTurn(0);
+    setShowTurnConsumptionTip(false);
+    if (turnConsumptionTimer.current) clearTimeout(turnConsumptionTimer.current);
+    try {
+      localStorage.removeItem("eden:world:polish-tokens");
+    } catch {
+      /* localStorage 不可用时静默忽略 */
+    }
   }, []);
 
   // ---- 存档：抽取到 useWorldSave（键名与数据格式与原有完全一致） ----
@@ -1486,7 +1543,6 @@ const riverPuzzle = getScenePuzzleById("puzzle_river_words_belonging");
 const riverCompleted = riverPuzzle
   ? state.completedScenePuzzleIds.includes(riverPuzzle.id)
   : false;
-const showObjectiveHint = isExploreActive && !state.hasDismissedObjectiveHint;
 const hasWhisperedToActiveNpc = activeNpc
   ? state.actionsThisSlot.whisperedNpcIds.filter((id) => id === activeNpc).length >= 3
   : false;
@@ -1794,7 +1850,6 @@ const whisperCountForActiveNpc = activeNpc
         >
           {/* 地点标题浮层 */}
           <div className="eden-world-stage-caption" style={{ position: "absolute", left: 24, top: 24, zIndex: 4 }}>
-            <span className="eden-world-stage-kicker">当前位置</span>
             <strong
               style={{ color: "#ead9ad", fontSize: "1.12rem", fontWeight: 500 }}
               data-testid="world-current-location"
@@ -1803,30 +1858,6 @@ const whisperCountForActiveNpc = activeNpc
             </strong>
             <span style={{ display: "block", fontSize: "0.78rem", color: "#b7b08e", marginTop: 2 }}>{currentLocation.shortDesc}</span>
           </div>
-
-          {showObjectiveHint && (
-            <aside
-              className="eden-objective-hint"
-              aria-label="当前目标"
-              data-testid="world-objective-hint"
-            >
-              <button
-                type="button"
-                className="eden-objective-hint-close"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  handleDismissObjectiveHint();
-                }}
-                aria-label="关闭当前目标"
-                data-testid="world-objective-hint-close"
-              >
-                x
-              </button>
-              <strong>当前目标：</strong>
-              <span>观察园中的角色与场景，收集能够影响夏娃的线索。</span>
-              <span>刻名石、伊甸之河与刺猬需要你直接点击才会回应。</span>
-            </aside>
-          )}
 
           {state.locationId === "adam_garden_work" && (
             <button
@@ -1842,7 +1873,7 @@ const whisperCountForActiveNpc = activeNpc
               data-testid="scene-action-engraved-stone"
             >
               <span>刻名石</span>
-              <small>{namingStoneCompleted ? "已记下" : "查看问题"}</small>
+              <small>{namingStoneCompleted ? "已记下" : "查看内容"}</small>
             </button>
           )}
 
@@ -2042,6 +2073,68 @@ const whisperCountForActiveNpc = activeNpc
 
       {/* 神明献礼三选一弹窗（与 intro 返回共用 giftChoiceModal 常量） */}
       {giftChoiceModal}
+
+      {/* 模块1：首次全局开场弹窗 */}
+      {showGlobalIntroModal && (
+        <div
+          className="eden-modal-overlay"
+          onClick={handleGlobalIntroClose}
+          data-testid="world-intro-modal"
+        >
+          <div
+            className="eden-modal eden-modal--compact"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="eden-modal-header">
+              <span className="eden-modal-title">第一章 · 园中诸声</span>
+              <button
+                type="button"
+                className="eden-modal-close"
+                onClick={handleGlobalIntroClose}
+                aria-label="关闭"
+                data-testid="world-intro-modal-close"
+              >
+                ×
+              </button>
+            </div>
+            <div className="eden-modal-body">
+              <p className="mb-4">你是蛇，低语引导夏娃做出选择。</p>
+              <p className="mb-4">观察园中角色与场景，收集能够影响夏娃的线索。</p>
+              <p className="mb-4">刻名石、伊甸之河与刺猬需要你直接点击才会回应。</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 模块1：场景切换弹窗 */}
+      {showSceneChangeModal && !showGlobalIntroModal && (
+        <div
+          className="eden-modal-overlay"
+          onClick={handleSceneChangeClose}
+          data-testid="world-scene-modal"
+        >
+          <div
+            className="eden-modal eden-modal--compact"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="eden-modal-header">
+              <span className="eden-modal-title">{currentSceneModalData.title}</span>
+              <button
+                type="button"
+                className="eden-modal-close"
+                onClick={handleSceneChangeClose}
+                aria-label="关闭"
+                data-testid="world-scene-modal-close"
+              >
+                ×
+              </button>
+            </div>
+            <div className="eden-modal-body">
+              <p>{currentSceneModalData.content}</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 顶部设置浮窗 */}
       <SettingsModal
@@ -2518,12 +2611,20 @@ const whisperCountForActiveNpc = activeNpc
                 你没有手，不能触碰果子，也不能替任何人做出选择。你的力量只剩语言——以及耐心。每一轮你有 {state.maxActionPoints} 点行动，用于移动、低语或场景互动。行动点用尽后，需要主动进入下一轮才能恢复。
               </p>
 
-              {/* 润色 token 消耗展示 */}
+              {/* 词元消耗统计（模块4） */}
               <div style={{ marginTop: 16 }}>
-                <p className="eden-section-title">润色消耗</p>
-                <p style={{ color: "#b7b08e", fontSize: "0.85rem" }}>
-                  本次 {lastPolishTokens ?? "-"} · 累计 {polishTokensTotal} token
-                </p>
+                <p className="eden-section-title">词元消耗统计</p>
+                <div style={{ color: "#b7b08e", fontSize: "0.85rem", display: "flex", justifyContent: "space-between" }}>
+                  <span>本轮消耗</span>
+                  <span>{polishTokensRound}</span>
+                </div>
+                <div style={{ color: "#b7b08e", fontSize: "0.85rem", display: "flex", justifyContent: "space-between" }}>
+                  <span>本局累计消耗</span>
+                  <span>{polishTokensTotal}</span>
+                </div>
+                <div style={{ color: "#9a946f", fontSize: "0.78rem", marginTop: 4 }}>
+                  本次 {lastPolishTokens ?? "-"} · 本局累计 {polishTokensTotal} token
+                </div>
               </div>
 
               {/* 当前回响Buff显示 */}
@@ -2939,6 +3040,12 @@ const whisperCountForActiveNpc = activeNpc
       {/* 输入区（固定底部，与教程统一） */}
       {isExploreActive && (
         <footer className="eden-input-footer">
+          {/* 模块4：本次对话词元消耗提示 */}
+          {showTurnConsumptionTip && polishTokensTurn > 0 && (
+            <div className="eden-polish-consumption-tip">
+              本次低语消耗 {polishTokensTurn} 词元 · 本轮累计 {polishTokensRound} · 本局累计 {polishTokensTotal}
+            </div>
+          )}
           {/* 推荐低语（输入框上方） */}
           {activeNpc && recommendedWhispers.length > 0 && (
             <div className="eden-input-suggestions">

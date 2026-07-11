@@ -2727,7 +2727,8 @@ a:hover {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: radial-gradient(ellipse at 50% 40%, rgba(180, 200, 220, 0.02) 0%, transparent 70%);
+  z-index: -1;
+  background: radial-gradient(ellipse at 50% 40%, rgba(0, 0, 0, 0.05) 0%, transparent 70%);
   animation: fadeIn 2s ease;
 }
 
@@ -2736,14 +2737,15 @@ a:hover {
   position: absolute;
   inset: 0;
   pointer-events: none;
+  z-index: -1;
   background:
-    radial-gradient(ellipse at 50% 40%, rgba(180, 200, 220, 0.04) 0%, transparent 60%),
+    radial-gradient(ellipse at 50% 40%, rgba(0, 0, 0, 0.1) 0%, transparent 60%),
     repeating-linear-gradient(
       0deg,
       transparent,
       transparent 60px,
-      rgba(180, 200, 220, 0.01) 60px,
-      rgba(180, 200, 220, 0.01) 61px
+      rgba(0, 0, 0, 0.02) 60px,
+      rgba(0, 0, 0, 0.02) 61px
     );
   animation: fadeIn 2s ease;
 }
@@ -2753,21 +2755,22 @@ a:hover {
   position: absolute;
   inset: 0;
   pointer-events: none;
+  z-index: -1;
   background:
-    radial-gradient(ellipse at 50% 40%, rgba(180, 200, 220, 0.06) 0%, transparent 55%),
+    radial-gradient(ellipse at 50% 40%, rgba(0, 0, 0, 0.15) 0%, transparent 55%),
     repeating-linear-gradient(
       0deg,
       transparent,
       transparent 40px,
-      rgba(180, 200, 220, 0.02) 40px,
-      rgba(180, 200, 220, 0.02) 41px
+      rgba(0, 0, 0, 0.03) 40px,
+      rgba(0, 0, 0, 0.03) 41px
     ),
     repeating-linear-gradient(
       90deg,
       transparent,
       transparent 60px,
-      rgba(180, 200, 220, 0.015) 60px,
-      rgba(180, 200, 220, 0.015) 61px
+      rgba(0, 0, 0, 0.02) 60px,
+      rgba(0, 0, 0, 0.02) 61px
     );
   animation: fadeIn 2s ease;
 }
@@ -6442,6 +6445,61 @@ a:hover {
 .eden-scene-puzzle-confirm {
   width: 100%;
   margin-top: 16px;
+}
+
+/* 刻名石自由文本：深色统一风格输入框（模块2） */
+.eden-scene-puzzle-textarea {
+  width: 100%;
+  min-height: 120px;
+  padding: 12px;
+  border: 1px solid rgba(220, 200, 150, 0.3);
+  border-radius: 8px;
+  background: rgba(12, 18, 12, 0.8);
+  color: #e8d8b8;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.eden-scene-puzzle-textarea::placeholder {
+  color: rgba(232, 216, 184, 0.5);
+}
+
+/* 刻名石单行姓名输入框 */
+.eden-scene-puzzle-input {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid rgba(220, 200, 150, 0.3);
+  border-radius: 8px;
+  background: rgba(12, 18, 12, 0.8);
+  color: #e8d8b8;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.eden-scene-puzzle-input::placeholder {
+  color: rgba(232, 216, 184, 0.5);
+}
+
+.eden-scene-puzzle-input:focus {
+  outline: none;
+  border-color: rgba(241, 216, 143, 0.58);
+  background: rgba(12, 18, 12, 0.92);
+}
+
+.eden-scene-puzzle-input:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+/* 低语润色词元消耗提示（模块4） */
+.eden-polish-consumption-tip {
+  font-size: 0.75rem;
+  color: rgba(232, 216, 184, 0.7);
+  text-align: center;
+  padding: 4px 0;
+  margin-bottom: 8px;
+  animation: fadeIn 0.3s ease;
 }
 
 @media (max-width: 720px) {

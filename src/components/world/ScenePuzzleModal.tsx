@@ -16,6 +16,8 @@ type ScenePuzzleModalProps = {
   onClose: () => void;
 };
 
+const SINGLE_LINE_MAX_LENGTH = 24;
+
 export default function ScenePuzzleModal({
   puzzle,
   result,
@@ -25,7 +27,18 @@ export default function ScenePuzzleModal({
 }: ScenePuzzleModalProps) {
   const hasSucceeded = result?.success === true;
   const isFreeText = puzzle.inputMode === "free_text";
+  const isSingleLine = isFreeText && puzzle.singleLine === true;
+  const hasSecondStep = Boolean(puzzle.secondStep);
+  const showSecondStep = hasSucceeded && hasSecondStep;
   const [freeText, setFreeText] = useState("");
+  const trimmed = freeText.trim();
+
+  const secondStepTitle = puzzle.secondStep?.title ?? puzzle.title;
+  const secondStepPrompt = puzzle.secondStep
+    ? puzzle.secondStep.promptTemplate.replace(/\{name\}/g, trimmed || "……")
+    : "";
+  const secondStepConfirm = puzzle.secondStep?.confirmText ?? "离开";
+  const submitLabel = puzzle.submitText ?? "刻下回答";
 
   return (
     <div className="eden-scene-puzzle-backdrop" role="presentation">
@@ -52,38 +65,53 @@ export default function ScenePuzzleModal({
           className="eden-scene-puzzle-title"
           data-testid="scene-puzzle-title"
         >
-          {puzzle.title}
+          {showSecondStep ? secondStepTitle : puzzle.title}
         </h2>
         <p
           className="eden-scene-puzzle-prompt"
           data-testid="scene-puzzle-prompt"
           style={{ whiteSpace: "pre-line" }}
         >
-          {puzzle.prompt}
+          {showSecondStep ? secondStepPrompt : puzzle.prompt}
         </p>
 
-        {isFreeText ? (
+        {!showSecondStep && isFreeText && (
           <div className="eden-scene-puzzle-freetext" aria-label="自由回答">
-            <textarea
-              className="eden-scene-puzzle-textarea"
-              value={freeText}
-              placeholder={puzzle.placeholder ?? "写下你的回答……"}
-              disabled={isLoading || hasSucceeded}
-              onChange={(event) => setFreeText(event.target.value)}
-              data-testid="scene-puzzle-textarea"
-              rows={5}
-            />
+            {isSingleLine ? (
+              <input
+                type="text"
+                className="eden-scene-puzzle-input"
+                value={freeText}
+                placeholder={puzzle.placeholder ?? ""}
+                maxLength={SINGLE_LINE_MAX_LENGTH}
+                disabled={isLoading || hasSucceeded}
+                onChange={(event) => setFreeText(event.target.value)}
+                data-testid="scene-puzzle-input"
+              />
+            ) : (
+              <textarea
+                className="eden-scene-puzzle-textarea"
+                value={freeText}
+                placeholder={puzzle.placeholder ?? "写下你的回答……"}
+                disabled={isLoading || hasSucceeded}
+                onChange={(event) => setFreeText(event.target.value)}
+                data-testid="scene-puzzle-textarea"
+                rows={5}
+              />
+            )}
             <button
               type="button"
               className="eden-btn eden-btn--primary eden-scene-puzzle-submit"
-              disabled={isLoading || hasSucceeded || freeText.trim().length === 0}
-              onClick={() => onChoose({ answerText: freeText.trim() })}
+              disabled={isLoading || hasSucceeded || trimmed.length === 0}
+              onClick={() => onChoose({ answerText: trimmed })}
               data-testid="scene-puzzle-submit"
             >
-              {isLoading ? "正在回应……" : "刻下名字"}
+              {isLoading ? "正在回应……" : submitLabel}
             </button>
           </div>
-        ) : (
+        )}
+
+        {!showSecondStep && !isFreeText && (
           <div className="eden-scene-puzzle-options" aria-label="回答选项">
             {(puzzle.options ?? []).map((option) => {
               const selected = result?.selectedOptionId === option.id;
@@ -104,7 +132,7 @@ export default function ScenePuzzleModal({
           </div>
         )}
 
-        {result && (
+        {!showSecondStep && result && (
           <div
             className={`eden-scene-puzzle-result ${
               result.success ? "eden-scene-puzzle-result--success" : "eden-scene-puzzle-result--failure"
@@ -124,14 +152,25 @@ export default function ScenePuzzleModal({
           </div>
         )}
 
-        {hasSucceeded && (
+        {showSecondStep ? (
           <button
             type="button"
             className="eden-btn eden-btn--primary eden-scene-puzzle-confirm"
             onClick={onClose}
+            data-testid="scene-puzzle-confirm"
           >
-            继续
+            {secondStepConfirm}
           </button>
+        ) : (
+          hasSucceeded && (
+            <button
+              type="button"
+              className="eden-btn eden-btn--primary eden-scene-puzzle-confirm"
+              onClick={onClose}
+            >
+              继续
+            </button>
+          )
         )}
       </section>
     </div>

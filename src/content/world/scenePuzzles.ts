@@ -47,6 +47,18 @@ export type ScenePuzzle = {
     hint: string;
     attentionDelta?: number;
   };
+  // ---- 新增（可选）：单行输入 + 两步弹窗，仅刻名石使用 ----
+  /** free_text 模式下渲染为单行 <input>（默认多行 textarea） */
+  singleLine?: boolean;
+  /** free_text 提交按钮文案（默认「刻下回答」） */
+  submitText?: string;
+  /** 成功后展示第二步弹窗（标题 / 正文模板 / 确认按钮文案） */
+  secondStep?: {
+    title: string;
+    /** 正文模板，支持 {name} 占位符，替换为玩家提交文本 */
+    promptTemplate: string;
+    confirmText?: string;
+  };
 };
 
 export const SCENE_PUZZLES: ScenePuzzle[] = [
@@ -56,20 +68,28 @@ export const SCENE_PUZZLES: ScenePuzzle[] = [
     trigger: "explicit_interaction",
     inputMode: "free_text",
     evaluationId: "naming_stone_meaning",
-    title: "刻名石上的问题",
+    title: "刻名石",
     prompt:
-      "亚当为飞鸟走兽一一命名。石上却留下未完的一句：\n“若只说出称呼，却未曾理解它，万物真的受名了吗？”\n名字赋予万物的，究竟是什么？",
-    placeholder: "写下你对“名字”的理解（200 字以内）……",
+      "蛇望向石面。原本空白的石面上，缓缓浮现出一行字：「来者，留下你的名姓。」\n名字么……我叫什么来着？哦，我是——",
+    placeholder: "输入你的名字",
+    singleLine: true,
+    submitText: "留下名字",
+    secondStep: {
+      title: "仅是一个念头",
+      promptTemplate:
+        "石面上浮现出：{name}。仅是一瞬，文字便消失了，石面重新归于空白。",
+      confirmText: "离开",
+    },
     successTags: ["understanding"],
     successFeedback:
-      "石痕亮了一瞬。名字不是把万物收进掌心，而是让它们能被看见、被理解，也能从万物中被认出。你记住了“万物名录”。",
+      "石上的字一闪而逝，归于空白。但那一瞬你看见了——名字让一个生命被看见、被理解。你记住了「万物名录」。",
     rewards: {
       clueId: "clue_naming_stones",
       itemId: "resonance_living_names",
       trustDelta: 2,
     },
     failure: {
-      hint: "石痕没有变亮。若名字只剩占有或秩序，它就很难成为能递给她的问题。",
+      hint: "石面没有回应。先说出你想被记住的名字。",
     },
   },
   {

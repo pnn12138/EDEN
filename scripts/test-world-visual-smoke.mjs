@@ -258,8 +258,8 @@ check("/world 不再定义旧场景热点配置", !worldPage.includes("SCENE_FOC
 check("/world 有刻名石显式问答入口", worldPage.includes("eden-naming-stone-entry") && worldPage.includes("handleNamingStoneClick"));
 check("/world 刻名石不再依赖多次点击", !worldPage.includes("naming-stone-center") && !worldPage.includes("点击中间的刻名石 3 次"));
 check("/world 有场景问答弹窗", worldPage.includes("ScenePuzzleModal") && worldPage.includes("activePuzzle"));
-check("/world 有当前目标提示（显式点击引导）",
-  worldPage.includes("当前目标") &&
+check("/world 有开场引导弹窗（显式点击引导）",
+  worldPage.includes("第一章 · 园中诸声") &&
   worldPage.includes("刻名石") &&
   worldPage.includes("伊甸之河") &&
   worldPage.includes("直接点击"));

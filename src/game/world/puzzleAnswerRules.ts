@@ -79,6 +79,19 @@ function isReverseNegated(normalized: string, reverseConceptIndex: number): bool
 }
 
 export function evaluateFreeTextAnswer(input: string, evaluationId: string): FreeTextAnswerResult | null {
+  // 刻名石：开放式问题，任意非空输入即判定正确（模块2：删除对错判断）
+  if (evaluationId === "naming_stone_meaning") {
+    const text = input.trim();
+    if (!text) {
+      return { grade: "wrong", feedback: "请先输入你的名字。" };
+    }
+    return {
+      grade: "correct",
+      feedback:
+        "石痕亮了一瞬。名字不是把万物收进掌心，而是让它们能被看见、被理解，也能从万物中被认出。你记住了「万物名录」。",
+    };
+  }
+
   const evaluator = EVALUATORS[evaluationId];
   if (!evaluator) return null;
 

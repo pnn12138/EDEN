@@ -78,7 +78,7 @@ export default function DivineAttentionViz({
       {showProgress && !capstone && (
         <div
           className="eden-attention-progress"
-          title={`神的注视累计 ${cumulative} / 下次献礼 ${nextThreshold}`}
+          title={`当前已累计${cumulative}点，再获得${nextThreshold - cumulative}点可领取神明献礼`}
         >
           <div className="eden-attention-progress-bar">
             <div
@@ -89,7 +89,7 @@ export default function DivineAttentionViz({
             />
           </div>
           <span className="eden-attention-progress-text">
-            已领 {ownedCount ?? 0}/7 · 注视累计 {cumulative}/{nextThreshold}
+            注视值：{cumulative}/{nextThreshold}
           </span>
         </div>
       )}

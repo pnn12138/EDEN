@@ -731,7 +731,7 @@ export type NpcLanguageStates = Partial<Record<EdenNpcId, NpcLanguageState>>;
 
 // ---- 神的注视叙事化表现（对齐 INTERACTION_LOGIC.md §五 等级表） ----
 export const DIVINE_ATTENTION_NARRATIONS: Record<DivineAttentionLevel, string> = {
-  0: "风很温和，鸟鸣照常，园中一切如常。",
+  0: "",
   1: "风停了一瞬，鸟鸣顿了一下，又接着叫了起来。",
   2: "远处传来羽翼振动的声音，风里带了一点凉意。",
   3: "树影变冷了，空气好像凝固，能感觉到有什么在注视。",
