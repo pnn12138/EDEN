@@ -87,6 +87,7 @@ a:hover {
   position: fixed;
   inset: 0;
   z-index: 0;
+  pointer-events: none;
 }
 
 .eden-bg img {
@@ -6188,74 +6189,6 @@ a:hover {
   font-size: 0.78rem;
 }
 
-/* §2.2 园中之声：常驻可收起引导面板（叙事化教学） */
-.eden-voice-guide {
-  position: absolute;
-  right: 16px;
-  top: 16px;
-  z-index: 7;
-  width: clamp(212px, 24vw, 300px);
-  padding: 0;
-  background: rgba(12, 16, 12, 0.82);
-  border: 1px solid rgba(220, 200, 150, 0.32);
-  border-radius: 10px;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.42);
-  backdrop-filter: blur(3px);
-  pointer-events: auto;
-}
-
-.eden-voice-guide-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  padding: 9px 13px;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  color: #ead9ad;
-  font-size: 0.82rem;
-  letter-spacing: 0.08em;
-}
-
-.eden-voice-guide-title {
-  font-weight: 500;
-}
-
-.eden-voice-guide-chevron {
-  font-size: 0.9rem;
-  color: #b7b08e;
-  line-height: 1;
-}
-
-.eden-voice-guide--collapsed .eden-voice-guide-chevron {
-  color: #ead9ad;
-}
-
-.eden-voice-guide-list {
-  list-style: none;
-  margin: 0;
-  padding: 0 13px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 7px;
-}
-
-.eden-voice-guide-list li {
-  position: relative;
-  padding-left: 14px;
-  font-size: 0.76rem;
-  line-height: 1.5;
-  color: #c7be98;
-}
-
-.eden-voice-guide-list li::before {
-  content: "·";
-  position: absolute;
-  left: 2px;
-  color: #8aaa70;
-}
-
 /* §2.2 方案 B：首次获得回响的一次性气泡提示 */
 .eden-first-resonance-hint {
   position: fixed;
@@ -6786,6 +6719,79 @@ a:hover {
 
 .eden-btn--polish-busy {
   opacity: 0.7;
+  cursor: default;
+}
+
+.eden-polish-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(200, 200, 210, 0.35);
+  border-top-color: #e8c470;
+  border-radius: 50%;
+  display: inline-block;
+  animation: eden-polish-spin 0.7s linear infinite;
+}
+
+@keyframes eden-polish-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---- 顶部设置浮窗 ---- */
+.eden-settings-btn {
+  margin-left: 4px;
+}
+
+.eden-settings-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.eden-settings-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.eden-settings-section-title {
+  font-size: 0.74rem;
+  letter-spacing: 0.12em;
+  color: #b7b08e;
+}
+
+.eden-settings-account {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.eden-settings-account-label {
+  font-size: 0.88rem;
+  color: #ead9ad;
+}
+
+.eden-settings-account-btn {
+  font-size: 0.78rem;
+  padding: 4px 12px;
+}
+
+.eden-settings-save-row {
+  display: flex;
+  gap: 8px;
+}
+
+.eden-settings-save-row .eden-btn {
+  flex: 1;
+  font-size: 0.82rem;
+  padding: 8px 0;
+}
+
+.eden-settings-save-status {
+  font-size: 0.74rem;
+  color: #8aaa70;
 }
 
 .eden-polish-error {

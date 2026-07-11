@@ -60,7 +60,9 @@ import {
 } from "@/game/world/puzzleRules";
 import InventoryPanel from "@/components/world/InventoryPanel";
 import DivineAttentionViz from "@/components/world/DivineAttentionViz";
-import SaveControl from "@/components/world/SaveControl";
+import SettingsModal from "@/components/world/SettingsModal";
+import LoginModal from "@/components/world/LoginModal";
+import { getAuth, logout, type AuthState } from "@/lib/auth";
 import AchievementGarden from "@/components/world/AchievementGarden";
 import {
   getUnlockedCrossSessionMarkIds,
@@ -608,27 +610,6 @@ export default function WorldPage() {
   // ---- 低语叙事化反馈（Task 1.4，仅展示） ----
   const [whisperFeedback, setWhisperFeedback] = useState<string[]>([]);
 
-  // ---- §2.2 园中之声：常驻可收起引导面板（叙事化教学，不出现工程术语） ----
-  const [guideCollapsed, setGuideCollapsed] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false;
-    try {
-      return window.localStorage.getItem("eden:world:guide-collapsed") === "1";
-    } catch {
-      return false;
-    }
-  });
-  const toggleGuide = useCallback(() => {
-    setGuideCollapsed((prev) => {
-      const next = !prev;
-      try {
-        window.localStorage.setItem("eden:world:guide-collapsed", next ? "1" : "0");
-      } catch {
-        /* localStorage 不可用时静默降级 */
-      }
-      return next;
-    });
-  }, []);
-
   // ---- §2.2 方案 B：首次获得回响的一次性气泡提示 ----
   const firstResonanceHintShownRef = useRef(false);
   const [firstResonanceHint, setFirstResonanceHint] = useState<string | null>(null);
@@ -657,6 +638,19 @@ export default function WorldPage() {
 
   // ---- 行动点耗尽提示状态 ----
   const [apDepletedToast, setApDepletedToast] = useState<{ visible: boolean; hiding: boolean }>({ visible: false, hiding: false });
+
+  // ---- 顶部设置浮窗与登录态 ----
+  const [auth, setAuth] = useState<AuthState | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [loginOpen, setLoginOpen] = useState(false);
+  useEffect(() => {
+    setAuth(getAuth());
+  }, []);
+  const handleLogout = useCallback(() => {
+    logout();
+    setAuth(null);
+    setSettingsOpen(false);
+  }, []);
 
   // ---- refs ----
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -1728,14 +1722,6 @@ const whisperCountForActiveNpc = activeNpc
           </button>
         </div>
         <div className="eden-header-right">
-          {/* 存档控制：保存 / 读取 / 重新开始 */}
-          <SaveControl
-            lastSavedAt={lastSavedAt}
-            dirty={dirty}
-            onSave={save}
-            onLoad={load}
-            onReset={reset}
-          />
           {/* 园中回响按钮 */}
           <button
             className="eden-btn eden-top-action-btn eden-btn--resonance"
@@ -1785,6 +1771,15 @@ const whisperCountForActiveNpc = activeNpc
           >
             {soundEnabled ? "🔊" : "🔇"}
           </button>
+          <button
+            className="eden-sound-btn eden-settings-btn"
+            onClick={() => setSettingsOpen(true)}
+            aria-label="打开设置"
+            title="设置"
+            data-testid="world-settings-open"
+          >
+            ⚙
+          </button>
         </div>
       </header>
 
@@ -1832,36 +1827,6 @@ const whisperCountForActiveNpc = activeNpc
               <span>刻名石、伊甸之河与刺猬需要你直接点击才会回应。</span>
             </aside>
           )}
-
-          {/* §2.2 园中之声：常驻可收起引导面板（叙事化教学，不出现工程术语） */}
-          <aside
-            className={`eden-voice-guide ${guideCollapsed ? "eden-voice-guide--collapsed" : ""}`}
-            aria-label="园中之声"
-            data-testid="world-guide-panel"
-          >
-            <button
-              type="button"
-              className="eden-voice-guide-toggle"
-              onClick={(event) => {
-                event.stopPropagation();
-                toggleGuide();
-              }}
-              aria-label={guideCollapsed ? "展开园中之声" : "收起园中之声"}
-              data-testid="world-guide-toggle"
-            >
-              <span className="eden-voice-guide-title">园中之声</span>
-              <span className="eden-voice-guide-chevron">{guideCollapsed ? "◧" : "×"}</span>
-            </button>
-            {!guideCollapsed && (
-              <ul className="eden-voice-guide-list">
-                <li>每段时间，你只能做几件事——这便是你的分寸。</li>
-                <li>十二段时间过去，神便会在园中行走。</li>
-                <li>风变冷时，是神在听——有些话，会惊动祂。</li>
-                <li>园中拾得之物，可在说话前准备好，让一句话更有分量。</li>
-                <li>你不能替她伸手，只能让她自己，想去碰那棵树。</li>
-              </ul>
-            )}
-          </aside>
 
           {state.locationId === "adam_garden_work" && (
             <button
@@ -2077,6 +2042,28 @@ const whisperCountForActiveNpc = activeNpc
 
       {/* 神明献礼三选一弹窗（与 intro 返回共用 giftChoiceModal 常量） */}
       {giftChoiceModal}
+
+      {/* 顶部设置浮窗 */}
+      <SettingsModal
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        auth={auth}
+        onLoginClick={() => {
+          setSettingsOpen(false);
+          setLoginOpen(true);
+        }}
+        onLogout={handleLogout}
+        onSave={save}
+        onLoad={load}
+        onReset={reset}
+        lastSavedAt={lastSavedAt}
+        dirty={dirty}
+      />
+      <LoginModal
+        open={loginOpen}
+        onClose={() => setLoginOpen(false)}
+        onSuccess={(a) => setAuth(a)}
+      />
 
       {/* 集满七献礼：顶点演出 */}
       {giftCapstoneShown && (
@@ -2993,12 +2980,12 @@ const whisperCountForActiveNpc = activeNpc
             <button
               className={`eden-btn eden-btn--polish ${polishing ? "eden-btn--polish-busy" : ""}`}
               onClick={handlePolish}
-              disabled={polishing || isLoading || !activeNpc || !playerInput.trim()}
-              title="润色为伊甸园中的低语"
-              aria-label="润色低语"
+              disabled={isLoading || !activeNpc || !playerInput.trim()}
+              title={polishing ? "润色中" : "润色为伊甸园中的低语"}
+              aria-label={polishing ? "润色中" : "润色低语"}
               data-testid="world-polish"
             >
-              {polishing ? "润色中…" : "✍️"}
+              {polishing ? <span className="eden-polish-spinner" aria-hidden="true" /> : "✍️"}
             </button>
             <button
               className="eden-btn eden-btn--send"

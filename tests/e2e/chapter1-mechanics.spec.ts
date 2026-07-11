@@ -102,23 +102,13 @@ test.describe("第一章机制：伊甸之河 / NPC 重开 / 刻名石自由文�
     await expect(page.getByText("万物名录", { exact: true })).toBeVisible();
   });
 
-  test("园中之声引导面板：首次可见、可收起、刷新保持", async ({ page }) => {
+  test("设置浮窗：可打开，含账号态与存档三按钮", async ({ page }) => {
     await startFreshChapter(page);
 
-    const guide = page.getByTestId("world-guide-panel");
-    await expect(guide).toBeVisible();
-    // 默认展开（可见教学条目）
-    await expect(page.getByText("十二段时间过去，神便会在园中行走。")).toBeVisible();
-
-    // 收起
-    await page.getByTestId("world-guide-toggle").click();
-    await expect(guide).toHaveClass(/eden-voice-guide--collapsed/);
-    await expect(page.getByText("十二段时间过去，神便会在园中行走。")).toHaveCount(0);
-
-    // 刷新后保持收起（guide-collapsed 为独立 localStorage 键，跨刷新保留；
-    // 刷新后 world-state 回到引言，需重新进入 explore 才能再次看到引导面板）
-    await page.reload();
-    await enterExplore(page);
-    await expect(page.getByTestId("world-guide-panel")).toHaveClass(/eden-voice-guide--collapsed/);
+    await page.getByTestId("world-settings-open").click();
+    await expect(page.getByTestId("settings-account")).toBeVisible();
+    await expect(page.getByTestId("world-save")).toBeVisible();
+    await expect(page.getByTestId("world-load")).toBeVisible();
+    await expect(page.getByTestId("world-restart")).toBeVisible();
   });
 });
