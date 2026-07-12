@@ -90,13 +90,12 @@ ${state.inventory.includes("gift_awaken_desire")
 {
   "reply": "你的回复文本",
   "toolCall": {
-    "name": "move_one_step" | "speak_to_npc" | "grant_item",
+    "name": "speak_to_npc" | "grant_item",
     "args": { "locationId": "目标地点ID" } | { "targetNpcId": "目标NPCID" } | { "itemId": "道具ID" }
   }
 }
 如果不需要工具行为，直接输出纯文本回复即可，不要输出 JSON。
 工具行为说明：
-- "move_one_step"：你走向一个相邻的地点（只能移动到相邻地点）。
 - "speak_to_npc"：你与同场景的另一个 NPC 对话（目标必须在同一地点）。
 - "grant_item"：你给予玩家一个回响道具（只能给予你对应的回响）。
 注意：不要在每个回复中都使用工具，只在真正有冲动时才使用。`;
@@ -170,6 +169,7 @@ export function buildAdamWorldPrompt(params: {
   const adamLocation = LOCATION_NAMES[state.npcLocations.adam];
   const serpentLocation = LOCATION_NAMES[state.locationId];
   const sameLocation = state.npcLocations.adam === state.locationId;
+  const eveLocation = LOCATION_NAMES[state.npcLocations.eve];
 
   const mindDesc = describeAdamMind(state);
 
@@ -190,6 +190,7 @@ ${mindDesc}
 
 你所在的地方：${adamLocation}
 蛇所在的地方：${serpentLocation}（${sameLocation ? "它就在你附近" : "它离你有些远"}）
+你的妻子（那个女人）现在在${eveLocation}。若蛇问起她在哪里，你据实相告，但用你自己的语气（例如「她刚才往${eveLocation}去了，说是要摘些果子」），不要像在汇报。
 神的注视：${state.divineAttention}/4
 
 你的输出规则：
@@ -207,13 +208,12 @@ ${mindDesc}
 {
   "reply": "你的回复文本",
   "toolCall": {
-    "name": "move_one_step" | "speak_to_npc" | "grant_item",
+    "name": "speak_to_npc" | "grant_item",
     "args": { "locationId": "目标地点ID" } | { "targetNpcId": "目标NPCID" } | { "itemId": "道具ID" }
   }
 }
 如果不需要工具行为，直接输出纯文本回复即可，不要输出 JSON。
 工具行为说明：
-- "move_one_step"：你走向一个相邻的地点（只能移动到相邻地点）。
 - "speak_to_npc"：你与同场景的另一个 NPC 对话（目标必须在同一地点）。
 - "grant_item"：你给予玩家一个回响道具（只能给予你对应的回响）。
 注意：不要在每个回复中都使用工具，只在真正有冲动时才使用。`;

@@ -14,6 +14,11 @@ import { normalizePuzzleState } from "@/game/world/puzzleRules";
 function normalizeWorldStateForClient(s: EdenWorldState): EdenWorldState {
   return normalizePuzzleState({
     ...s,
+    apMaxBonusBase: s.apMaxBonusBase ?? 0,
+    apMaxBonusDay: s.apMaxBonusDay ?? 0,
+    divineThresholdModifier: s.divineThresholdModifier ?? 0,
+    unlockMapNpcLocations: s.unlockMapNpcLocations ?? false,
+    unlockTreeNames: s.unlockTreeNames ?? false,
     itemCounts: { ...(s.itemCounts ?? {}) },
     pendingConsumableEffects: (s.pendingConsumableEffects ?? []).map((effect) => ({ ...effect })),
     resonanceUseHistory: (s.resonanceUseHistory ?? []).map((record) => ({ ...record })),

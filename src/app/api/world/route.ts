@@ -45,6 +45,7 @@ import {
   applyDivineAttention,
   shouldTriggerGodArrives,
   getDivineAttentionNarration,
+  reduceNpcObedience,
 } from "@/game/world/divineAttentionRules";
 import { shouldTriggerGiftChoice, rollGiftChoices } from "@/game/world/divineGiftRules";
 import {
@@ -166,6 +167,8 @@ type WorldResponseBody = {
   } | null;
   /** 好感/关系变化的自然反馈（不显示数值） */
   npcFeedback?: string | null;
+  /** 任务 6：跨场景低语扣除目标敬畏的实际值（仅跨场景时 > 0） */
+  aweReduction?: number;
 };
 
 // ---- 流式 Agent 结果（在普通 AgentResult 上附加逐字流） ----
@@ -296,6 +299,11 @@ function cloneWorldState(s: EdenWorldState): EdenWorldState {
     lastDivineGiftHint: s.lastDivineGiftHint ?? null,
     fruitDirectionBias: { ...(s.fruitDirectionBias ?? { left: 0, right: 0 }) },
     pickedFruitSide: s.pickedFruitSide ?? null,
+    apMaxBonusBase: s.apMaxBonusBase ?? 0,
+    apMaxBonusDay: s.apMaxBonusDay ?? 0,
+    divineThresholdModifier: s.divineThresholdModifier ?? 0,
+    unlockMapNpcLocations: s.unlockMapNpcLocations ?? false,
+    unlockTreeNames: s.unlockTreeNames ?? false,
   };
 }
 
@@ -555,6 +563,20 @@ export async function POST(request: NextRequest) {
     }
     applyDivineAttention(state, attentionDelta);
 
+    // 任务 6：随处低语——跨场景低语扣目标敬畏（仅一次/每次低语，clamp 0）
+    let aweReduction = 0;
+    const whisperAnywhereOwned =
+      state.divineGiftsOwned.includes("gift_whisper_anywhere") ||
+      state.inventory.includes("gift_whisper_anywhere");
+    const targetNpcLoc = state.npcLocations[targetNpc];
+    if (
+      whisperAnywhereOwned &&
+      targetNpcLoc !== undefined &&
+      targetNpcLoc !== state.locationId
+    ) {
+      aweReduction = reduceNpcObedience(state, targetNpc, 10);
+    }
+
     // ---- 检查累计注视是否达下一次三选一阈值（开局后由前端首拍弹窗处理） ----
     let divineGiftChoice: string[] | null = shouldTriggerGiftChoice(state)
       ? rollGiftChoices(state.divineGiftsOwned)
@@ -746,6 +768,11 @@ export async function POST(request: NextRequest) {
 
     if (agentResult.toolCall) {
       const tc = agentResult.toolCall;
+      const tcName = tc.name;
+      if (tcName === "move_one_step") {
+        // 任务 5：对话后 NPC 不移动，直接忽略该工具意图（prompt 残留兜底）
+        toolResult = null;
+      } else {
       let validation = validateWorldToolCall(state, tc);
 
       // 关系赠礼额外校验：好感 100、奖励资格、未领取、itemId 匹配、天使挑战已通过
@@ -763,8 +790,10 @@ export async function POST(request: NextRequest) {
           toolName: tc.name as "grant_item" | "move_one_step" | "speak_to_npc",
           narration: execResult.narration,
           itemId: tc.args.itemId,
-          fromLocationId: tc.name === "move_one_step" ? state.npcLocations[tc.caller as EdenNpcId] : undefined,
-          toLocationId: tc.name === "move_one_step" ? tc.args.locationId as EdenLocationId : undefined,
+          // 任务 5：move_one_step 已在上面提前过滤（直接忽略），此处不会再是非移动工具，
+          // 故移动相关的起止地点恒为 undefined（死分支，不再做三元判断）。
+          fromLocationId: undefined,
+          toLocationId: undefined,
           npcDialogueRecordId: execResult.npcDialogueRecordId ?? undefined,
         };
 
@@ -793,6 +822,7 @@ export async function POST(request: NextRequest) {
           narration: validation.reason ?? "那个动作没能发生。",
           rejectedReason: validation.reason,
         };
+      }
       }
     }
 
@@ -898,6 +928,7 @@ export async function POST(request: NextRequest) {
         resonanceGained: resonanceGained ?? undefined,
         npcFeedback: affinityFeedback ?? null,
         languagePunishment: languagePunishmentResult ?? null,
+        aweReduction,
       };
       return finalizeResponse(
         failureBody,
@@ -925,6 +956,7 @@ export async function POST(request: NextRequest) {
         resonanceGained: resonanceGained ?? undefined,
         npcFeedback: affinityFeedback ?? null,
         languagePunishment: languagePunishmentResult ?? null,
+        aweReduction,
       };
       return finalizeResponse(
         successBody,

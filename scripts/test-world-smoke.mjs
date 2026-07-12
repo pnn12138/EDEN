@@ -163,7 +163,7 @@ async function scenario1() {
 }
 
 // ---- 场景 2：直接命令提高累计注视，达阈值触发神明献礼三选一（而非失败）----
-// 新设计：神的注视为累计资源，达阈值 [2,4,6,8,10,12] 时弹出三选一（已选>=1 份后），不归零、不失败
+// 新设计：神的注视为累计资源，达阈值 [2,3,4,5,6,7] 时弹出三选一（已选>=1 份后）；领取献礼后累计注视归零，不失败
 async function scenario2() {
   console.log("\n[场景 2] 直接命令提高累计注视，达阈值触发神明献礼三选一");
   const POOL = [
@@ -519,7 +519,8 @@ async function scenario15() {
   r = await postTool(state, "claim_divine_gift", { itemId: pick });
   state = r.state ?? state;
   check("选中后 divineGiftsOwned 数量 +1", state.divineGiftsOwned.length === 2, `实际 ${state.divineGiftsOwned.length}`);
-  check("累计注视未归零（保持累计）", state.divineAttentionCumulative >= 2, `实际 ${state.divineAttentionCumulative}`);
+  // T2 Bug A：领取献礼后累计注视归零（不再保留溢出，避免提前触发下一次三选一）
+  check("领取献礼后累计注视归零", state.divineAttentionCumulative === 0, `实际 ${state.divineAttentionCumulative}`);
   check("divineVisitCount === owned 数", state.divineVisitCount === state.divineGiftsOwned.length);
   check("divineGiftHistory 记录数随选定增长", state.divineGiftHistory.length === state.divineGiftsOwned.length);
   check("新选献礼进入 inventory", state.inventory.includes(pick));
@@ -782,7 +783,8 @@ async function scenario22() {
   const secondClaim = await postTool(state, "claim_divine_gift", { itemId: pick });
   state = secondClaim.state ?? state;
   check("献礼三：选定后进入 divineGiftsOwned", state.divineGiftsOwned.length === 2 && state.divineGiftsOwned.includes(pick), `owned=${JSON.stringify(state.divineGiftsOwned)}`);
-  check("献礼三：累计注视保持（不归零）", state.divineAttentionCumulative >= 2, `cumulative=${state.divineAttentionCumulative}`);
+  // T2 Bug A：领取献礼后累计注视归零（新行为，非保留）
+  check("献礼三：领取后累计注视归零", state.divineAttentionCumulative === 0, `cumulative=${state.divineAttentionCumulative}`);
   check("献礼三：divineVisitCount 同步", state.divineVisitCount === state.divineGiftsOwned.length);
 }
 
@@ -1008,6 +1010,56 @@ async function scenario30() {
   check("永生之味 mark_life_fruit 已解锁", state.unlockedAchievementIds.includes("mark_life_fruit"), `unlocked=${JSON.stringify(state.unlockedAchievementIds)}`);
 }
 
+// ---- 补测场景：跨场景低语扣敬畏（问题 6，路由层） ----
+async function scenarioCrossSceneAwe() {
+  console.log("\n[场景 31] 跨场景低语扣敬畏（问题 6，路由层）");
+
+  // 持有「随处低语」：玩家 adam_garden_work，夏娃 tree_court（跨场景）
+  {
+    const state = makeInitialState();
+    state.divineGiftsOwned = ["gift_whisper_anywhere"];
+    state.inventory = ["gift_whisper_anywhere"];
+    const before = state.eveMind.obedience;
+    const data = await postWorld(state, "你在远处也能听见我对你说的话。", "eve");
+    check("跨场景低语：持有随处低语 → 扣敬畏 10", data.aweReduction === 10, `实际 ${data.aweReduction}`);
+    check(
+      "跨场景低语：夏娃敬畏下降 10（仅一次）",
+      data.state && data.state.eveMind.obedience === before - 10,
+      `before=${before} after=${data.state?.eveMind?.obedience}`,
+    );
+  }
+
+  // 同场景：玩家与亚当同在 adam_garden_work → 不扣敬畏
+  {
+    const state = makeInitialState();
+    state.divineGiftsOwned = ["gift_whisper_anywhere"];
+    state.inventory = ["gift_whisper_anywhere"];
+    const before = state.adamMind.obedience;
+    const data = await postWorld(state, "你听我说。", "adam");
+    check("同场景低语：持有随处低语但不扣敬畏", !data.aweReduction, `实际 ${data.aweReduction}`);
+    check(
+      "同场景低语：亚当敬畏不变",
+      data.state && data.state.adamMind.obedience === before,
+      `before=${before} after=${data.state?.adamMind?.obedience}`,
+    );
+  }
+
+  // 未持有随处低语：跨场景低语不扣敬畏
+  {
+    const state = makeInitialState();
+    state.divineGiftsOwned = [];
+    state.inventory = [];
+    const before = state.eveMind.obedience;
+    const data = await postWorld(state, "你在远处也能听见我对你说的话。", "eve");
+    check("未持随处低语：跨场景低语不扣敬畏", !data.aweReduction, `实际 ${data.aweReduction}`);
+    check(
+      "未持随处低语：夏娃敬畏不变",
+      data.state && data.state.eveMind.obedience === before,
+      `before=${before} after=${data.state?.eveMind?.obedience}`,
+    );
+  }
+}
+
 // ---- 运行 ----
 console.log(`目标: ${BASE}`);
 try {
@@ -1037,6 +1089,7 @@ try {
   await scenario28();
   await scenario29();
   await scenario30();
+  await scenarioCrossSceneAwe();
 } catch (e) {
   console.error("运行异常:", e.message);
   fail++;

@@ -111,7 +111,7 @@ const ANGEL_PERSONAS: Record<AngelNpcId, AngelPersona> = {
   },
   lucifer: {
     name: "路西法",
-    identity: "你被神安置在四河分流处看水，是园中明亮之星。",
+    identity: "你被神安置在四河分流处，是园中明亮之星，看遍所有水流的走向。",
     traits:
       "- 明亮、温和，像晨光落在水面，不愤怒、不阴郁\n" +
       "- 语速慢、语气温柔，喜欢用反问引导人自己想答案\n" +

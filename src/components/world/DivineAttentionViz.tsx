@@ -56,48 +56,50 @@ export default function DivineAttentionViz({
 
   return (
     <>
-      {/* 注视指示器：4 个水滴 */}
-      <span
-        className={`eden-attention-stage eden-attention-stage--viz eden-attention-stage--l${safeLevel}`}
-        title={`神的注视等级：${safeLevel} / 4`}
-        aria-label={`神的注视等级 ${safeLevel} 级`}
-      >
-        {Array.from({ length: 4 }, (_, i) => (
-          <Droplet key={i} active={i < safeLevel} index={i} />
-        ))}
-      </span>
+      <div className="eden-attention-cluster">
+        {/* 注视指示器：4 个水滴 */}
+        <span
+          className={`eden-attention-stage eden-attention-stage--viz eden-attention-stage--l${safeLevel}`}
+          title={`神的注视等级：${safeLevel} / 4`}
+          aria-label={`神的注视等级 ${safeLevel} 级`}
+        >
+          {Array.from({ length: 4 }, (_, i) => (
+            <Droplet key={i} active={i < safeLevel} index={i} />
+          ))}
+        </span>
+
+        {/* T6：累计注视进度（驱动三选一） */}
+        {showProgress && !capstone && (
+          <div
+            className="eden-attention-progress"
+            title={`当前已累计${cumulative}点，再获得${nextThreshold - cumulative}点可领取神明献礼`}
+          >
+            <div className="eden-attention-progress-bar">
+              <div
+                className="eden-attention-progress-fill"
+                style={{
+                  width: `${Math.min(100, Math.round(((cumulative ?? 0) / (nextThreshold ?? 1)) * 100))}%`,
+                }}
+              />
+            </div>
+            <span className="eden-attention-progress-text">
+              注视值：{cumulative}/{nextThreshold}
+            </span>
+          </div>
+        )}
+
+        {/* T6：集满七献礼顶点提示 */}
+        {capstone && (
+          <div className="eden-attention-progress eden-attention-progress--capstone" role="status">
+            <span className="eden-attention-progress-text">七恩俱临 · 园中众人对你全然倾心</span>
+          </div>
+        )}
+      </div>
 
       {/* 顶部居中叙事提示条 */}
       {narration && (
         <div className="eden-divine-narration-bar" role="status">
           {narration}
-        </div>
-      )}
-
-      {/* T6：累计注视进度（驱动三选一） */}
-      {showProgress && !capstone && (
-        <div
-          className="eden-attention-progress"
-          title={`当前已累计${cumulative}点，再获得${nextThreshold - cumulative}点可领取神明献礼`}
-        >
-          <div className="eden-attention-progress-bar">
-            <div
-              className="eden-attention-progress-fill"
-              style={{
-                width: `${Math.min(100, Math.round(((cumulative ?? 0) / (nextThreshold ?? 1)) * 100))}%`,
-              }}
-            />
-          </div>
-          <span className="eden-attention-progress-text">
-            注视值：{cumulative}/{nextThreshold}
-          </span>
-        </div>
-      )}
-
-      {/* T6：集满七献礼顶点提示 */}
-      {capstone && (
-        <div className="eden-attention-progress eden-attention-progress--capstone" role="status">
-          <span className="eden-attention-progress-text">七恩俱临 · 园中众人对你全然倾心</span>
         </div>
       )}
 

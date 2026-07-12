@@ -139,38 +139,83 @@ const namingPuzzle = getScenePuzzleById("puzzle_naming_stone_identity");
 assert.ok(namingPuzzle, "naming stone puzzle exists");
 assert.equal(namingPuzzle.inputMode, "free_text", "naming stone uses free_text input mode");
 
-// ---- choice 谜题仍可判定 ----
+// ---- 东园幽径 per_option：不自动弹出，每选项独立结算 ----
 {
   const state = makeState();
   state.locationId = "east_garden_path";
+  // 改为 explicit_interaction 后不再自动弹出
   const enterPuzzle = getAvailableEnterPuzzle(SCENE_PUZZLES, state);
-  assert.equal(enterPuzzle?.id, "puzzle_east_path_cautious_presence");
+  assert.equal(enterPuzzle, null, "east path no longer auto-triggers on enter");
 
-  const failed = applyScenePuzzleAnswer(state, enterPuzzle, "urge_directly");
-  assert.equal(failed.success, false);
-  assert.equal(failed.state.completedScenePuzzleIds.includes(enterPuzzle.id), false);
-  assert.equal(failed.state.divineAttention, 1, "wrong answer can add a small amount of attention");
+  const eastPuzzle = getScenePuzzleById("puzzle_east_path_cautious_presence");
+  assert.ok(eastPuzzle, "east path puzzle exists");
+  assert.equal(eastPuzzle.trigger, "explicit_interaction", "east path is explicit interaction");
+  assert.equal(eastPuzzle.resolutionMode, "per_option", "east path uses per_option");
 
-  const recovered = applyScenePuzzleAnswer(failed.state, enterPuzzle, "ask_gently");
-  assert.equal(recovered.success, true);
-  assert.ok(recovered.state.completedScenePuzzleIds.includes(enterPuzzle.id));
-  assert.ok(recovered.state.inventory.includes("resonance_silent_grass"));
+  // 众生回声：得道具 + 解锁地图 NPC 位置
+  const echo = applyScenePuzzleAnswer(state, eastPuzzle, "echo_of_beings");
+  assert.equal(echo.success, true);
+  assert.ok(echo.state.completedScenePuzzleIds.includes(eastPuzzle.id));
+  assert.ok(echo.state.inventory.includes("resonance_echo_of_beings"));
+  assert.equal(echo.state.unlockMapNpcLocations, true, "众生回声 unlocks map npc locations");
+
+  // 完成后重复选择 → alreadyCompleted
+  const repeated = applyScenePuzzleAnswer(echo.state, eastPuzzle, "sober_eye");
+  assert.equal(repeated.alreadyCompleted, true, "east path reward not granted twice");
+
+  // 清醒之眼：白天上限加成 +1（独立新局）
+  const sober = applyScenePuzzleAnswer(makeState(), eastPuzzle, "sober_eye");
+  assert.equal(sober.success, true);
+  assert.equal(sober.state.apMaxBonusDay, 1, "清醒之眼 grants apMaxBonusDay +1");
+  assert.ok(sober.state.inventory.includes("resonance_sober_eye"));
+
+  // 双树残识：解锁真名
+  const twin = applyScenePuzzleAnswer(makeState(), eastPuzzle, "twin_tree_memory");
+  assert.equal(twin.success, true);
+  assert.equal(twin.state.unlockTreeNames, true, "双树残识 unlocks tree names");
+  assert.ok(twin.state.inventory.includes("resonance_twin_tree_memory"));
+
+  // 徒劳的挣扎：当前行动点归零，上限不变
+  const struggleState = makeState();
+  struggleState.actionPoints = 5;
+  const struggle = applyScenePuzzleAnswer(struggleState, eastPuzzle, "futile_struggle");
+  assert.equal(struggle.success, true);
+  assert.equal(struggle.state.actionPoints, 0, "futile struggle zeroes action points");
+  assert.equal(struggle.resultTitle, "徒劳的挣扎", "futile struggle carries result title");
 }
 
+// ---- 伊甸之河 per_option：4 种水声回响，保留旧线索/道具依赖 ----
 {
-  const state = makeState();
-  state.locationId = "four_river_source";
   const riverPuzzle = getScenePuzzleById("puzzle_river_words_belonging");
   assert.ok(riverPuzzle, "river puzzle exists");
-  assert.equal(riverPuzzle.trigger, "explicit_interaction", "river is now explicit interaction");
+  assert.equal(riverPuzzle.trigger, "explicit_interaction", "river is explicit interaction");
+  assert.equal(riverPuzzle.resolutionMode, "per_option", "river uses per_option");
 
-  const result = applyScenePuzzleAnswer(state, riverPuzzle, "words_change_in_hearing");
-  assert.equal(result.success, true);
-  assert.ok(result.state.discoveredClues.includes("clue_four_river_echo"));
-  assert.ok(result.state.inventory.includes("resonance_four_river_echo"));
+  // 复苏：回满行动点 + 保留旧线索/道具
+  const reviveState = makeState();
+  reviveState.locationId = "four_river_source";
+  reviveState.actionPoints = 1;
+  const revive = applyScenePuzzleAnswer(reviveState, riverPuzzle, "revive");
+  assert.equal(revive.success, true);
+  assert.ok(revive.state.inventory.includes("resonance_water_echo_revive"));
+  assert.ok(revive.state.discoveredClues.includes("clue_four_river_echo"), "保留四河回声线索依赖");
+  assert.ok(revive.state.inventory.includes("resonance_four_river_echo"), "保留四河回声道具依赖");
+  assert.equal(revive.state.actionPoints, 5, "复苏回复至当前上限");
 
-  const repeated = applyScenePuzzleAnswer(result.state, riverPuzzle, "words_change_in_hearing");
+  const repeated = applyScenePuzzleAnswer(revive.state, riverPuzzle, "abundant");
   assert.equal(repeated.alreadyCompleted, true, "river reward not granted twice");
+
+  // 丰沛：全时段上限 +1
+  const abundant = applyScenePuzzleAnswer(makeState(), riverPuzzle, "abundant");
+  assert.equal(abundant.state.apMaxBonusBase, 1, "丰沛 grants apMaxBonusBase +1");
+
+  // 引目：注视累计 +1
+  const attract = applyScenePuzzleAnswer(makeState(), riverPuzzle, "attract");
+  assert.equal(attract.state.divineAttentionCumulative, 1, "引目 raises cumulative attention");
+
+  // 藏目：门槛修正 -1
+  const conceal = applyScenePuzzleAnswer(makeState(), riverPuzzle, "conceal");
+  assert.equal(conceal.state.divineThresholdModifier, -1, "藏目 lowers threshold modifier");
 }
 
 // ---- 刻名石自由文本判定（模块2：开放式问题，任意非空即正确） ----
@@ -318,6 +363,104 @@ assert.equal(namingPuzzle.inputMode, "free_text", "naming stone uses free_text i
   check("旧存档补发万物名录", oldState.inventory.includes("resonance_living_names") && oldState.itemCounts.resonance_living_names === 1);
   check("迁移后 npcRelations 存在", typeof oldState.npcRelations === "object");
   check("迁移后 encounteredNpcIds 为数组", Array.isArray(oldState.encounteredNpcIds));
+}
+
+// ---- 补测（第一章六项修复收尾）：门槛序列 / 归零 / 跨场景扣敬畏 / 槽位稳定 ----
+{
+  console.log("\n[补测] 神的注视门槛序列与归零（问题 2）");
+  const {
+    DIVINE_GIFT_THRESHOLDS,
+    shouldTriggerGiftChoice,
+    claimDivineGift,
+  } = loadTsModule(path.join(ROOT, "src/game/world/divineGiftRules.ts"));
+  const { reduceNpcObedience } = loadTsModule(path.join(ROOT, "src/game/world/divineAttentionRules.ts"));
+  const { allocateStageSlots } = loadTsModule(path.join(ROOT, "src/game/world/stageSlots.ts"));
+
+  check(
+    "DIVINE_GIFT_THRESHOLDS 深等于 [2,3,4,5,6,7]",
+    JSON.stringify(DIVINE_GIFT_THRESHOLDS) === JSON.stringify([2, 3, 4, 5, 6, 7]),
+    `实际 ${JSON.stringify(DIVINE_GIFT_THRESHOLDS)}`,
+  );
+
+  // owned=1, cumulative=2 → 触发三选一
+  {
+    const s = makeState();
+    s.divineGiftsOwned = ["gift_all_seduction_up"];
+    s.divineAttentionCumulative = 2;
+    check("owned=1 且 cumulative=2 → 触发三选一", shouldTriggerGiftChoice(s) === true);
+  }
+
+  // claim 后 owned+1 且 cumulative 归零
+  {
+    const s = makeState();
+    s.divineGiftsOwned = ["gift_all_seduction_up"];
+    s.divineAttentionCumulative = 2;
+    const before = s.divineGiftsOwned.length;
+    claimDivineGift(s, "gift_attention_accel");
+    check("claim 后 owned 增加 1", s.divineGiftsOwned.length === before + 1, `实际 ${s.divineGiftsOwned.length}`);
+    check("claim 后累计注视归零", s.divineAttentionCumulative === 0, `实际 ${s.divineAttentionCumulative}`);
+  }
+
+  // owned=2 → cumulative=2 不触发、cumulative=3 触发
+  {
+    const s = makeState();
+    s.divineGiftsOwned = ["gift_all_seduction_up", "gift_attention_accel"];
+    s.divineAttentionCumulative = 2;
+    check("owned=2 且 cumulative=2 → 不触发", shouldTriggerGiftChoice(s) === false);
+    s.divineAttentionCumulative = 3;
+    check("owned=2 且 cumulative=3 → 触发", shouldTriggerGiftChoice(s) === true);
+  }
+
+  // owned=7 → 恒不触发
+  {
+    const s = makeState();
+    s.divineGiftsOwned = [
+      "gift_all_seduction_up", "gift_attention_accel", "gift_resonance_double",
+      "gift_threshold_cut", "gift_free_move", "gift_whisper_anywhere", "gift_awaken_desire",
+    ];
+    s.divineAttentionCumulative = 99;
+    check("owned=7 → 恒不触发", shouldTriggerGiftChoice(s) === false);
+  }
+
+  console.log("\n[补测] 跨场景扣敬畏（问题 6，规则层）");
+  {
+    const s = makeState();
+    check("未知 NPC reduceNpcObedience 返回 0 不崩溃", reduceNpcObedience(s, "does_not_exist", 10) === 0);
+  }
+  {
+    const s = makeState();
+    s.eveMind.obedience = 3;
+    const r = reduceNpcObedience(s, "eve", 10);
+    check("eve obedience=3 扣 10 → 0（不穿透负数）", s.eveMind.obedience === 0 && r === 3, `obedience=${s.eveMind.obedience} r=${r}`);
+  }
+  {
+    const s = makeState();
+    s.adamMind.obedience = 50;
+    const r = reduceNpcObedience(s, "adam", 10);
+    check("adam obedience=50 扣 10 → 40", s.adamMind.obedience === 40 && r === 10, `obedience=${s.adamMind.obedience} r=${r}`);
+  }
+  {
+    const s = makeState();
+    s.npcRelations.hedgehog = { affinity: 0, obedience: 60, rewardEligible: false, rewardClaimed: false, lastAffinitySignature: null };
+    const r = reduceNpcObedience(s, "hedgehog", 10);
+    check("hedgehog obedience=60 扣 10 → 50", s.npcRelations.hedgehog.obedience === 50 && r === 10, `obedience=${s.npcRelations.hedgehog.obedience} r=${r}`);
+  }
+
+  console.log("\n[补测] 槽位稳定分配（问题 5）");
+  {
+    const npcs = ["eve", "adam", "gabriel", "hedgehog"];
+    const a = allocateStageSlots(npcs);
+    const b = allocateStageSlots(npcs);
+    const map = (x) => x.placements.map((p) => `${p.npcId}->${p.slot.role}`).join(",");
+    check("同一 presentNpcs 分配稳定（多次调用一致）", map(a) === map(b), `${map(a)} vs ${map(b)}`);
+    const idOf = (id) => a.placements.find((p) => p.npcId === id)?.slot.id;
+    check("天使优先于刺猬（gabriel 槽位 < hedgehog 槽位）", idOf("gabriel") < idOf("hedgehog"), `gabriel=${idOf("gabriel")} hedgehog=${idOf("hedgehog")}`);
+    check(
+      "刺猬优先于夏娃/亚当（hedgehog 槽位 < eve 且 < adam）",
+      idOf("hedgehog") < idOf("eve") && idOf("hedgehog") < idOf("adam"),
+      `hedgehog=${idOf("hedgehog")} eve=${idOf("eve")} adam=${idOf("adam")}`,
+    );
+  }
 }
 
 console.log(`\n[scene puzzle rules] ${pass} passed, ${fail} failed`);

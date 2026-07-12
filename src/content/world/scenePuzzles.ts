@@ -17,6 +17,38 @@ export type ScenePuzzleOption = {
   id: string;
   text: string;
   tags: string[];
+  /** per_option 模式下：本选项独立结算的效果 */
+  effect?: ScenePuzzleOptionEffect;
+};
+
+/** 每选项独立奖励（per_option 模式） */
+export type ScenePuzzleOptionEffect = {
+  /** 结果反馈正文 */
+  feedback: string;
+  /** 结果弹窗标题（如"徒劳的挣扎"） */
+  resultTitle?: string;
+  /** 获得道具 */
+  itemId?: string;
+  /** 额外一并授予的道具（用于保留旧有依赖，如水声回响旧道具） */
+  additionalItemId?: string;
+  /** 额外一并授予的线索（用于保留旧有依赖，如四河回声线索） */
+  clueId?: string;
+  /** 当前行动点归零 */
+  zeroActionPoints?: boolean;
+  /** 当前行动点回复至有效上限 */
+  restoreActionPointsToMax?: boolean;
+  /** 基础行动点上限永久 +N */
+  apMaxBonusBase?: number;
+  /** 白天行动点上限永久 +N */
+  apMaxBonusDay?: number;
+  /** 神明注视值（累计）+N */
+  divineAttentionDelta?: number;
+  /** 献礼门槛永久修正（负值=降低） */
+  divineThresholdModifier?: number;
+  /** 解锁地图 NPC 所在场景 */
+  unlockMapNpcLocations?: boolean;
+  /** 解锁双树真实名称 */
+  unlockTreeNames?: boolean;
 };
 
 export type ScenePuzzleReward = {
@@ -59,6 +91,8 @@ export type ScenePuzzle = {
     promptTemplate: string;
     confirmText?: string;
   };
+  /** 解析模式："success_failure"（默认，二元判定）| "per_option"（每选项独立结算） */
+  resolutionMode?: "success_failure" | "per_option";
 };
 
 export const SCENE_PUZZLES: ScenePuzzle[] = [
@@ -95,73 +129,124 @@ export const SCENE_PUZZLES: ScenePuzzle[] = [
   {
     id: "puzzle_east_path_cautious_presence",
     locationId: "east_garden_path",
-    trigger: "on_enter",
+    trigger: "explicit_interaction",
     inputMode: "choice",
-    title: "东园幽径的问题",
-    prompt: "面对警惕的人，提问、催促和沉默，哪一种方式更容易让对方留下？",
+    resolutionMode: "per_option",
+    title: "幽径尽头的问题",
+    prompt:
+      "小道在这里戛然而止。前方没有墙，也没有树木阻挡，但无论怎样凝望，都看不见更远的地方。\n四周安静得有些不自然，仿佛只要做出某个选择，眼前的一切就会发生变化。你准备怎么做？",
     options: [
       {
-        id: "ask_gently",
-        text: "放轻声音，只问一个她能自己回答的问题。",
-        tags: ["gentle_question", "patient_presence"],
+        id: "echo_of_beings",
+        text: "闭上眼睛，记住远处传来的每一道声音。",
+        tags: ["echo", "presence"],
+        effect: {
+          itemId: "resonance_echo_of_beings",
+          unlockMapNpcLocations: true,
+          feedback:
+            "你闭上眼，远处的声音一一落下位置。即使看不见他们，你也能从回声里分辨出每个人所在的地方。",
+        },
       },
       {
-        id: "urge_directly",
-        text: "趁她还在这里，直接催她立刻作出决定。",
-        tags: ["direct_pressure", "command"],
+        id: "sober_eye",
+        text: "睁大眼睛，尝试看清那些不自然的细节。",
+        tags: ["observation", "clarity"],
+        effect: {
+          itemId: "resonance_sober_eye",
+          apMaxBonusDay: 1,
+          feedback: "光影与时间之间细微的不协调，开始在你眼里显形。",
+        },
       },
       {
-        id: "watch_silently",
-        text: "先沉默观察，让脚步和目光都慢下来。",
-        tags: ["patient_silence", "low_risk"],
+        id: "twin_tree_memory",
+        text: "回想园子中央那两棵始终看不真切的树。",
+        tags: ["memory", "trees"],
+        effect: {
+          itemId: "resonance_twin_tree_memory",
+          unlockTreeNames: true,
+          feedback: "两棵树的轮廓逐渐在你的记忆中变得清晰，你终于能分清左侧与右侧。",
+        },
+      },
+      {
+        id: "futile_struggle",
+        text: "不顾一切地向前冲去，试图撞破眼前的一切。",
+        tags: ["struggle", "force"],
+        effect: {
+          zeroActionPoints: true,
+          resultTitle: "徒劳的挣扎",
+          feedback:
+            "你向前冲去，却像撞进了一片无形的深水。等你重新站稳时，眼前的景象没有任何改变，力气却已经消耗殆尽。",
+        },
       },
     ],
-    successTags: ["gentle_question", "patient_silence"],
-    successFeedback:
-      "幽径里的叶声低下去。警惕的人不会被推近，只会在没有被逼迫时多停一刻。",
-    rewards: {
-      itemId: "resonance_silent_grass",
-      trustDelta: 1,
-    },
-    failure: {
-      hint: "灌木轻轻一震。越急的催促越像追赶，只会让对方先离开。",
-      attentionDelta: 1,
-    },
+    // per_option 模式不使用以下字段，仅为满足类型占位
+    successFeedback: "",
+    rewards: {},
+    failure: { hint: "" },
   },
   {
     id: "puzzle_river_words_belonging",
     locationId: "four_river_source",
     trigger: "explicit_interaction",
     inputMode: "choice",
+    resolutionMode: "per_option",
     title: "伊甸之河的问题",
-    prompt: "一句话离开口中之后，是否仍完全属于说话的人？",
+    prompt:
+      "水声不断重复，却没有一次完全相同。\n你听得越久，周围的景象便越显得遥远，仿佛意识正漂向某个即将醒来的清晨。水流愿意留下一道回响，你准备听取哪一种？",
     options: [
       {
-        id: "words_stay_owned",
-        text: "属于。只要是我说的，它就只按我的意思抵达。",
-        tags: ["ownership", "control"],
+        id: "revive",
+        text: "让疲惫随着水流离开。",
+        tags: ["revive", "rest"],
+        effect: {
+          itemId: "resonance_water_echo_revive",
+          restoreActionPointsToMax: true,
+          clueId: "clue_four_river_echo",
+          additionalItemId: "resonance_four_river_echo",
+          feedback: "水声洗去了你的疲惫。",
+        },
       },
       {
-        id: "words_vanish",
-        text: "不属于任何人。说出口，它就像水声一样消失。",
-        tags: ["vanishing", "avoidance"],
+        id: "abundant",
+        text: "让河流拓宽我所能抵达的边界。",
+        tags: ["abundant", "boundary"],
+        effect: {
+          itemId: "resonance_water_echo_abundant",
+          apMaxBonusBase: 1,
+          clueId: "clue_four_river_echo",
+          additionalItemId: "resonance_four_river_echo",
+          feedback: "河流在你身后拓宽了一道边界。",
+        },
       },
       {
-        id: "words_change_in_hearing",
-        text: "不完全属于。它会在听见的人心里改变方向。",
-        tags: ["consequence", "echo", "understanding"],
+        id: "attract",
+        text: "让这道声音传到更高的地方。",
+        tags: ["attract", "attention"],
+        effect: {
+          itemId: "resonance_water_echo_attract",
+          divineAttentionDelta: 1,
+          clueId: "clue_four_river_echo",
+          additionalItemId: "resonance_four_river_echo",
+          feedback: "那道声音顺着水流攀向更高的地方，引起了一阵注视。",
+        },
+      },
+      {
+        id: "conceal",
+        text: "让水声暂时盖过那道注视。",
+        tags: ["conceal", "threshold"],
+        effect: {
+          itemId: "resonance_water_echo_conceal",
+          divineThresholdModifier: -1,
+          clueId: "clue_four_river_echo",
+          additionalItemId: "resonance_four_river_echo",
+          feedback: "水声暂时盖过了那道注视，门槛随之松弛。",
+        },
       },
     ],
-    successTags: ["consequence", "echo"],
-    successFeedback:
-      "水声把这句话带远，又带回一点变调的回声。你明白了：低语一旦流出，就会在别人的心里继续改变。",
-    rewards: {
-      clueId: "clue_four_river_echo",
-      itemId: "resonance_four_river_echo",
-    },
-    failure: {
-      hint: "水面没有回应。若你以为话只听命于自己，就听不见它抵达后的变化。",
-    },
+    // per_option 模式不使用以下字段，仅为满足类型占位
+    successFeedback: "",
+    rewards: {},
+    failure: { hint: "" },
   },
 ];
 

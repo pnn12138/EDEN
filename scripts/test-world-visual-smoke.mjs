@@ -111,7 +111,7 @@ check("assets.ts 包含 luciferSprite", assets.includes("luciferSprite"));
 // sprite 文件实际存在
 check("npc_gabriel_sprite.png 存在", exists("public/assets/chapter1/images/npc_gabriel_sprite.png"));
 check("npc_michael_sprite.png 存在", exists("public/assets/chapter1/images/npc_michael_sprite.png"));
-check("npc_lucifer_sprite.png 存在", exists("public/assets/chapter1/images/npc_lucifer_sprite.png"));
+check("npc_uriel_sprite.png 存在（路西法复用乌列尔透明立绘）", exists("public/assets/chapter1/images/npc_uriel_sprite.png"));
 
 // 每位天使引用自己的 sprite 常量
 const gabrielBlock = blockAfter(worldPage, 'currentNpcs.includes("gabriel")');
@@ -131,7 +131,7 @@ check("lucifer 不复用守望天使立绘", !luciferBlock.includes("CHAPTER1_IM
 const spritePaths = [
   "npc_gabriel_sprite.png",
   "npc_michael_sprite.png",
-  "npc_lucifer_sprite.png",
+  "npc_uriel_sprite.png",
 ];
 const uniquePaths = new Set(spritePaths);
 check("3 位天使 sprite 文件名互不相同", uniquePaths.size === 3);
@@ -295,7 +295,7 @@ check("/world Tab 将心智改为属性", worldPage.includes('["mind", "属性"]
 check("/world 属性面板按当前低语对象显示", worldPage.includes("activeAttributeProfile") && worldPage.includes("buildAttributeProfile"));
 check("/world 蛇是独立 Tab", worldPage.includes('["serpent", "蛇（我）"]') && worldPage.includes('activeTab === "serpent"'));
 check("/world 属性 Tab 未选中 NPC 时提示选择对象", worldPage.includes("请选择一个角色查看属性"));
-check("/world 蛇 Tab 显示行动与限制", worldPage.includes("草叶下的低语") && worldPage.includes("不能触碰果子") && worldPage.includes("行动 {state.actionPoints}/{state.maxActionPoints}"));
+check("/world 蛇 Tab 显示行动与限制", worldPage.includes("草叶下的低语") && worldPage.includes("不能触碰果子") && worldPage.includes("行动 {state.actionPoints}/{getEffectiveMaxActionPoints(state)}"));
 check("/world 蛇 Tab 显示回响 Buff", worldPage.includes("当前回响赋予的Buff") && worldPage.includes("将在下次行动中生效") && worldPage.includes("pendingConsumableEffects"));
 check("/world 第一章不显示旧词元面板", !worldPage.includes("serpentTokenStats") && !worldPage.includes("estimateWorldTokenUsage") && !worldPage.includes("SERPENT_TOKEN_RESERVE"));
 check("CSS 不再保留词元进度条", !css.includes(".eden-token-bar-bg") && !css.includes(".eden-token-bar-fill"));

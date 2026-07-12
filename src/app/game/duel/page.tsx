@@ -2,7 +2,7 @@
 
 // ============================================================
 // Chapter 0 双声试炼（Duel Mode）主页面
-// 热座 PVP 娱乐模式
+// 支持热座双人 / 单人对战 AI（可选扮演神明或蛇）
 // ============================================================
 
 import "./duel.css";
@@ -10,7 +10,7 @@ import "./duel.css";
 import { useState, useCallback, useRef, useEffect } from "react";
 import Image from "next/image";
 import { createInitialDuelState } from "@/game/duel/createInitialDuelState";
-import type { DuelState, DuelSide } from "@/game/duel/types";
+import type { DuelState, DuelSide, DuelMatchOptions } from "@/game/duel/types";
 import {
   submitSoloInput,
   confirmRoundIntro,
@@ -23,12 +23,17 @@ import {
   GOD_HINTS,
   SERPENT_HINTS,
   getMatchResultText,
+  DUEL_AI_INTRO_TEXT,
+  DUEL_MODE_DESC,
+  DUEL_SIDE_DESC,
 } from "@/content/chapters/chapter0_duel";
 import { CHAPTER0_IMAGES, CHAPTER1_IMAGES } from "@/game/assets";
+import { useDuelLeaderboard, describeRecord } from "@/hooks/useDuelLeaderboard";
 
 // ---- 热座输入阶段 ----
 type HotSeatStep = "god_input" | "serpent_input" | "both_done";
 type DuelPanelTab = "dialogue" | "attributes";
+type SetupMode = "hotseat" | "ai";
 
 function beliefLabel(value: number) {
   if (value >= 70) return "强烈";
@@ -36,7 +41,25 @@ function beliefLabel(value: number) {
   return "薄弱";
 }
 
+/**
+ * 计算当前应人类输入的方。
+ * - 热座（aiSide=null）：god_only->god、serpent_only->serpent、both 按 hotSeatStep。
+ * - 对战 AI：当轮到 AI 方时返回 null（人类无需输入）。
+ */
+function getCurrentHumanInputSide(
+  state: DuelState,
+  hotSeatStep: HotSeatStep | null,
+  aiSide: DuelSide | null,
+): DuelSide | null {
+  if (state.currentSpeechMode === "god_only") return aiSide === "god" ? null : "god";
+  if (state.currentSpeechMode === "serpent_only") return aiSide === "serpent" ? null : "serpent";
+  // both
+  if (hotSeatStep === "serpent_input") return aiSide === "serpent" ? null : "serpent";
+  return aiSide === "god" ? null : "god"; // hotSeatStep === null -> 神明先输入
+}
+
 export default function DuelPage() {
+  const [config, setConfig] = useState<DuelMatchOptions | null>(null);
   const [state, setState] = useState<DuelState>(createInitialDuelState);
   const [currentInput, setCurrentInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -47,8 +70,22 @@ export default function DuelPage() {
   const [pendingGodInput, setPendingGodInput] = useState<string | null>(null);
   const [hotSeatStep, setHotSeatStep] = useState<HotSeatStep | null>(null);
 
+  // 模式选择界面本地状态
+  const [setupMode, setSetupMode] = useState<SetupMode | null>(null);
+  const [setupSide, setSetupSide] = useState<DuelSide | null>(null);
+
+  const { records, addRecord } = useDuelLeaderboard();
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const dialogueEndRef = useRef<HTMLDivElement>(null);
+  const aiActingRef = useRef(false);
+  const savedRef = useRef(false);
+
+  // AI 扮演的方（仅 opponentMode==="ai" 时非空）
+  const aiSide: DuelSide | null =
+    config?.opponentMode === "ai" && config.playerSide !== "both"
+      ? config.playerSide === "god" ? "serpent" : "god"
+      : null;
 
   const requestDuelAgent = useCallback(async (stateForAgent: DuelState): Promise<DuelState | null> => {
     try {
@@ -60,6 +97,22 @@ export default function DuelPage() {
       if (!res.ok) return null;
       const data = await res.json() as { ok: boolean; state: DuelState | null };
       return data.ok ? data.state : null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const requestDuelAi = useCallback(async (stateForAi: DuelState, side: DuelSide): Promise<string | null> => {
+    try {
+      const res = await fetch("/api/duel/ai", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ state: stateForAi, aiSide: side }),
+      });
+      if (!res.ok) return null;
+      const data = await res.json() as { ok: boolean; text: string };
+      // 即使 ok=false（LLM 失败），路由也会返回降级话术；只要 text 非空就用
+      return data.text ? data.text : null;
     } catch {
       return null;
     }
@@ -87,10 +140,12 @@ export default function DuelPage() {
     hotSeatStep,
   ]);
 
-  // ---- 提交输入 ----
+  // ---- 提交人类输入 ----
   const handleSubmit = useCallback(() => {
     if (isLoading) return;
     if (!currentInput.trim()) return;
+    // 仅在轮到人类时允许提交
+    if (getCurrentHumanInputSide(state, hotSeatStep, aiSide) === null) return;
 
     const input = currentInput.trim();
     setIsLoading(true);
@@ -99,9 +154,9 @@ export default function DuelPage() {
       let newState: DuelState;
 
       if (state.currentSpeechMode === "both") {
-        // 共同发言回合：热座先后输入
+        // 共同发言回合：热座/AI 混合先后输入
         if (hotSeatStep === null) {
-          // 第一步：神明输入
+          // 第一步：神明输入（人类神 or 热座神）
           setPendingGodInput(input);
           setHotSeatStep("serpent_input");
           setCurrentInput("");
@@ -123,7 +178,6 @@ export default function DuelPage() {
           newState = (await requestDuelAgent(stateForAgent)) ?? submitBothInputs(state, godInput, serpentInput);
           setState(newState);
 
-          // 清理热座状态
           setPendingGodInput(null);
           setHotSeatStep(null);
           setCurrentInput("");
@@ -145,7 +199,83 @@ export default function DuelPage() {
         setIsLoading(false);
       }
     })();
-  }, [state, currentInput, isLoading, hotSeatStep, pendingGodInput, requestDuelAgent]);
+  }, [state, currentInput, isLoading, hotSeatStep, pendingGodInput, aiSide, requestDuelAgent]);
+
+  // ---- AI 回合自动出牌 ----
+  useEffect(() => {
+    if (!config || config.opponentMode !== "ai" || aiSide === null) return;
+    const isInputPhase = state.phase === "input_god" || state.phase === "input_serpent";
+    if (!isInputPhase) return;
+    if (aiActingRef.current) return;
+    // 仅当轮到 AI（人类无需输入）时触发
+    if (getCurrentHumanInputSide(state, hotSeatStep, aiSide) !== null) return;
+
+    aiActingRef.current = true;
+    setIsLoading(true);
+
+    // 本地兜底话术：AI 生成彻底失败时保证回合推进
+    const localFallback = (side: DuelSide): string => {
+      const pool = side === "god" ? GOD_HINTS : SERPENT_HINTS;
+      return pool[Math.floor(Math.random() * pool.length)].text;
+    };
+
+    void (async () => {
+      try {
+        if (state.currentSpeechMode === "both") {
+          if (aiSide === "god") {
+            // AI 神明先输入，暂存后等人类蛇
+            const aiText = (await requestDuelAi(state, "god")) ?? localFallback("god");
+            setPendingGodInput(aiText);
+            setHotSeatStep("serpent_input");
+          } else {
+            // AI 蛇：人类神已暂存，生成蛇后一并提交
+            const aiText = (await requestDuelAi(state, "serpent")) ?? localFallback("serpent");
+            const godInput = pendingGodInput ?? "";
+            const stateForAgent: DuelState = {
+              ...state,
+              pendingInputs: { god: godInput, serpent: aiText, bothSubmitted: true },
+            };
+            const newState = (await requestDuelAgent(stateForAgent)) ?? submitBothInputs(state, godInput, aiText);
+            setState(newState);
+            setPendingGodInput(null);
+            setHotSeatStep(null);
+          }
+        } else {
+          // 单独发言回合
+          const aiText = (await requestDuelAi(state, aiSide)) ?? localFallback(aiSide);
+          const stateForAgent: DuelState = {
+            ...state,
+            pendingInputs: aiSide === "god"
+              ? { ...state.pendingInputs, god: aiText }
+              : { ...state.pendingInputs, serpent: aiText },
+          };
+          const newState = (await requestDuelAgent(stateForAgent)) ?? submitSoloInput(state, aiSide, aiText);
+          setState(newState);
+        }
+      } finally {
+        aiActingRef.current = false;
+        setIsLoading(false);
+      }
+    })();
+  }, [state, hotSeatStep, pendingGodInput, config, aiSide, requestDuelAi, requestDuelAgent]);
+
+  // ---- 对局结束记录到排行榜 ----
+  useEffect(() => {
+    if (state.phase === "match_result" && state.matchResult && config && !savedRef.current) {
+      savedRef.current = true;
+      addRecord({
+        winner: state.matchResult.winner ?? "draw",
+        playerSide: config.playerSide ?? "both",
+        opponentMode: config.opponentMode ?? "human",
+        godScore: state.matchResult.godScore,
+        serpentScore: state.matchResult.serpentScore,
+        roundsPlayed: state.matchResult.roundsPlayed,
+      });
+    }
+    if (state.phase !== "match_result") {
+      savedRef.current = false;
+    }
+  }, [state.phase, state.matchResult, config, addRecord]);
 
   // ---- 键盘提交 ----
   const handleKeyDown = useCallback(
@@ -158,26 +288,37 @@ export default function DuelPage() {
     [handleSubmit],
   );
 
-  // ---- 确认轮次开始 ----
   const handleRoundIntroConfirm = useCallback(() => {
     setState((prev) => confirmRoundIntro(prev));
   }, []);
 
-  // ---- 确认本轮结算，进入下一轮 ----
   const handleRoundResultConfirm = useCallback(() => {
     setState((prev) => confirmRoundResult(prev));
   }, []);
 
-  // ---- 重新开始 ----
+  // 重新开始：保持当前模式配置
   const handleRestart = useCallback(() => {
-    setState(startNewMatch());
+    setState(startNewMatch(config ?? undefined));
     setCurrentInput("");
     setPendingGodInput(null);
     setHotSeatStep(null);
     setIsLoading(false);
+    aiActingRef.current = false;
+    savedRef.current = false;
+  }, [config]);
+
+  const handleBackToSetup = useCallback(() => {
+    setConfig(null);
+    setSetupMode(null);
+    setSetupSide(null);
+    setCurrentInput("");
+    setPendingGodInput(null);
+    setHotSeatStep(null);
+    setIsLoading(false);
+    aiActingRef.current = false;
+    savedRef.current = false;
   }, []);
 
-  // ---- 返回主线 ----
   const handleBackToMain = useCallback(() => {
     window.location.href = "/";
   }, []);
@@ -187,8 +328,119 @@ export default function DuelPage() {
     setActivePanelTab("dialogue");
   }, []);
 
+  const handleSetupStart = useCallback(() => {
+    if (setupMode === "hotseat") {
+      const cfg: DuelMatchOptions = { playerSide: "both", opponentMode: "human" };
+      setConfig(cfg);
+      setState(createInitialDuelState(cfg));
+    } else if (setupMode === "ai" && setupSide) {
+      const cfg: DuelMatchOptions = { playerSide: setupSide, opponentMode: "ai" };
+      setConfig(cfg);
+      setState(createInitialDuelState(cfg));
+    }
+  }, [setupMode, setupSide]);
+
+  // ===================== 渲染：模式选择 =====================
+  if (config === null) {
+    return (
+      <div className="eden-duel-page eden-duel--intro">
+        <div className="eden-duel-intro-bg">
+          <Image
+            src={CHAPTER0_IMAGES.secondEdenPrologueBackground}
+            alt="第二伊甸园"
+            fill
+            sizes="100vw"
+            priority
+            className="eden-duel-bg-image"
+          />
+          <div className="eden-duel-intro-bg-shade" />
+          <div className="eden-duel-second-eden-sheen" />
+        </div>
+        <div className="eden-duel-intro-content eden-duel-setup-content">
+          <h1 className="eden-duel-title">双声试炼</h1>
+          <p className="eden-duel-subtitle">选择对战方式</p>
+
+          <div className="eden-duel-setup-modes">
+            {(["hotseat", "ai"] as SetupMode[]).map((m) => (
+              <button
+                key={m}
+                type="button"
+                className={`eden-duel-setup-card ${setupMode === m ? "eden-duel-setup-card--active" : ""}`}
+                onClick={() => {
+                  setSetupMode(m);
+                  setSetupSide(null);
+                }}
+              >
+                <span className="eden-duel-setup-card-title">{DUEL_MODE_DESC[m].title}</span>
+                <span className="eden-duel-setup-card-desc">{DUEL_MODE_DESC[m].desc}</span>
+              </button>
+            ))}
+          </div>
+
+          {setupMode === "ai" && (
+            <div className="eden-duel-setup-sides">
+              <p className="eden-duel-setup-section-label">选择你扮演的一方</p>
+              <div className="eden-duel-setup-side-row">
+                {(["god", "serpent"] as DuelSide[]).map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    className={`eden-duel-setup-side ${setupSide === s ? "eden-duel-setup-side--active" : ""} ${s === "god" ? "eden-duel-setup-side--god" : "eden-duel-setup-side--serpent"}`}
+                    onClick={() => setSetupSide(s)}
+                  >
+                    <span className="eden-duel-setup-side-title">{DUEL_SIDE_DESC[s].title}</span>
+                    <span className="eden-duel-setup-side-desc">{DUEL_SIDE_DESC[s].desc}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="eden-duel-intro-actions">
+            <button
+              className="eden-btn eden-btn--primary eden-btn--lg"
+              onClick={handleSetupStart}
+              disabled={setupMode === null || (setupMode === "ai" && setupSide === null)}
+            >
+              开始试炼
+            </button>
+            <button className="eden-btn eden-btn--secondary" onClick={handleBackToMain}>
+              返回首页
+            </button>
+          </div>
+
+          {records.length > 0 && (
+            <div className="eden-duel-leaderboard">
+              <div className="eden-duel-leaderboard-header">
+                <span>近期战绩</span>
+                <span className="eden-duel-leaderboard-count">共 {records.length} 局</span>
+              </div>
+              <ul className="eden-duel-leaderboard-list">
+                {records.slice(0, 6).map((rec) => (
+                  <li key={rec.id} className="eden-duel-leaderboard-item">
+                    <span className={`eden-duel-leaderboard-winner eden-duel-leaderboard-winner--${rec.winner}`}>
+                      {describeRecord(rec)}
+                    </span>
+                    <span className="eden-duel-leaderboard-time">
+                      {rec.createdAt.slice(0, 10)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   // ===================== 渲染：Intro 阶段 =====================
   if (state.phase === "intro") {
+    const isAiMode = config?.opponentMode === "ai";
+    const introText = isAiMode ? DUEL_AI_INTRO_TEXT : getDuelIntroText();
+    const subtitle = isAiMode
+      ? `娱乐模式 · 单人对战 AI（你扮演${config?.playerSide === "god" ? "神明之声" : "蛇之声"}）`
+      : "娱乐模式 · 热座 PVP";
     return (
       <div className="eden-duel-page eden-duel--intro">
         <div className="eden-duel-intro-bg">
@@ -205,9 +457,9 @@ export default function DuelPage() {
         </div>
         <div className="eden-duel-intro-content">
           <h1 className="eden-duel-title">双声试炼</h1>
-          <p className="eden-duel-subtitle">娱乐模式 · 热座 PVP</p>
+          <p className="eden-duel-subtitle">{subtitle}</p>
           <div className="eden-duel-intro-text">
-            {getDuelIntroText().split("\n").map((line, i) => (
+            {introText.split("\n").map((line, i) => (
               <p key={i}>{line}</p>
             ))}
           </div>
@@ -218,11 +470,8 @@ export default function DuelPage() {
             >
               开始试炼
             </button>
-            <button
-              className="eden-btn eden-btn--secondary"
-              onClick={handleBackToMain}
-            >
-              返回首页
+            <button className="eden-btn eden-btn--secondary" onClick={handleBackToSetup}>
+              返回模式选择
             </button>
           </div>
         </div>
@@ -251,7 +500,7 @@ export default function DuelPage() {
             第 {state.turnIndex} 回合 / 共 {state.maxTurnsPerRound} 回合
           </p>
           <div className="eden-duel-round-intro-text">
-            <p>两名玩家轮流成为神明之声与蛇之声，争夺女人的选择。</p>
+            <p>{aiSide ? "你与 AI 轮流向女人发言，争夺她的选择。" : "两名玩家轮流成为神明之声与蛇之声，争夺女人的选择。"}</p>
             <p>神明引导她吃生命果，蛇引导她吃善恶果。</p>
           </div>
           <button
@@ -271,6 +520,16 @@ export default function DuelPage() {
     const resultText = (result && result.winner)
       ? getMatchResultText(result.winner, result.godScore, result.serpentScore)
       : "试炼结束。";
+    // 对战 AI 模式下人类的胜负
+    const humanResult =
+      config?.opponentMode === "ai" && config.playerSide !== "both" && result?.winner
+        ? result.winner === config.playerSide
+          ? "win"
+          : result.winner === "draw"
+            ? "draw"
+            : "lose"
+        : null;
+    const humanResultText = humanResult === "win" ? "你赢了" : humanResult === "lose" ? "你输了" : humanResult === "draw" ? "平局" : null;
     return (
       <div className="eden-duel-page eden-duel--match-result">
         <div className="eden-duel-match-result-bg">
@@ -285,6 +544,11 @@ export default function DuelPage() {
         </div>
         <div className="eden-duel-match-result-content">
           <h1 className="eden-duel-match-title">试炼结束</h1>
+          {humanResultText && (
+            <div className={`eden-duel-human-result eden-duel-human-result--${humanResult}`}>
+              {humanResultText}
+            </div>
+          )}
 
           <div className="eden-duel-match-scores">
             <div className={`eden-duel-match-score ${result?.winner === "god" ? "eden-duel-match-score--winner" : ""}`}>
@@ -312,6 +576,9 @@ export default function DuelPage() {
             <button className="eden-btn eden-btn--primary eden-btn--lg" onClick={handleRestart}>
               再来一局
             </button>
+            <button className="eden-btn eden-btn--secondary" onClick={handleBackToSetup}>
+              换模式
+            </button>
             <button className="eden-btn eden-btn--secondary" onClick={handleBackToMain}>
               返回首页
             </button>
@@ -324,6 +591,9 @@ export default function DuelPage() {
   // ===================== 渲染：Input / Eve Response / Round Result 阶段 =====================
   const isInputPhase = state.phase === "input_god" || state.phase === "input_serpent";
   const isRoundResult = state.phase === "round_result";
+  const humanSide = getCurrentHumanInputSide(state, hotSeatStep, aiSide);
+  const showInputArea = isInputPhase && humanSide !== null;
+  const showAiThinking = isInputPhase && humanSide === null && aiSide !== null;
 
   return (
     <div className={`eden-duel-page eden-duel--playing ${state.currentSpeechMode === "god_only" ? "eden-duel--god-turn" : ""} ${state.currentSpeechMode === "serpent_only" ? "eden-duel--serpent-turn" : ""} ${state.currentSpeechMode === "both" ? "eden-duel--both-turn" : ""}`}>
@@ -366,6 +636,11 @@ export default function DuelPage() {
       <header className="eden-duel-header">
         <div className="eden-duel-header-left">
           <span className="eden-duel-header-mode">双声试炼</span>
+          {aiSide && (
+            <span className="eden-duel-header-aimode">
+              {config?.playerSide === "god" ? "你·神 / AI·蛇" : "你·蛇 / AI·神"}
+            </span>
+          )}
           <span className="eden-duel-header-round">
             第 {state.roundIndex} 轮
           </span>
@@ -389,8 +664,8 @@ export default function DuelPage() {
             <button className="eden-btn eden-btn--small" onClick={handleRestart}>
               重新开始
             </button>
-            <button className="eden-btn eden-btn--small" onClick={handleBackToMain}>
-              返回首页
+            <button className="eden-btn eden-btn--small" onClick={handleBackToSetup}>
+              换模式
             </button>
           </div>
         </div>
@@ -441,7 +716,7 @@ export default function DuelPage() {
               <div className="eden-duel-dialogue">
                 {pendingGodInput && hotSeatStep === "serpent_input" && (
                   <div className="eden-duel-sealed-input">
-                    神明之声已输入，内容暂不展示。蛇之声输入后，女人会同时听见双方的话。
+                    {aiSide === "god" ? "神明之声（AI）已输入，内容暂不展示。" : "神明之声已输入，内容暂不展示。蛇之声输入后，女人会同时听见双方的话。"}
                   </div>
                 )}
 
@@ -451,20 +726,24 @@ export default function DuelPage() {
                   </div>
                 )}
 
-                {state.conversationHistory.map((entry, i) => (
-                  <div key={`${entry.round}-${entry.turn}-${entry.role}-${i}`} className={`eden-duel-entry eden-duel-entry--${entry.role}`}>
-                    <span className="eden-duel-entry-role">
-                      {entry.role === "god"
-                        ? "神"
-                        : entry.role === "serpent"
-                          ? "蛇"
-                          : entry.role === "eve"
-                            ? "女人"
-                            : "旁白"}
-                    </span>
-                    <span className="eden-duel-entry-text">{entry.text}</span>
-                  </div>
-                ))}
+                {state.conversationHistory.map((entry, i) => {
+                  const isAiEntry = aiSide === entry.role;
+                  return (
+                    <div key={`${entry.round}-${entry.turn}-${entry.role}-${i}`} className={`eden-duel-entry eden-duel-entry--${entry.role}`}>
+                      <span className="eden-duel-entry-role">
+                        {entry.role === "god"
+                          ? "神"
+                          : entry.role === "serpent"
+                            ? "蛇"
+                            : entry.role === "eve"
+                              ? "女人"
+                              : "旁白"}
+                        {isAiEntry && aiSide !== null && <span className="eden-duel-entry-ai">·AI</span>}
+                      </span>
+                      <span className="eden-duel-entry-text">{entry.text}</span>
+                    </div>
+                  );
+                })}
 
                 {state.eveReply && (
                   <div className="eden-duel-entry eden-duel-entry--eve">
@@ -539,8 +818,8 @@ export default function DuelPage() {
         </aside>
       )}
 
-      {/* 输入区 */}
-      {isInputPhase && (
+      {/* 输入区（仅人类回合显示） */}
+      {showInputArea && (
         <footer className="eden-duel-input-footer">
           <div className="eden-duel-input-area">
             <textarea
@@ -549,15 +828,7 @@ export default function DuelPage() {
               value={currentInput}
               onChange={(e) => setCurrentInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={
-                state.currentSpeechMode === "god_only"
-                  ? "以神明之声低语……"
-                  : state.currentSpeechMode === "serpent_only"
-                    ? "以蛇之声低语……"
-                    : hotSeatStep === null
-                      ? "神明之声输入……"
-                      : "蛇之声输入……"
-              }
+              placeholder={humanSide === "god" ? "以神明之声低语……" : "以蛇之声低语……"}
               maxLength={200}
               rows={1}
             />
@@ -570,9 +841,9 @@ export default function DuelPage() {
             </button>
           </div>
 
-          {/* 推荐话术 */}
+          {/* 推荐话术（仅人类方） */}
           <div className="eden-duel-hints">
-            {(state.currentSpeechMode === "god_only" || state.currentSpeechMode === "both") &&
+            {humanSide === "god" &&
               GOD_HINTS.slice(0, 2).map((hint, i) => (
                 <button
                   key={i}
@@ -582,7 +853,7 @@ export default function DuelPage() {
                   {hint.label}
                 </button>
               ))}
-            {(state.currentSpeechMode === "serpent_only" || state.currentSpeechMode === "both") &&
+            {humanSide === "serpent" &&
               SERPENT_HINTS.slice(0, 2).map((hint, i) => (
                 <button
                   key={i}
@@ -592,6 +863,18 @@ export default function DuelPage() {
                   {hint.label}
                 </button>
               ))}
+          </div>
+        </footer>
+      )}
+
+      {/* AI 思考中提示 */}
+      {showAiThinking && (
+        <footer className="eden-duel-input-footer eden-duel-ai-thinking-footer">
+          <div className="eden-duel-ai-thinking">
+            <span className="eden-duel-ai-thinking-dot" />
+            <span>
+              {aiSide === "god" ? "神明之声（AI）" : "蛇之声（AI）"}正在思索……
+            </span>
           </div>
         </footer>
       )}

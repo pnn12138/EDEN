@@ -135,10 +135,15 @@ export default function ScenePuzzleModal({
         {!showSecondStep && result && (
           <div
             className={`eden-scene-puzzle-result ${
-              result.success ? "eden-scene-puzzle-result--success" : "eden-scene-puzzle-result--failure"
+              puzzle.resolutionMode === "per_option"
+                ? "eden-scene-puzzle-result--neutral"
+                : result.success ? "eden-scene-puzzle-result--success" : "eden-scene-puzzle-result--failure"
             }`}
             data-testid="scene-puzzle-feedback"
           >
+            {result.resultTitle && (
+              <p className="eden-scene-puzzle-result-title">{result.resultTitle}</p>
+            )}
             <p>{result.feedback}</p>
             {result.rewards.length > 0 && (
               <ul className="eden-scene-puzzle-rewards" data-testid="scene-puzzle-reward">

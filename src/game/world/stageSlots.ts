@@ -26,21 +26,19 @@ export { ANGELS as ANGEL_SET };
 
 export type StagePlacement = { slot: StageSlot; npcId: EdenNpcId };
 
-/** 把在场 NPC 分配到 6 槽位；世界对象进 backgroundObjects（不占槽位） */
+/** 把在场 NPC 分配到 6 槽位；世界对象进 backgroundObjects（不占槽位）。
+ * 排序稳定，与"选中态"无关——选中态仅由 CSS .eden-stage-character--active 体现，不改坐标。 */
 export function allocateStageSlots(
   presentNpcs: EdenNpcId[],
-  activeNpc: EdenNpcId | null,
 ): { placements: StagePlacement[]; backgroundObjects: EdenNpcId[] } {
   const backgroundObjects = presentNpcs.filter((n) => WORLD_OBJECTS.has(n));
   const characters = presentNpcs.filter((n) => !WORLD_OBJECTS.has(n));
 
-  // 排序：activeNpc 首位；其余 天使->刺猬->其他
-  const rest = characters.filter((n) => n !== activeNpc).sort((a, b) => {
+  // 固定优先级：天使 -> 刺猬 -> 其他
+  const ordered = characters.slice().sort((a, b) => {
     const w = (n: EdenNpcId) => (ANGELS.has(n) ? 0 : n === "hedgehog" ? 1 : 2);
     return w(a) - w(b);
   });
-  const ordered = activeNpc && characters.includes(activeNpc)
-    ? [activeNpc, ...rest] : rest;
 
   // 槽位消费顺序：1 center-main -> 4,5 back -> 6 foreground -> 2,3 flank
   const slotOrder: StageSlot["id"][] = [1, 4, 5, 6, 2, 3];

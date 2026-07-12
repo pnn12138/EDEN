@@ -332,6 +332,16 @@ export type EdenWorldState = {
   /** 行动点系统：每时段 5 AP，移动/低语/场景互动/主动信物消耗 AP */
   actionPoints: number;
   maxActionPoints: number;
+  /** 行动点上限·全时段永久加成（水声回响·丰沛 +1 等） */
+  apMaxBonusBase: number;
+  /** 行动点上限·白天永久加成（清醒之眼 +1 等） */
+  apMaxBonusDay: number;
+  /** 神明献礼门槛·永久修正（水声回响·藏目，负值=降低） */
+  divineThresholdModifier: number;
+  /** 众生回声：解锁地图显示各 NPC 当前所在场景 */
+  unlockMapNpcLocations: boolean;
+  /** 双树残识：解锁园子中央两棵树的真实名称 */
+  unlockTreeNames: boolean;
   /** NPC 轻量时段行动预算：每时段最多结算 3 次 NPC 行动 */
   npcActionPoints: number;
   maxNpcActionPoints: number;
@@ -482,6 +492,11 @@ export const initialEdenWorldState: EdenWorldState = {
   // 行动点系统：玩家每时段 5 AP；NPC 轻量结算每时段 3 次
   actionPoints: 5,
   maxActionPoints: 5,
+  apMaxBonusBase: 0,
+  apMaxBonusDay: 0,
+  divineThresholdModifier: 0,
+  unlockMapNpcLocations: false,
+  unlockTreeNames: false,
   npcActionPoints: 3,
   maxNpcActionPoints: 3,
   actionsThisSlot: {

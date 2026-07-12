@@ -2,7 +2,7 @@
 // Chapter 0 双声试炼：核心回合处理
 // ============================================================
 
-import type { DuelState, DuelSide, DuelFallbackReply } from "./types";
+import type { DuelMatchOptions, DuelState, DuelSide, DuelFallbackReply } from "./types";
 import {
   DUEL_TURN_ORDER,
   estimateTokens,
@@ -305,8 +305,8 @@ function endMatch(state: DuelState): DuelState {
 /**
  * 开始新对局
  */
-export function startNewMatch(): DuelState {
-  return createInitialDuelState();
+export function startNewMatch(options?: DuelMatchOptions): DuelState {
+  return createInitialDuelState(options);
 }
 
 /**

@@ -3,7 +3,7 @@
 // 世界圣经 v3.0：6 NPC + 2 世界对象
 // ============================================================
 
-import type { EdenNpcId } from "@/game/world/types";
+import type { EdenNpcId, EdenWorldState } from "@/game/world/types";
 
 export type EdenNpcMeta = {
   id: EdenNpcId;
@@ -146,3 +146,15 @@ export const NPC_NAMES: Record<EdenNpcId, string> = {
   lucifer: EDEN_NPCS.lucifer.name,
   tree_of_life: EDEN_NPCS.tree_of_life.name,
 };
+
+// ---- 双树真实名称（双树残识解锁后显示） ----
+// 左侧=生命树，右侧=分别善恶树（与 pickedFruitSide 注释一致）
+export function getTreeDisplayName(
+  npcId: "forbidden_tree" | "tree_of_life",
+  state: EdenWorldState,
+): string {
+  if (state.unlockTreeNames) {
+    return npcId === "tree_of_life" ? "生命树" : "分别善恶树";
+  }
+  return npcId === "tree_of_life" ? "园中央左侧的树" : "园中央右侧的树";
+}

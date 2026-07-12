@@ -4,10 +4,12 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { CHAPTER0_IMAGES } from "@/game/assets";
-import AchievementGarden from "@/components/world/AchievementGarden";
+import GardenCodex from "@/components/world/GardenCodex";
 import { WORLD_STATE_STORAGE_KEY } from "@/hooks/useWorldSave";
 import {
   getUnlockedCrossSessionMarkIds,
+  getCollectedResonanceIds,
+  getTriggeredEndingIds,
   syncFromWorldState,
 } from "@/services/achievement/globalTracker";
 import type { EdenWorldState } from "@/game/world/types";
@@ -29,6 +31,8 @@ function readSavedUnlockedIds(): string[] {
 
 export default function GardenPage() {
   const [unlockedIds, setUnlockedIds] = useState<string[]>([]);
+  const [collectedResonanceIds, setCollectedResonanceIds] = useState<string[]>([]);
+  const [triggeredEndingIds, setTriggeredEndingIds] = useState<string[]>([]);
 
   useEffect(() => {
     // 用存档状态刷新跨局累计（如已通关）
@@ -46,6 +50,8 @@ export default function GardenPage() {
     const saved = readSavedUnlockedIds();
     const cross = getUnlockedCrossSessionMarkIds();
     setUnlockedIds(Array.from(new Set([...saved, ...cross])));
+    setCollectedResonanceIds(getCollectedResonanceIds());
+    setTriggeredEndingIds(getTriggeredEndingIds());
   }, []);
 
   return (
@@ -70,13 +76,17 @@ export default function GardenPage() {
         </Link>
 
         <header className="eden-garden-header">
-          <h1>园中印记</h1>
+          <h1>园中档案</h1>
           <p className="eden-garden-subtitle">
-            你在这座园子里留下的痕迹。有些一眼可见，有些要自己去找。
+            你在这座园子里留下的痕迹——印记、回响与走过的结局。有些一眼可见，有些要自己去找。
           </p>
         </header>
 
-        <AchievementGarden unlockedIds={unlockedIds} />
+        <GardenCodex
+          unlockedIds={unlockedIds}
+          collectedResonanceIds={collectedResonanceIds}
+          triggeredEndingIds={triggeredEndingIds}
+        />
 
         <p className="eden-garden-hint">
           未解锁的隐藏印记不会透露任何线索——它们藏在你还没走过的路上。

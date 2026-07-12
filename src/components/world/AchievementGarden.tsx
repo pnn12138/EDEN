@@ -50,6 +50,7 @@ function formatUnlockTime(iso: string | undefined): string | null {
 export default function AchievementGarden({ unlockedIds, compact }: AchievementGardenProps) {
   const [activeTab, setActiveTab] = useState<AchievementCategory>("explore");
   const [filter, setFilter] = useState<FilterMode>("all");
+  const [search, setSearch] = useState("");
 
   const unlockedSet = useMemo(() => new Set(unlockedIds), [unlockedIds]);
   const unlockedCount = useMemo(
@@ -65,12 +66,22 @@ export default function AchievementGarden({ unlockedIds, compact }: AchievementG
 
   const unlockedAt = useMemo(() => getUnlockedAt(), []);
 
+  const searchTrim = search.trim().toLowerCase();
   const visibleMarks = useMemo(() => {
     const list = getAchievementsByCategory(activeTab);
-    if (filter === "unlocked") return list.filter((a) => unlockedSet.has(a.id));
-    if (filter === "locked") return list.filter((a) => !unlockedSet.has(a.id));
-    return list;
-  }, [activeTab, filter, unlockedSet]);
+    const filtered = filter === "unlocked"
+      ? list.filter((a) => unlockedSet.has(a.id))
+      : filter === "locked"
+        ? list.filter((a) => !unlockedSet.has(a.id))
+        : list;
+    if (!searchTrim) return filtered;
+    // 搜索匹配名称或描述（隐藏未解锁印记名是「？？」，不会被命中，符合不泄密原则）
+    return filtered.filter(
+      (a) =>
+        a.name.toLowerCase().includes(searchTrim) ||
+        a.desc.toLowerCase().includes(searchTrim),
+    );
+  }, [activeTab, filter, unlockedSet, searchTrim]);
 
   return (
     <div className={`eden-achievement-garden ${compact ? "eden-achievement-garden--compact" : ""}`}>
@@ -113,9 +124,20 @@ export default function AchievementGarden({ unlockedIds, compact }: AchievementG
             {label}
           </button>
         ))}
+        <input
+          type="search"
+          className="eden-achievement-search"
+          placeholder="搜索印记名称或描述…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          aria-label="搜索印记"
+        />
       </div>
 
       <div className="eden-achievement-grid">
+        {visibleMarks.length === 0 && (
+          <div className="eden-achievement-empty">没有匹配的印记。</div>
+        )}
         {visibleMarks.map((mark: Achievement) => {
           const unlocked = unlockedSet.has(mark.id);
           const isHiddenLocked = mark.hidden && !unlocked;
@@ -151,6 +173,7 @@ export default function AchievementGarden({ unlockedIds, compact }: AchievementG
                     (e.currentTarget as HTMLImageElement).style.visibility = "hidden";
                   }}
                 />
+                {!unlocked && <span className="eden-achievement-card-lock" aria-hidden="true">🔒</span>}
               </div>
               <p className="eden-achievement-card-name">
                 {unlocked ? "✦ " : "○ "}

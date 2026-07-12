@@ -159,6 +159,30 @@ export function getDivineAttentionNarration(level: DivineAttentionLevel): string
   return DIVINE_ATTENTION_NARRATIONS[level];
 }
 
+/** 降低某 NPC 对神的敬畏（obedience），clamp 0-100，返回实际扣除值。任务 6 跨场景低语使用。 */
+export function reduceNpcObedience(
+  state: EdenWorldState,
+  npcId: EdenNpcId,
+  amount: number,
+): number {
+  const clamp100 = (v: number) => Math.max(0, Math.min(100, v));
+  if (npcId === "eve") {
+    const before = state.eveMind.obedience;
+    state.eveMind.obedience = clamp100(before - amount);
+    return before - state.eveMind.obedience;
+  }
+  if (npcId === "adam") {
+    const before = state.adamMind.obedience;
+    state.adamMind.obedience = clamp100(before - amount);
+    return before - state.adamMind.obedience;
+  }
+  const rel = state.npcRelations[npcId];
+  if (!rel) return 0;
+  const before = rel.obedience;
+  rel.obedience = clamp100(before - amount);
+  return before - rel.obedience;
+}
+
 /** 判断是否触发失败结局（第12时段结束仍未吃果） */
 export function shouldTriggerGodArrives(state: EdenWorldState): boolean {
   if (state.isEnded) return false;

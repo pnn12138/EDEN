@@ -94,6 +94,10 @@ export type DuelState = {
   currentSpeechMode: DuelSpeechMode;
   activeSpeaker: DuelSide | "both" | null;  // 当前正在输入的方
 
+  // 对战配置（模式选择阶段确定）
+  playerSide: DuelSide | "both";   // 人类玩家扮演哪一方；"both" = 热座双人
+  opponentMode: "human" | "ai";    // 对手是人类还是 AI
+
   // 输入封存（热座：双方输入完成前不展示全文）
   pendingInputs: {
     god: string | null;
@@ -155,6 +159,18 @@ export type DuelFallbackReply = {
   };
   toolCall?: DuelToolName;
   memoryNote?: string;
+};
+
+/** 推导 AI 扮演的方（仅在 opponentMode === "ai" 时非空） */
+export function getAiSide(state: DuelState): DuelSide | null {
+  if (state.opponentMode !== "ai") return null;
+  return state.playerSide === "god" ? "serpent" : "god";
+}
+
+/** 创建新对局的配置参数 */
+export type DuelMatchOptions = {
+  playerSide?: DuelSide | "both";
+  opponentMode?: "human" | "ai";
 };
 
 /** 回合顺序定义 */

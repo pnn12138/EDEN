@@ -24,6 +24,7 @@ import type {
   DivineAttentionLevel,
 } from "@/game/world/types";
 import { getItemById } from "@/content/world/items";
+import { getEffectiveMaxActionPoints } from "@/game/world/actionPointRules";
 import type { WorldItem } from "@/content/world/items";
 
 // ---- 旧准备回响结果（兼容旧请求） ----
@@ -293,7 +294,7 @@ export function executeInstantResonance(
 
   // 根据回响 ID 执行效果
   if (itemId === "resonance_river_dew") {
-    state.actionPoints = Math.min(state.maxActionPoints, state.actionPoints + 1);
+    state.actionPoints = Math.min(getEffectiveMaxActionPoints(state), state.actionPoints + 1);
     narration = `${item.description} 你恢复了 1 点行动点。`;
   } else if (itemId === "resonance_four_river_echo") {
     narration = `${item.description} 这段回声会留到结局复盘中，让因果链更清楚。`;

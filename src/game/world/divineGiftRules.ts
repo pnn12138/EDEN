@@ -39,7 +39,7 @@ export function getDivineAttentionStage(ownedCount: number): DivineAttentionStag
 }
 
 // ---- 累计注视阈值（第 2~7 个三选一的触发点） ----
-export const DIVINE_GIFT_THRESHOLDS = [2, 4, 6, 8, 10, 12];
+export const DIVINE_GIFT_THRESHOLDS = [2, 3, 4, 5, 6, 7];
 
 // ---- 7 献礼池 ----
 export const DIVINE_GIFT_POOL: DivineGiftId[] = [
@@ -116,12 +116,19 @@ export function rollGiftChoices(owned: DivineGiftId[]): DivineGiftId[] {
   return remain.slice(0, Math.min(3, remain.length));
 }
 
+// ---- 有效献礼门槛 = 当前阶段基础门槛 + 永久门槛修正（最低 1） ----
+export function getEffectiveDivineThreshold(state: EdenWorldState): number | null {
+  const owned = state.divineGiftsOwned.length;
+  if (owned === 0 || owned >= 7) return null; // 开局 / 集满不显示
+  const base = DIVINE_GIFT_THRESHOLDS[owned - 1];
+  const modifier = state.divineThresholdModifier ?? 0;
+  return Math.max(1, base + modifier);
+}
+
 // ---- 是否达到下一次三选一阈值（开局后第 N 个，N=owned.length） ----
 export function shouldTriggerGiftChoice(state: EdenWorldState): boolean {
-  const owned = state.divineGiftsOwned.length;
-  if (owned >= 7) return false;
-  if (owned === 0) return false; // 开局单独触发
-  const threshold = DIVINE_GIFT_THRESHOLDS[owned - 1];
+  const threshold = getEffectiveDivineThreshold(state);
+  if (threshold === null) return false;
   return state.divineAttentionCumulative >= threshold;
 }
 
@@ -149,6 +156,9 @@ export function claimDivineGift(
   if (state.divineGiftsOwned.length >= 7) {
     applyGiftCapstone(state);
   }
+
+  // T2 Bug A：领取献礼后累计注视归零，不留溢出
+  state.divineAttentionCumulative = 0;
 
   const meta = DIVINE_GIFT_META[giftId];
   return {

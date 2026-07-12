@@ -164,6 +164,16 @@ export function getUnlockedCrossSessionMarkIds(): AchievementId[] {
   return readData().unlockedCrossSessionMarkIds;
 }
 
+/** 读取跨局累计收集过的回响 ID 列表（供图鉴回响分页） */
+export function getCollectedResonanceIds(): string[] {
+  return readData().collectedResonanceIds;
+}
+
+/** 读取跨局触发过的结局 ID 列表（供图鉴结局分页） */
+export function getTriggeredEndingIds(): string[] {
+  return readData().triggeredEndingIds;
+}
+
 /** 读取跨局累计概览（供图鉴进度展示） */
 export function getGlobalAchievementSummary(): {
   collectedResonanceCount: number;

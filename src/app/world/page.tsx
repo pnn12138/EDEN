@@ -26,10 +26,11 @@ import { allocateStageSlots } from "@/game/world/stageSlots";
 import {
   rollGiftChoices,
   getGiftMeta,
-  DIVINE_GIFT_THRESHOLDS,
+  getEffectiveDivineThreshold,
 } from "@/game/world/divineGiftRules";
+import { getEffectiveMaxActionPoints } from "@/game/world/actionPointRules";
 import { EDEN_LOCATIONS, LOCATION_NAMES } from "@/content/world/locations";
-import { EDEN_NPCS, NPC_NAMES } from "@/content/world/npcs";
+import { EDEN_NPCS, NPC_NAMES, getTreeDisplayName } from "@/content/world/npcs";
 import { getClueById } from "@/content/world/clues";
 import { getItemById } from "@/content/world/items";
 import {
@@ -129,6 +130,8 @@ type WorldAgentResponse = {
     displayName: string;
     narration: string;
   } | null;
+  // 任务 6：跨场景低语扣除目标敬畏的实际值（仅跨场景时 > 0）
+  aweReduction?: number;
 };
 
 type WorldNpcToolResult = {
@@ -231,7 +234,7 @@ function buildAttributeProfile(
     }
     case "forbidden_tree":
       return {
-        title: "分别善恶树",
+        title: getTreeDisplayName("forbidden_tree", worldState),
         subtitle: EDEN_NPCS.forbidden_tree.shortDesc,
         summary: "它不是可被说服的角色。蛇不能触碰它，只能让那个女人自己一步步走近。",
         rows: [
@@ -275,7 +278,7 @@ function buildAttributeProfile(
       };
     case "tree_of_life":
       return {
-        title: "生命树",
+        title: getTreeDisplayName("tree_of_life", worldState),
         subtitle: EDEN_NPCS.tree_of_life.shortDesc,
         summary: "生命树在光里站立，叶子闪着微光。它不是可被说服的对象，而是园中永恒的见证者。",
         rows: [
@@ -563,6 +566,9 @@ export default function WorldPage() {
   } | null>(null);
   const [slotNarrations, setSlotNarrations] = useState<string[] | null>(null);
   const [achievementToast, setAchievementToast] = useState<string | null>(null);
+  // 任务 6 收尾：跨场景低语扣敬畏的反馈独立于对话 Tab（仅展示角色发言与必要叙事）
+  const [aweReductionToast, setAweReductionToast] = useState<string | null>(null);
+
   const [selectedWhisperStyle, setSelectedWhisperStyle] = useState<WhisperStyle["id"] | null>(null);
 
   // ---- 面板状态 ----
@@ -1114,7 +1120,14 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
         // 新增：设置 toolResult
         setToolResult(data.toolResult ?? null);
         // 第一章：关系/好感自然反馈与言语分裂惩罚
-        setNpcFeedbackState(data.npcFeedback ?? null);
+        let npcFb = data.npcFeedback ?? null;
+        setNpcFeedbackState(npcFb);
+        // 跨场景低语扣敬畏：独立浮动提示，不污染对话 Tab
+        if (data.aweReduction && data.aweReduction > 0) {
+          const awName = EDEN_NPCS[targetNpc]?.name ?? "对方";
+          setAweReductionToast(`你的声音越过距离落下，${awName}对神的敬畏减了几分。`);
+          setTimeout(() => setAweReductionToast(null), 4000);
+        }
         setLanguagePunishmentState(data.languagePunishment ?? null);
         setSlotNarrations(data.slotNarrations ?? null);
         // 第一章：处理回响叙事
@@ -1338,6 +1351,7 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
       playObserveLocation,
       playHedgehogRustle,
       playDivineAttentionRise,
+      playDivineGift,
       showApDepletedToast,
     ],
   );
@@ -1363,13 +1377,20 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
     openScenePuzzle(puzzle);
   }, [openScenePuzzle, state.completedScenePuzzleIds]);
 
-  // 通用场景谜题点击：显式交互型谜题（刻名石、伊甸之河）都走这里
+  // 通用场景谜题点击：显式交互型谜题（刻名石、伊甸之河、东园幽径）都走这里
   const handleScenePuzzleClick = useCallback(
     (puzzleId: string) => {
       const puzzle = getScenePuzzleById(puzzleId);
       if (!puzzle) return;
       if (state.completedScenePuzzleIds.includes(puzzle.id)) {
-        setSystemHint("这个问题已经在本局留下答案，不会再留下新的回响。");
+        const completedHint: Record<string, string> = {
+          puzzle_east_path_cautious_presence: "前方仍旧空无一物。",
+          puzzle_river_words_belonging: "水声依旧，却不再回应你的选择。",
+        };
+        setSystemHint(
+          completedHint[puzzle.id] ??
+            "这个问题已经在本局留下答案，不会再留下新的回响。",
+        );
         return;
       }
       openScenePuzzle(puzzle);
@@ -1425,7 +1446,7 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
     } finally {
       setIsLoading(false);
     }
-  }, [activePuzzle, isLoading, state, maybeShowFirstResonanceHint]);
+  }, [activePuzzle, isLoading, state, maybeShowFirstResonanceHint, playDivineGift]);
 
   const handlePuzzleClose = useCallback(() => {
     if (activePuzzle && !puzzleResult?.success && activePuzzle.trigger === "on_enter") {
@@ -1517,7 +1538,7 @@ const stageSlotByNpc = new Map<
   EdenNpcId,
   { left: string; bottom: string; zIndex: number; maxWidth: string }
 >(
-  allocateStageSlots(currentNpcs, activeNpc).placements.map((p) => [
+  allocateStageSlots(currentNpcs).placements.map((p) => [
     p.npcId,
     { position: "absolute", left: p.slot.left, bottom: p.slot.bottom, zIndex: p.slot.zIndex, maxWidth: p.slot.maxWidth },
   ]),
@@ -1542,6 +1563,10 @@ const namingStoneCompleted = namingStonePuzzle
 const riverPuzzle = getScenePuzzleById("puzzle_river_words_belonging");
 const riverCompleted = riverPuzzle
   ? state.completedScenePuzzleIds.includes(riverPuzzle.id)
+  : false;
+const eastPathPuzzle = getScenePuzzleById("puzzle_east_path_cautious_presence");
+const eastPathCompleted = eastPathPuzzle
+  ? state.completedScenePuzzleIds.includes(eastPathPuzzle.id)
   : false;
 const hasWhisperedToActiveNpc = activeNpc
   ? state.actionsThisSlot.whisperedNpcIds.filter((id) => id === activeNpc).length >= 3
@@ -1744,7 +1769,7 @@ const whisperCountForActiveNpc = activeNpc
             narration={divineNarrationText}
             giftFlash={!!divineGiftToast}
             cumulative={state.divineAttentionCumulative}
-            nextThreshold={DIVINE_GIFT_THRESHOLDS[state.divineGiftsOwned.length] ?? null}
+            nextThreshold={getEffectiveDivineThreshold(state)}
             ownedCount={state.divineGiftsOwned.length}
           />
         </div>
@@ -1754,10 +1779,10 @@ const whisperCountForActiveNpc = activeNpc
           </span>
           <span
             className="eden-ap-dots"
-            title={`行动点 ${state.actionPoints}/${state.maxActionPoints}`}
+            title={`行动点 ${state.actionPoints}/${getEffectiveMaxActionPoints(state)}`}
             data-testid="world-action-points"
           >
-            {Array.from({ length: state.maxActionPoints }, (_, i) => (
+            {Array.from({ length: getEffectiveMaxActionPoints(state) }, (_, i) => (
               <span key={i} className={i < state.actionPoints ? "eden-ap-dot eden-ap-dot--filled" : "eden-ap-dot eden-ap-dot--empty"}>
                 {i < state.actionPoints ? "●" : "○"}
               </span>
@@ -1834,7 +1859,10 @@ const whisperCountForActiveNpc = activeNpc
             title="设置"
             data-testid="world-settings-open"
           >
-            ⚙
+            <svg className="eden-settings-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="3.2" />
+              <path d="M19.4 12.9a7.6 7.6 0 0 0 0-1.8l1.9-1.5-1.9-3.3-2.3.9a7.6 7.6 0 0 0-1.6-.9l-.4-2.5H9.9l-.4 2.5a7.6 7.6 0 0 0-1.6.9l-2.3-.9-1.9 3.3 1.9 1.5a7.6 7.6 0 0 0 0 1.8l-1.9 1.5 1.9 3.3 2.3-.9a7.6 7.6 0 0 0 1.6.9l.4 2.5h4.2l.4-2.5a7.6 7.6 0 0 0 1.6-.9l2.3.9 1.9-3.3z" />
+            </svg>
           </button>
         </div>
       </header>
@@ -1891,8 +1919,47 @@ const whisperCountForActiveNpc = activeNpc
               title={riverCompleted ? "回声已经记下" : "倾听伊甸之河的水声"}
               data-testid="scene-action-eden-river"
             >
-              <span>伊甸之河</span>
-              <small>{riverCompleted ? "回声已记下" : "倾听水声"}</small>
+              <span>倾听水流</span>
+            </button>
+          )}
+
+          {/* 东园幽径：显式可点击，不自动弹窗 */}
+          {state.locationId === "east_garden_path" && (
+            <button
+              type="button"
+              className={`eden-east-path-entry ${eastPathCompleted ? "eden-east-path-entry--completed" : ""}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                handleScenePuzzleClick("puzzle_east_path_cautious_presence");
+              }}
+              disabled={isLoading || !isExploreActive}
+              aria-label={eastPathCompleted ? "幽径尽头，前方空无一物" : "走向幽径尽头"}
+              title={eastPathCompleted ? "前方仍旧空无一物" : "走向小道的尽头"}
+              data-testid="scene-action-east-path-end"
+            >
+              <span>幽径尽头</span>
+            </button>
+          )}
+
+          {/* 园心双树：信息展示交互框，不绑定场景问题，可反复点击 */}
+          {state.locationId === "central_meadow" && (
+            <button
+              type="button"
+              className="eden-central-trees-entry"
+              onClick={(event) => {
+                event.stopPropagation();
+                setSystemHint(
+                  state.unlockTreeNames
+                    ? "园子中央并立着两棵树——左侧是生命树，右侧是分别善恶树。"
+                    : "两棵树的轮廓始终看不真切，你分不清它们有何不同。",
+                );
+              }}
+              disabled={isLoading || !isExploreActive}
+              aria-label="端详园心双树"
+              title="端详园子中央的两棵树"
+              data-testid="scene-action-central-trees"
+            >
+              <span>园心双树</span>
             </button>
           )}
 
@@ -2204,7 +2271,7 @@ const whisperCountForActiveNpc = activeNpc
               这一时段的行动点已用完，请点击顶部「进入下一轮」恢复行动。
             </p>
             <p className="eden-ap-depleted-toast-hint">
-              新的时段将恢复5点行动点。
+              新的时段将恢复 {getEffectiveMaxActionPoints(state)} 点行动点。
             </p>
           </div>
         </div>
@@ -2219,6 +2286,30 @@ const whisperCountForActiveNpc = activeNpc
             <p className="eden-resonance-gained-toast-name">{resonanceGainedToast.title}</p>
             <p className="eden-resonance-gained-toast-desc">{resonanceGainedToast.narration}</p>
           </div>
+        </div>
+      )}
+
+      {/* 任务 6：印记解锁独立浮动提示（从对话 Tab 移出） */}
+      {achievementToast && (
+        <div className="eden-achievement-toast-floating">
+          <div className="eden-achievement-toast">{achievementToast}</div>
+        </div>
+      )}
+
+      {/* 任务 6 收尾：跨场景低语扣敬畏浮动提示（独立于对话 Tab） */}
+      {aweReductionToast && (
+        <div className="eden-achievement-toast-floating">
+          <div className="eden-awe-reduction-toast">{aweReductionToast}</div>
+        </div>
+      )}
+
+
+      {/* 任务 6：时段推进叙事顶部提示条（从对话 Tab 移出） */}
+      {slotNarrations && slotNarrations.length > 0 && (
+        <div className="eden-slot-narration-bar" role="status">
+          {slotNarrations.map((n, i) => (
+            <p key={i}>{n}</p>
+          ))}
         </div>
       )}
 
@@ -2282,27 +2373,6 @@ const whisperCountForActiveNpc = activeNpc
           {/* ===== 对话 Tab ===== */}
           {activeTab === "dialogue" && (
             <div className="eden-dialogue-flow">
-              {/* 神的注视叙事 */}
-              <div className="eden-divine-narration" style={{ marginTop: 4 }}>
-                {divineNarrationText}
-              </div>
-
-              {/* 时段推进叙事 */}
-              {slotNarrations && slotNarrations.length > 0 && (
-                <div className="eden-memory-narration" style={{ marginTop: 8 }}>
-                  {slotNarrations.map((n, i) => (
-                    <p key={i} style={{ margin: 0 }}>{n}</p>
-                  ))}
-                </div>
-              )}
-
-              {/* 印记解锁提示 */}
-              {achievementToast && (
-                <div className="eden-achievement-toast" style={{ marginTop: 8 }}>
-                  {achievementToast}
-                </div>
-              )}
-
               {/* 对话历史 */}
               {activeNpc && (
                 <>
@@ -2604,11 +2674,11 @@ const whisperCountForActiveNpc = activeNpc
                   <p className="eden-section-title">蛇（我）</p>
                   <p className="eden-character-name">草叶下的低语</p>
                 </div>
-                <span className="eden-character-status">时段 {state.timeSlot}/12 · 行动 {state.actionPoints}/{state.maxActionPoints}</span>
+                <span className="eden-character-status">时段 {state.timeSlot}/12 · 行动 {state.actionPoints}/{getEffectiveMaxActionPoints(state)}</span>
               </div>
 
               <p className="eden-character-desc">
-                你没有手，不能触碰果子，也不能替任何人做出选择。你的力量只剩语言——以及耐心。每一轮你有 {state.maxActionPoints} 点行动，用于移动、低语或场景互动。行动点用尽后，需要主动进入下一轮才能恢复。
+                你没有手，不能触碰果子，也不能替任何人做出选择。你的力量只剩语言——以及耐心。每一轮你有 {getEffectiveMaxActionPoints(state)} 点行动，用于移动、低语或场景互动。行动点用尽后，需要主动进入下一轮才能恢复。
               </p>
 
               {/* 词元消耗统计（模块4） */}
@@ -2926,6 +2996,29 @@ const whisperCountForActiveNpc = activeNpc
                     <span className="eden-map-hotspot-state">
                       {isCurrent ? "你在这里" : isReachable ? "可前往" : "需绕行"}
                     </span>
+                    {state.unlockMapNpcLocations && (() => {
+                      const npcs = getVisibleNpcsAtLocation(state, locId).filter((id) => NPC_SPRITE[id]);
+                      if (!npcs.length) return null;
+                      return (
+                        <div className="eden-map-hotspot-avatars" aria-hidden="true">
+                          {npcs.map((id) => {
+                            const sprite = NPC_SPRITE[id];
+                            if (!sprite) return null;
+                            return (
+                              <Image
+                                key={id}
+                                src={sprite.src}
+                                alt={EDEN_NPCS[id].name}
+                                width={28}
+                                height={28}
+                                className="eden-map-hotspot-avatar"
+                                title={EDEN_NPCS[id].name}
+                              />
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
                   </button>
                 );
               })}
@@ -3064,6 +3157,41 @@ const whisperCountForActiveNpc = activeNpc
                 </button>
               ))}
             </div>
+          )}
+          {/* 任务 6：随处低语 - 跨场景低语对象选择（持有 gift_whisper_anywhere 时显示全场景对象） */}
+          {state.divineGiftsOwned.includes("gift_whisper_anywhere") && (
+            (() => {
+              const targets = (Object.keys(EDEN_NPCS) as EdenNpcId[])
+                .filter((id) => EDEN_NPCS[id].canWhisper && id !== "forbidden_tree" && id !== "tree_of_life")
+                .sort((a, b) => {
+                  const ah = state.npcLocations[a] === state.locationId ? 0 : 1;
+                  const bh = state.npcLocations[b] === state.locationId ? 0 : 1;
+                  return ah - bh;
+                });
+              return (
+                <div className="eden-whisper-targets">
+                  <span className="eden-whisper-targets-label">低语对象</span>
+                  <div className="eden-whisper-targets-chips">
+                    {targets.map((id) => {
+                      const here = state.npcLocations[id] === state.locationId;
+                      return (
+                        <button
+                          key={id}
+                          type="button"
+                          className={`eden-whisper-target-chip ${activeNpc === id ? "eden-whisper-target-chip--active" : ""} ${here ? "eden-whisper-target-chip--here" : "eden-whisper-target-chip--far"}`}
+                          onClick={() => handleNpcInteract(id)}
+                          disabled={isLoading}
+                          title={here ? "在此处" : "远处"}
+                        >
+                          {EDEN_NPCS[id].name}
+                          <span className="eden-whisper-target-chip-tag">{here ? "在此处" : "远处"}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()
           )}
           <div className="eden-input-area">
             <textarea

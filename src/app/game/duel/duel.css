@@ -1145,3 +1145,285 @@
   background: rgba(30, 40, 30, 0.5);
   color: #c8a86e;
 }
+
+/* ============================================================
+   模式选择 / 阵营选择 / 排行榜
+   ============================================================ */
+.eden-duel-setup-content {
+  max-width: 620px;
+}
+
+.eden-duel-setup-modes {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.eden-duel-setup-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 18px 16px;
+  border: 1px solid rgba(200, 168, 110, 0.18);
+  border-radius: 10px;
+  background: rgba(10, 14, 10, 0.5);
+  color: #d8d4c8;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  transition: border-color 0.2s, background 0.2s, transform 0.15s;
+}
+
+.eden-duel-setup-card:hover {
+  border-color: rgba(200, 168, 110, 0.36);
+  background: rgba(24, 32, 24, 0.6);
+  transform: translateY(-1px);
+}
+
+.eden-duel-setup-card--active {
+  border-color: rgba(214, 187, 120, 0.6);
+  background: rgba(36, 48, 36, 0.7);
+  box-shadow: 0 0 22px rgba(200, 168, 110, 0.16);
+}
+
+.eden-duel-setup-card-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #eadcae;
+  letter-spacing: 0.06em;
+}
+
+.eden-duel-setup-card-desc {
+  font-size: 0.82rem;
+  line-height: 1.7;
+  color: rgba(199, 189, 154, 0.72);
+}
+
+.eden-duel-setup-sides {
+  margin-bottom: 24px;
+  padding: 16px;
+  border: 1px solid rgba(200, 168, 110, 0.14);
+  border-radius: 10px;
+  background: rgba(10, 14, 10, 0.36);
+  animation: duelFadeIn 0.3s ease;
+}
+
+.eden-duel-setup-section-label {
+  margin: 0 0 12px;
+  font-size: 0.86rem;
+  color: #c8a86e;
+  letter-spacing: 0.08em;
+}
+
+.eden-duel-setup-side-row {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+}
+
+.eden-duel-setup-side {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 14px;
+  border: 1px solid rgba(200, 168, 110, 0.18);
+  border-radius: 10px;
+  background: rgba(10, 14, 10, 0.5);
+  color: #d8d4c8;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  transition: border-color 0.2s, background 0.2s, transform 0.15s;
+}
+
+.eden-duel-setup-side:hover {
+  transform: translateY(-1px);
+}
+
+.eden-duel-setup-side--god:hover {
+  border-color: rgba(160, 200, 224, 0.5);
+  background: rgba(20, 30, 40, 0.6);
+}
+
+.eden-duel-setup-side--serpent:hover {
+  border-color: rgba(192, 128, 208, 0.5);
+  background: rgba(34, 22, 38, 0.6);
+}
+
+.eden-duel-setup-side--active.eden-duel-setup-side--god {
+  border-color: rgba(160, 200, 224, 0.72);
+  background: rgba(24, 38, 50, 0.72);
+  box-shadow: 0 0 22px rgba(120, 170, 200, 0.2);
+}
+
+.eden-duel-setup-side--active.eden-duel-setup-side--serpent {
+  border-color: rgba(192, 128, 208, 0.72);
+  background: rgba(40, 26, 46, 0.72);
+  box-shadow: 0 0 22px rgba(170, 110, 190, 0.2);
+}
+
+.eden-duel-setup-side-title {
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.eden-duel-setup-side--god .eden-duel-setup-side-title {
+  color: #b8d8e8;
+}
+
+.eden-duel-setup-side--serpent .eden-duel-setup-side-title {
+  color: #d49be2;
+}
+
+.eden-duel-setup-side-desc {
+  font-size: 0.8rem;
+  line-height: 1.7;
+  color: rgba(199, 189, 154, 0.72);
+}
+
+/* ---- 排行榜 ---- */
+.eden-duel-leaderboard {
+  margin-top: 28px;
+  padding: 16px;
+  border: 1px solid rgba(200, 168, 110, 0.14);
+  border-radius: 10px;
+  background: rgba(10, 14, 10, 0.4);
+  text-align: left;
+}
+
+.eden-duel-leaderboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 10px;
+  font-size: 0.86rem;
+  color: #c8a86e;
+  letter-spacing: 0.08em;
+}
+
+.eden-duel-leaderboard-count {
+  font-size: 0.74rem;
+  color: rgba(199, 189, 154, 0.6);
+  letter-spacing: 0.04em;
+}
+
+.eden-duel-leaderboard-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.eden-duel-leaderboard-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 7px 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 0.8rem;
+}
+
+.eden-duel-leaderboard-winner {
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.eden-duel-leaderboard-winner--god {
+  color: #a0c8e0;
+}
+
+.eden-duel-leaderboard-winner--serpent {
+  color: #c080d0;
+}
+
+.eden-duel-leaderboard-winner--draw {
+  color: #c8a86e;
+}
+
+.eden-duel-leaderboard-time {
+  font-size: 0.72rem;
+  color: rgba(199, 189, 154, 0.5);
+}
+
+/* ---- HUD AI 模式标识 ---- */
+.eden-duel-header-aimode {
+  font-size: 0.7rem;
+  color: #b8c8a8;
+  letter-spacing: 0.06em;
+  padding: 2px 8px;
+  border: 1px solid rgba(180, 200, 150, 0.22);
+  border-radius: 999px;
+  background: rgba(180, 200, 150, 0.08);
+}
+
+/* ---- 对话条目 AI 标记 ---- */
+.eden-duel-entry-ai {
+  font-size: 0.62rem;
+  color: rgba(180, 200, 150, 0.72);
+  letter-spacing: 0.04em;
+  margin-left: 2px;
+}
+
+/* ---- AI 思考中 ---- */
+.eden-duel-ai-thinking-footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.eden-duel-ai-thinking {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: rgba(199, 189, 154, 0.78);
+  font-size: 0.88rem;
+  letter-spacing: 0.06em;
+}
+
+.eden-duel-ai-thinking-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #c8a86e;
+  animation: duelAiPulse 1.2s ease-in-out infinite;
+}
+
+@keyframes duelAiPulse {
+  0%, 100% { opacity: 0.35; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1.15); }
+}
+
+/* ---- 人类胜负标识 ---- */
+.eden-duel-human-result {
+  display: inline-block;
+  margin-bottom: 24px;
+  padding: 8px 24px;
+  border-radius: 999px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+}
+
+.eden-duel-human-result--win {
+  color: #eadcae;
+  background: rgba(200, 168, 110, 0.18);
+  border: 1px solid rgba(214, 187, 120, 0.5);
+  text-shadow: 0 0 18px rgba(214, 187, 120, 0.4);
+}
+
+.eden-duel-human-result--lose {
+  color: #c080d0;
+  background: rgba(160, 100, 200, 0.14);
+  border: 1px solid rgba(192, 128, 208, 0.4);
+}
+
+.eden-duel-human-result--draw {
+  color: #8a8a7a;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(200, 168, 110, 0.2);
+}

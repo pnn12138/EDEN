@@ -2,7 +2,7 @@
 // Chapter 0 双声试炼：初始状态
 // ============================================================
 
-import type { DuelState } from "./types";
+import type { DuelMatchOptions, DuelState } from "./types";
 
 /** 初始女人属性 */
 export const INITIAL_DUEL_BELIEF = {
@@ -26,7 +26,7 @@ export const POST_FRUIT_BELIEF_DELTA = {
 } as const;
 
 /** 创建初始 Duel 状态 */
-export function createInitialDuelState(): DuelState {
+export function createInitialDuelState(options?: DuelMatchOptions): DuelState {
   return {
     modeId: "chapter0_duel_mode",
     phase: "intro",
@@ -38,6 +38,9 @@ export function createInitialDuelState(): DuelState {
 
     currentSpeechMode: "both",
     activeSpeaker: "both",
+
+    playerSide: options?.playerSide ?? "both",
+    opponentMode: options?.opponentMode ?? "human",
 
     pendingInputs: {
       god: null,

@@ -60,7 +60,8 @@ export const CHAPTER1_IMAGES = {
   // 三位天使独立透明立绘（v3.0：加百列 / 米迦勒 / 路西法）
   gabrielSprite: "/assets/chapter1/images/npc_gabriel_sprite.png",
   michaelSprite: "/assets/chapter1/images/npc_michael_sprite.png",
-  luciferSprite: "/assets/chapter1/images/npc_lucifer_sprite.png",
+  // 路西法立绘复用乌列尔（其前身）透明立绘；原 npc_lucifer_sprite.png 为 colorType=2 实色背景图，已废弃
+  luciferSprite: "/assets/chapter1/images/npc_uriel_sprite.png",
   // 圆润版刺猬透明立绘（1254x1254 RGBA），第一章万物受名处专用
   hedgehogRoundedSprite: "/assets/chapter1/images/npc_hedgehog_rounded_final.png",
   // 夜景背景（2026-06-22 Codex 生成）

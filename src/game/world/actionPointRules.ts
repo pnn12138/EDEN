@@ -41,6 +41,14 @@ export function consumeActionPoints(state: EdenWorldState, cost: number): void {
   state.actionPoints = Math.max(0, state.actionPoints - cost);
 }
 
+/** 有效行动点上限 = 基础上限 + 全时段加成 + 当前时段加成（白天才计白天加成） */
+export function getEffectiveMaxActionPoints(state: EdenWorldState): number {
+  const base = state.maxActionPoints ?? 5;
+  const bonusAll = state.apMaxBonusBase ?? 0;
+  const bonusDay = state.timeOfDay === "day" ? (state.apMaxBonusDay ?? 0) : 0;
+  return base + bonusAll + bonusDay;
+}
+
 /** 本时段是否已对该 NPC 低语达到上限 */
 export function hasWhisperedToNpcThisSlot(state: EdenWorldState, npcId: EdenNpcId): boolean {
   const count = state.actionsThisSlot.whisperedNpcIds.filter((id) => id === npcId).length;
@@ -87,9 +95,9 @@ function resetSlotActions(state: EdenWorldState): void {
   };
 }
 
-/** 恢复 AP 到上限 */
+/** 恢复 AP 到有效上限 */
 function restoreActionPoints(state: EdenWorldState): void {
-  state.actionPoints = state.maxActionPoints;
+  state.actionPoints = getEffectiveMaxActionPoints(state);
   state.npcActionPoints = state.maxNpcActionPoints;
 }
 
@@ -113,7 +121,9 @@ export function advanceToNextSlot(state: EdenWorldState): {
     return { slotNarrations: ["第十二个时段过去了。园中起了凉风，那是神行走的声音。"], triggeredTimeFailure: true };
   }
 
-  const spentThisSlot = state.maxActionPoints - state.actionPoints;
+  // 注意：用有效上限（基础 + 全时段加成 + 白天加成）计算本时段花费，
+  // 否则拥有 AP 上限加成道具（丰沛/清醒之眼）的玩家会少算花费、错过轻步印记授予。
+  const spentThisSlot = Math.max(0, getEffectiveMaxActionPoints(state) - state.actionPoints);
   const passiveNarrations: string[] = [];
   if (spentThisSlot >= 3 && !state.inventory.includes("passive_light_step")) {
     const granted = grantResonance(state, "passive_light_step", 1);
