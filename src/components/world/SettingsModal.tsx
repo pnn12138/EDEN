@@ -211,14 +211,16 @@ export default function SettingsModal({
                   <button
                     key={m.index}
                     type="button"
-                    className={`eden-save-slot ${m.empty ? "eden-save-slot--empty" : ""}`}
-                    disabled={pickerMode === "load" && m.empty}
+                    className={`eden-save-slot ${m.empty || m.corrupted ? "eden-save-slot--empty" : ""}`}
+                    disabled={pickerMode === "load" && (m.empty || m.corrupted)}
                     onClick={() => handlePickSlot(m)}
                     data-testid={`world-slot-${m.index}`}
                   >
                     <span className="eden-save-slot-title">存档 {m.index}</span>
                     {m.empty ? (
                       <span className="eden-save-slot-empty-hint">暂无存档</span>
+                    ) : m.corrupted ? (
+                      <span className="eden-save-slot-empty-hint">存档损坏</span>
                     ) : (
                       <>
                         <span className="eden-save-slot-scene">{m.chapterSceneLabel}</span>
