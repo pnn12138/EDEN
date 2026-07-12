@@ -7,12 +7,13 @@ import { useRouter } from "next/navigation";
 import { CHAPTER0_IMAGES } from "@/game/assets";
 import LoginModal from "@/components/world/LoginModal";
 import { getAuth, logout, type AuthState } from "@/lib/auth";
-import { SAVE_SLOTS, slotKey, LEGACY_WORLD_STATE_KEY, AUX_KEYS_TO_CLEAR } from "@/hooks/useWorldSave";
+import { SAVE_SLOTS, slotKey, LEGACY_WORLD_STATE_KEY, AUX_KEYS_TO_CLEAR, AUTOSAVE_KEY } from "@/hooks/useWorldSave";
 
-// 首页仅判断是否存在任一存档（四槽位中任一有存档即视为有存档）
+// 首页判断是否存在任一存档（四槽位中任一有存档，或存在自动保存，即视为有存档）
 function hasAnyWorldSave(): boolean {
   try {
-    return SAVE_SLOTS.some((i) => !!window.localStorage.getItem(slotKey(i)));
+    if (SAVE_SLOTS.some((i) => !!window.localStorage.getItem(slotKey(i)))) return true;
+    return !!window.localStorage.getItem(AUTOSAVE_KEY);
   } catch {
     return false;
   }

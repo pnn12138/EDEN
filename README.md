@@ -177,3 +177,13 @@ CNB 负责构建，产物发布至 EdgeOne Pages（同 Serverless 模式）。�
 
 > 完整提交材料（在线链接、Demo 分镜脚本、PPT、对话记录、偏差说明、提交清单、社媒文案）
 > 见 `doc/submit/` 目录；AI 创作说明见 `doc/AI_ASSET_RECORD.md`。
+
+## 在线试玩与已知问题
+
+- **在线试玩链接**：`<部署后由项目所有者填入 EdgeOne Pages / CNB 提供的公网 URL>`
+- **推荐浏览器**：桌面端 Chrome / Edge / Firefox（最新两个大版本）。移动端未做适配。
+- **推荐分辨率**：1920×1080（桌面）；低于 1366×768 可能出现布局裁剪。
+- **已知问题**：
+  1. 东园幽径「夜晚」坐标（`src/app/globals.css` 中 `.eden-east-path-entry--night`）为未校准猜测值（`left:76% / top:38%`），需对照夜景背景人工校准（见 doc 19 第五项）。
+  2. 若浏览器禁用 `localStorage`，存档写入会失败并弹出提示，但当前局游玩不受影响。
+  3. 未配置 LLM Provider 时，NPC 对话返回本地固定兜底文本（游戏内语境提示），不影响流程闭环。

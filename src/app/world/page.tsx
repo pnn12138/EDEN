@@ -74,6 +74,7 @@ import NpcStatusHint from "@/components/world/NpcStatusHint";
 import { computeWhisperFeedback } from "@/content/world/whisperFeedback";
 import { useWorldSave, type SaveSlotIndex, type SaveSlotMeta } from "@/hooks/useWorldSave";
 import { recordEncounterForVisibleNpcs } from "@/game/world/npcRelationRules";
+import { fetchWithTimeout } from "@/lib/fetchWithTimeout";
 
 // ---- 对话历史条目（按 NPC 区分） ----
 type HistoryEntry = { role: "serpent" | "npc"; text: string };
@@ -574,6 +575,13 @@ export default function WorldPage() {
   // 任务 6 收尾：跨场景低语扣敬畏的反馈独立于对话 Tab（仅展示角色发言与必要叙事）
   const [aweReductionToast, setAweReductionToast] = useState<string | null>(null);
 
+  // ---- 存档操作失败提示（写入失败 / 损坏存档） ----
+  const [saveErrorToast, setSaveErrorToast] = useState<string | null>(null);
+  const showSaveErrorToast = useCallback((msg: string) => {
+    setSaveErrorToast(msg);
+    setTimeout(() => setSaveErrorToast(null), 4000);
+  }, []);
+
   const [selectedWhisperStyle, setSelectedWhisperStyle] = useState<WhisperStyle["id"] | null>(null);
 
   // ---- 面板状态 ----
@@ -841,7 +849,7 @@ export default function WorldPage() {
   // ---- 神明献礼三选一：玩家选定一份，调用 claim_divine_gift 工具端点 ----
   const claimGift = useCallback(async (giftId: string) => {
     try {
-      const res = await fetch("/api/world/tool", {
+      const res = await fetchWithTimeout("/api/world/tool", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1019,7 +1027,7 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
     setPolishing(true);
     setPolishError(false);
     try {
-      const res = await fetch("/api/polish", {
+      const res = await fetchWithTimeout("/api/polish", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1182,8 +1190,8 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
 
         playWhisperSubmit();
       } else if (data.usedFallback) {
-        // LLM 未连接或请求失败：不显示假回复，明确提示
-        setSystemHint("模型未连接。园中的声音暂时无法回应你。");
+        // LLM 未连接或请求失败：不显示假回复，给出游戏语境提示（不露技术细节）
+        setSystemHint("对方似乎没有听清。园中暂时安静了下来。");
         setCurrentReply(null);
       } else {
         setSystemHint(data.systemHint ?? "园中起了风，声音暂时听不清。");
@@ -1191,7 +1199,7 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
     };
 
     try {
-      const response = await fetch("/api/world", {
+      const response = await fetchWithTimeout("/api/world", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1287,11 +1295,11 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
       if (tool === "move_to_location") setMapModalOpen(false);
 
       try {
-        const response = await fetch("/api/world/tool", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tool, state, args }),
-        });
+      const response = await fetchWithTimeout("/api/world/tool", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tool, state, args }),
+      });
 
         const data: WorldToolResponse = await response.json();
 
@@ -1536,17 +1544,19 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
 
   const handleSaveToSlot = useCallback(
     (i: SaveSlotIndex) => {
-      save(i);
+      const ok = save(i);
       setSlotMetas(getSlotMetas());
+      if (!ok) showSaveErrorToast("保存失败，请检查浏览器是否允许本地存储。");
     },
-    [save, getSlotMetas],
+    [save, getSlotMetas, showSaveErrorToast],
   );
   const handleLoadFromSlot = useCallback(
     (i: SaveSlotIndex) => {
-      load(i);
+      const ok = load(i);
       setSlotMetas(getSlotMetas());
+      if (!ok) showSaveErrorToast("该存档已损坏，无法读取。");
     },
-    [load, getSlotMetas],
+    [load, getSlotMetas, showSaveErrorToast],
   );
   const handleResetAll = useCallback(() => {
     reset();
@@ -2330,6 +2340,13 @@ const whisperCountForActiveNpc = activeNpc
             <p className="eden-resonance-gained-toast-name">{resonanceGainedToast.title}</p>
             <p className="eden-resonance-gained-toast-desc">{resonanceGainedToast.narration}</p>
           </div>
+        </div>
+      )}
+
+      {/* 存档操作失败提示（保存失败 / 损坏存档），不静默丢失 */}
+      {saveErrorToast && (
+        <div className="eden-achievement-toast-floating">
+          <div className="eden-achievement-toast eden-achievement-toast--error">{saveErrorToast}</div>
         </div>
       )}
 

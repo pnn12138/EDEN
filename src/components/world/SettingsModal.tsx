@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 // ============================================================
 // 第一章：设置浮窗
@@ -45,6 +45,11 @@ export default function SettingsModal({
   dirty,
 }: SettingsModalProps) {
   const [pickerMode, setPickerMode] = useState<"save" | "load" | null>(null);
+
+  // 关闭浮窗时重置槽位选择模式，避免下次打开停留在上次模式
+  useEffect(() => {
+    if (!open) setPickerMode(null);
+  }, [open]);
 
   if (!open) return null;
 

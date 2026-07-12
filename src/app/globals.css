@@ -3388,6 +3388,13 @@ a:hover {
   text-align: center;
 }
 
+/* 存档操作失败提示（保存失败 / 损坏存档） */
+.eden-achievement-toast--error {
+  border-color: rgba(206, 96, 84, 0.7);
+  color: #f3c6bf;
+  background: rgba(70, 32, 28, 0.66);
+}
+
 .eden-turn-display {
   color: #8a9a7a;
 }

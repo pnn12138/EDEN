@@ -1,30 +1,48 @@
-# CNB 仅预览模式部署配置
-# 通过 cnb.cool 云原生开发的「仅预览模式」运行 Next.js 全栈应用
-# 服务必须监听 8686 端口（CNB 仅预览模式要求）
-# 包含 /api/* 服务端路由，使用 Node 运行时，不做静态导出
+# ============================================================
+# CNB 云原生构建配置（备用部署链路）
+#
+# 本文件声明：
+# - onlyPreview: true  → 仅预览构建，不污染主分支产物
+# - daemon: true       → 构建后常驻守护，评审可随时访问预览环境
+#
+# 实际构建命令与运行环境变量（LLM_PROVIDER / 密钥）在 CNB 控制台配置，
+# 镜像使用固定公共地址，不依赖动态仓库变量。
+# ============================================================
 
-$:
-  vscode:
-    - docker:
-        image: node:20
-        volumes:
-          - /root/.npm:copy-on-write
-      services:
-        - name: vscode
-          options:
-            onlyPreview: true
-            launch: npx next start -p 8686
-            keepAliveTimeout: 24h
-            daemon: true
-      env:
-        PORT: "8686"
-        LLM_PROVIDER: volcengine
-        VOLCENGINE_BASE_URL: https://ark.cn-beijing.volces.com/api/plan/v3
-        VOLCENGINE_MODEL: ark-code-latest
-        # VOLCENGINE_API_KEY 为敏感信息，请在 CNB 项目设置 → 密钥变量中配置
-        # 未配置时应用使用 Mock 兜底，NPC 对话返回固定回复
-        # 注意：不要设 NODE_ENV=production，否则 npm install 会跳过 devDependencies
-        # （TypeScript 等），导致 next build 失败。next build 内部会自动设置 production 模式
-      stages:
-        - npm install
-        - npm run build
+version: 1
+
+# 仅预览构建
+onlyPreview: true
+
+# 构建后常驻守护（daemon），便于评委随时访问
+daemon: true
+
+build:
+  # 构建命令（与 EdgeOne 一致）
+  steps:
+    - run: npm ci
+    - run: npm run build
+  # 产物目录（由 npm run build 生成）
+  output: .next
+
+# 运行时：Node，保留 /api/* 服务端路由（禁止静态导出）
+runtime: node
+
+# 环境变量仅声明名称，值在 CNB 控制台注入（不入库）
+env:
+  LLM_PROVIDER:
+    required: false
+  VOLCENGINE_API_KEY:
+    required: false
+    secret: true
+  VOLCENGINE_BASE_URL:
+    required: false
+  VOLCENGINE_MODEL:
+    required: false
+  DEEPSEEK_API_KEY:
+    required: false
+    secret: true
+  DEEPSEEK_BASE_URL:
+    required: false
+  DEEPSEEK_MODEL:
+    required: false
