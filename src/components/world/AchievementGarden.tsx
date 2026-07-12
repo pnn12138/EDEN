@@ -89,50 +89,102 @@ export default function AchievementGarden({ unlockedIds, compact }: AchievementG
         已解锁 <strong>{unlockedCount}</strong> / {ACHIEVEMENTS.length}
       </div>
 
-      <div className="eden-achievement-tabs" role="tablist">
-        {CATEGORY_ORDER.map((cat) => {
-          const total = getAchievementsByCategory(cat).length;
-          const got = getAchievementsByCategory(cat).filter((a) => unlockedSet.has(a.id)).length;
-          return (
-            <button
-              key={cat}
-              role="tab"
-              aria-selected={activeTab === cat}
-              className={`eden-achievement-tab ${activeTab === cat ? "eden-achievement-tab--active" : ""}`}
-              onClick={() => setActiveTab(cat)}
-            >
-              {CATEGORY_LABEL[cat]}
-              <span className="eden-achievement-tab-count">{got}/{total}</span>
-            </button>
-          );
-        })}
-      </div>
+      {compact ? (
+        <>
+          <div className="eden-achievement-tabs" role="tablist">
+            {CATEGORY_ORDER.map((cat) => {
+              const total = getAchievementsByCategory(cat).length;
+              const got = getAchievementsByCategory(cat).filter((a) => unlockedSet.has(a.id)).length;
+              return (
+                <button
+                  key={cat}
+                  role="tab"
+                  aria-selected={activeTab === cat}
+                  className={`eden-achievement-tab ${activeTab === cat ? "eden-achievement-tab--active" : ""}`}
+                  onClick={() => setActiveTab(cat)}
+                >
+                  {CATEGORY_LABEL[cat]}
+                  <span className="eden-achievement-tab-count">{got}/{total}</span>
+                </button>
+              );
+            })}
+          </div>
 
-      <div className="eden-achievement-filters">
-        {(
-          [
-            ["all", "全部"],
-            ["unlocked", "已解锁"],
-            ["locked", "未解锁"],
-          ] as [FilterMode, string][]
-        ).map(([mode, label]) => (
-          <button
-            key={mode}
-            className={`eden-achievement-filter ${filter === mode ? "eden-achievement-filter--active" : ""}`}
-            onClick={() => setFilter(mode)}
-          >
-            {label}
-          </button>
-        ))}
-        <input
-          type="search"
-          className="eden-achievement-search"
-          placeholder="搜索印记名称或描述…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          aria-label="搜索印记"
-        />
-      </div>
+          <div className="eden-achievement-filters">
+            {(
+              [
+                ["all", "全部"],
+                ["unlocked", "已解锁"],
+                ["locked", "未解锁"],
+              ] as [FilterMode, string][]
+            ).map(([mode, label]) => (
+              <button
+                key={mode}
+                className={`eden-achievement-filter ${filter === mode ? "eden-achievement-filter--active" : ""}`}
+                onClick={() => setFilter(mode)}
+              >
+                {label}
+              </button>
+            ))}
+            <input
+              type="search"
+              className="eden-achievement-search"
+              placeholder="搜索印记名称或描述…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              aria-label="搜索印记"
+            />
+          </div>
+        </>
+      ) : (
+        <div className="eden-achievement-toolbar">
+          <div className="eden-achievement-tabs" role="tablist" aria-label="印记分类">
+            {CATEGORY_ORDER.map((cat) => {
+              const total = getAchievementsByCategory(cat).length;
+              const got = getAchievementsByCategory(cat).filter((a) => unlockedSet.has(a.id)).length;
+              return (
+                <button
+                  key={cat}
+                  role="tab"
+                  aria-selected={activeTab === cat}
+                  className={`eden-achievement-tab ${activeTab === cat ? "eden-achievement-tab--active" : ""}`}
+                  onClick={() => setActiveTab(cat)}
+                >
+                  {CATEGORY_LABEL[cat]}
+                  <span className="eden-achievement-tab-count">{got}/{total}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="eden-achievement-filters" aria-label="印记状态筛选">
+            {(
+              [
+                ["all", "全部"],
+                ["unlocked", "已解锁"],
+                ["locked", "未解锁"],
+              ] as [FilterMode, string][]
+            ).map(([mode, label]) => (
+              <button
+                key={mode}
+                className={`eden-achievement-filter ${filter === mode ? "eden-achievement-filter--active" : ""}`}
+                onClick={() => setFilter(mode)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <input
+            type="search"
+            className="eden-achievement-search"
+            placeholder="搜索印记名称或描述…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            aria-label="搜索印记"
+          />
+        </div>
+      )}
 
       <div className="eden-achievement-grid">
         {visibleMarks.length === 0 && (
@@ -150,8 +202,12 @@ export default function AchievementGarden({ unlockedIds, compact }: AchievementG
                 title="尚未解锁的隐藏印记"
               >
                 <div className="eden-achievement-card-icon eden-achievement-card-icon--hidden">?</div>
-                <p className="eden-achievement-card-name eden-achievement-card-name--hidden">？？</p>
-                <p className="eden-achievement-card-desc">尚未解锁</p>
+                <p className="eden-achievement-card-name eden-achievement-card-name--hidden">
+                  {compact ? "？？" : "未知印记"}
+                </p>
+                <p className="eden-achievement-card-desc">
+                  {compact ? "尚未解锁" : "尚未发现"}
+                </p>
               </div>
             );
           }
@@ -173,7 +229,11 @@ export default function AchievementGarden({ unlockedIds, compact }: AchievementG
                     (e.currentTarget as HTMLImageElement).style.visibility = "hidden";
                   }}
                 />
-                {!unlocked && <span className="eden-achievement-card-lock" aria-hidden="true">🔒</span>}
+                {!unlocked && (
+                  <span className="eden-achievement-card-lock" aria-hidden="true">
+                    {compact ? "🔒" : "锁"}
+                  </span>
+                )}
               </div>
               <p className="eden-achievement-card-name">
                 {unlocked ? "✦ " : "○ "}

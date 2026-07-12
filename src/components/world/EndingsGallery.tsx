@@ -61,6 +61,7 @@ export default function EndingsGallery({ triggeredIds }: EndingsGalleryProps) {
             <div
               key={ending.id}
               className={`eden-codex-ending ${triggered ? "eden-codex-ending--triggered" : "eden-codex-ending--locked"} eden-codex-ending--${ending.type}`}
+              aria-label={`${triggered ? "已达成" : "未达成"}结局：${triggered ? ending.title : TYPE_LABEL[ending.type]}`}
             >
               <div className="eden-codex-ending-head">
                 <h3 className="eden-codex-ending-title">{triggered ? ending.title : "尚未达成的结局"}</h3>

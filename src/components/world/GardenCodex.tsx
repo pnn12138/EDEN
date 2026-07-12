@@ -59,7 +59,7 @@ export default function GardenCodex({
 
   return (
     <div className="eden-codex">
-      <div className="eden-codex-stats">
+      <div className="eden-codex-stats" aria-label="园中档案总览">
         {stats.map((s) => (
           <div key={s.label} className="eden-codex-stat">
             <span className="eden-codex-stat-label">{s.label}</span>
@@ -73,6 +73,8 @@ export default function GardenCodex({
           <button
             key={t.id}
             role="tab"
+            id={`garden-tab-${t.id}`}
+            aria-controls={`garden-panel-${t.id}`}
             aria-selected={tab === t.id}
             className={`eden-codex-tab ${tab === t.id ? "eden-codex-tab--active" : ""}`}
             onClick={() => setTab(t.id)}
@@ -82,7 +84,12 @@ export default function GardenCodex({
         ))}
       </div>
 
-      <div className="eden-codex-panel">
+      <div
+        id={`garden-panel-${tab}`}
+        className="eden-codex-panel"
+        role="tabpanel"
+        aria-labelledby={`garden-tab-${tab}`}
+      >
         {tab === "marks" && <AchievementGarden unlockedIds={unlockedIds} />}
         {tab === "items" && <ItemsGallery collectedIds={collectedResonanceIds} />}
         {tab === "endings" && <EndingsGallery triggeredIds={triggeredEndingIds} />}

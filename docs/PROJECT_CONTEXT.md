@@ -802,3 +802,11 @@ Codex 每轮测试或审查后必须维护本文件：
 - T6列为阶段E(P0最大,4h)，独立于T1/T5。已更新plan_docs/14文档5.3+代码映射+阶段表+自校验。本次仅改规划文档，build/test不变(沿用#55b)。
 
 【2026-07-11 Codex 审查 #61（plan_docs/14 补全为开发就绪文档，未改业务代码）】将 `doc/第一章/plan_docs/14_..._OPTIMIZATION.md` 从任务清单级扩展为 CodeBuddy 可直接照改的开发文档（v3，530行）：每个任务含精确行号引用+可直接复制的代码块+步骤+验收。关键代码骨架已写入：T1 `stageSlots.ts`(6槽位+allocateStageSlots分配器)+`NPC_SPRITE`扩天使+槽位驱动渲染+CSS；T4 polish传人设+token透出(`polish/route.ts`)+蛇我页签展示；T5 `NpcRelationState`加obedience(圣经初值)+`applyNpcAffinity`路西法响应+`buildAttributeProfile`全NPC双维度2行删第三行；T5.4 `showDetailed`分层(万物名录解锁数值/牵绊道具`usedItemIds||inventory`解锁深层关系)；T6 `DivineGiftId`7枚举+`divineAttentionCumulative`累计+`divineGiftRules`重写(rollGiftChoices/shouldTriggerGiftChoice/claimDivineGift/applyGiftCapstone全NPC好感=100)+注视累计+7 passive献礼+三选一弹窗+成就。30代码块平衡，15节齐全。本次仅改规划文档，build/test不变(沿用#55b)。
+
+【2026-07-12 Codex UI 开发 #62（/garden 园中档案桌面重构）】完成独立 `/garden` 档案页视觉优化，未改玩法、存档、追踪规则或 `/world` 业务状态：
+- 统一为 1200px 桌面档案工作区，使用稳定深绿档案面板、中心阅读遮罩、横向统计带、卷宗式一级分页与单条印记工具栏。
+- 印记页使用四列收藏卡，回响三列，结局单列宽卡；独立页区分已解锁、普通锁定和隐藏锁定，隐藏项文案改为“尚未发现”。
+- 增加本地加载骨架，避免本地存档读取前后统计/卡片跳变；补充焦点状态与减少动效支持。
+- `AchievementGarden` 的 `compact` 分支保留原有 DOM、筛选结构、emoji 锁标与隐藏文案；所有新视觉规则均限定在 `.eden-garden-page`，游戏内印记浮窗不受影响。
+- 新增 `scripts/test-garden-codex-ui.mjs` 和 `tests/e2e/garden-codex.spec.ts`。复验通过：园中档案静态 smoke 8/8、世界视觉 smoke 230/230、`npm run lint`、`npm run build`、1920×1080 Playwright 3/3（含 `/world` compact 回归）。
+- 比赛展示价值：28 枚园中印记、园中回响与多结局收藏从隐蔽功能提升为可在评审试玩与 Demo 视频中直观展示的跨局档案系统。
