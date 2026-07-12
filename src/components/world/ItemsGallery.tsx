@@ -71,10 +71,11 @@ export default function ItemsGallery({ collectedIds }: ItemsGalleryProps) {
                   <div
                     key={item.id}
                     className={`eden-codex-card ${collected ? "eden-codex-card--unlocked" : "eden-codex-card--locked"}`}
+                    aria-label={`${collected ? "已获得" : "未获得"}回响：${collected ? item.title : "未知回响"}`}
                   >
                     <div className="eden-codex-card-icon">
                       <span aria-hidden="true">{item.icon ?? "✦"}</span>
-                      {!collected && <span className="eden-achievement-card-lock" aria-hidden="true">🔒</span>}
+                      {!collected && <span className="eden-achievement-card-lock" aria-hidden="true">锁</span>}
                     </div>
                     <p className="eden-codex-card-name">{collected ? item.title : "未曾获得"}</p>
                     <p className="eden-codex-card-desc">
