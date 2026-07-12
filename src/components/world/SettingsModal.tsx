@@ -1,16 +1,19 @@
 "use client";
 
+import { useState } from "react";
+
 // ============================================================
 // 第一章：设置浮窗
 //
 // 顶部最右侧「设置」图标点击后弹出，集中承载：
 // - 账号态（用户名 / 游客 / 未登录 + 登录或退出入口）
-// - 存档控制（保存 / 读取 / 重新开始）+ 存档状态
-// 复用 useWorldSave 的 save/load/reset 与 SaveControl 的二次确认逻辑。
+// - 存档控制（四槽位保存 / 读取 / 重新开始）+ 返回主页 + 存档状态
+// 复用 useWorldSave 的四槽位 save/load/reset 与二次确认逻辑。
 // 不改动任何规则层 / 游戏逻辑。
 // ============================================================
 
 import type { AuthState } from "@/lib/auth";
+import type { SaveSlotIndex, SaveSlotMeta } from "@/hooks/useWorldSave";
 
 type SettingsModalProps = {
   open: boolean;
@@ -18,9 +21,11 @@ type SettingsModalProps = {
   auth: AuthState | null;
   onLoginClick: () => void;
   onLogout: () => void;
-  onSave: () => void;
-  onLoad: () => void;
+  onSave: (slotIndex: SaveSlotIndex) => void;
+  onLoad: (slotIndex: SaveSlotIndex) => void;
   onReset: () => void;
+  onGoHome: () => void;
+  slotMetas: SaveSlotMeta[];
   lastSavedAt: string | null;
   dirty: boolean;
 };
@@ -34,22 +39,56 @@ export default function SettingsModal({
   onSave,
   onLoad,
   onReset,
+  onGoHome,
+  slotMetas,
   lastSavedAt,
   dirty,
 }: SettingsModalProps) {
+  const [pickerMode, setPickerMode] = useState<"save" | "load" | null>(null);
+
   if (!open) return null;
 
   const saved = lastSavedAt != null && !dirty;
 
-  const handleLoad = () => {
-    if (window.confirm("确定要读取上次存档吗？当前进度会丢失")) {
-      onLoad();
+  const handleSaveClick = () => {
+    setPickerMode("save");
+  };
+
+  const handleLoadClick = () => {
+    setPickerMode("load");
+  };
+
+  const handlePickSlot = (m: SaveSlotMeta) => {
+    if (pickerMode === "save") {
+      if (!m.empty) {
+        if (!window.confirm(`该槽位已有存档（${m.savedAtLabel}），是否覆盖？`)) {
+          return;
+        }
+      }
+      onSave(m.index);
+      setPickerMode(null);
+    } else if (pickerMode === "load") {
+      if (m.empty) return;
+      if (!window.confirm("读取存档将替换当前未保存的游戏进度，是否继续？")) {
+        return;
+      }
+      onLoad(m.index);
+      setPickerMode(null);
+      onClose();
     }
   };
 
   const handleReset = () => {
     if (window.confirm("确定要重新开始吗？所有进度会丢失")) {
       onReset();
+      setPickerMode(null);
+      onClose();
+    }
+  };
+
+  const handleGoHome = () => {
+    if (window.confirm("尚未保存的进度可能会丢失，确定返回主页吗？")) {
+      onGoHome();
     }
   };
 
@@ -114,7 +153,7 @@ export default function SettingsModal({
               <button
                 className="eden-btn eden-btn--primary"
                 type="button"
-                onClick={onSave}
+                onClick={handleSaveClick}
                 data-testid="world-save"
               >
                 保存
@@ -122,7 +161,7 @@ export default function SettingsModal({
               <button
                 className="eden-btn eden-btn--ghost"
                 type="button"
-                onClick={handleLoad}
+                onClick={handleLoadClick}
                 data-testid="world-load"
               >
                 读取
@@ -135,10 +174,57 @@ export default function SettingsModal({
               >
                 重新开始
               </button>
+              <button
+                className="eden-btn eden-btn--ghost eden-btn--home"
+                type="button"
+                onClick={handleGoHome}
+                data-testid="world-home"
+              >
+                返回主页
+              </button>
             </div>
             <div className="eden-settings-save-status" data-testid="world-save-dot">
               {saved ? `已保存${lastSavedAt ? " " + lastSavedAt : ""}` : "尚未保存"}
             </div>
+
+            {pickerMode && (
+              <div className="eden-save-slots">
+                <div className="eden-save-slots-head">
+                  <span>
+                    {pickerMode === "save" ? "选择要保存的槽位" : "选择要读取的槽位"}
+                  </span>
+                  <button
+                    type="button"
+                    className="eden-save-slots-close"
+                    onClick={() => setPickerMode(null)}
+                    aria-label="关闭槽位选择"
+                  >
+                    ×
+                  </button>
+                </div>
+                {slotMetas.map((m) => (
+                  <button
+                    key={m.index}
+                    type="button"
+                    className={`eden-save-slot ${m.empty ? "eden-save-slot--empty" : ""}`}
+                    disabled={pickerMode === "load" && m.empty}
+                    onClick={() => handlePickSlot(m)}
+                    data-testid={`world-slot-${m.index}`}
+                  >
+                    <span className="eden-save-slot-title">存档 {m.index}</span>
+                    {m.empty ? (
+                      <span className="eden-save-slot-empty-hint">暂无存档</span>
+                    ) : (
+                      <>
+                        <span className="eden-save-slot-scene">{m.chapterSceneLabel}</span>
+                        <span className="eden-save-slot-timeslot">{m.timeSlotLabel}</span>
+                        <span className="eden-save-slot-time">保存于 {m.savedAtLabel}</span>
+                      </>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
           </section>
         </div>
       </div>

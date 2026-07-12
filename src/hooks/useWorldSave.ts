@@ -2,21 +2,77 @@
 // 第一章：世界存档 hook（localStorage，纯前端）
 //
 // 非侵入式抽取：将 page.tsx 中的 localStorage 读写逻辑
-// 统一到本 hook。保持键名与数据格式与原有完全一致，
-// 兼容旧存档；不改变游戏状态结构。
+// 统一到本 hook。支持四槽位独立存档，旧单存档自动迁移到槽位 1。
 // ============================================================
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { EdenWorldState } from "@/game/world/types";
 import { normalizePuzzleState } from "@/game/world/puzzleRules";
+import { LOCATION_NAMES } from "@/content/world/locations";
 
-// 与 page.tsx 中本地定义保持一致（不修改规则层）
+// ---- 四槽位存储 ----
+export const SAVE_SLOTS = [1, 2, 3, 4] as const;
+export type SaveSlotIndex = (typeof SAVE_SLOTS)[number];
+
+/** 每个槽位的存储包装（不仅存 state，还存保存时间） */
+export type WorldSaveSlotData = {
+  state: EdenWorldState;
+  savedAt: string; // ISO 字符串
+  slotIndex: SaveSlotIndex;
+};
+
+/** 槽位 i 的存储 key */
+export function slotKey(i: SaveSlotIndex): string {
+  return `eden:chapter1:save:slot${i}`;
+}
+
+/** 旧单存档 key（迁移后删除） */
+export const LEGACY_WORLD_STATE_KEY = "eden:chapter1:world-state:v2";
+
+/** 辅助 key（重新开始时一并清理） */
+export const AUX_KEYS_TO_CLEAR = [
+  "eden:world:global_intro_shown",
+  "eden:world:polish-tokens",
+];
+
+/** 槽位摘要（UI 展示用） */
+export type SaveSlotMeta = {
+  index: SaveSlotIndex;
+  empty: boolean;
+  savedAtLabel: string | null;
+  chapterSceneLabel: string | null;
+  timeSlotLabel: string | null;
+};
+
+function formatClock(d: Date = new Date()): string {
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${hh}:${mm}`;
+}
+
+function timeSlotDisplay(timeSlot: number, dayIndex: number, timeOfDay: string): string {
+  const dayNames = ["", "周一", "周二", "周三", "周四", "周五", "周六"];
+  const timeLabel = timeOfDay === "night" ? "夜晚" : "白天";
+  return `时段 ${timeSlot}/12 · ${dayNames[dayIndex] ?? ""} ${timeLabel}`;
+}
+
+type UseWorldSaveOptions = {
+  state: EdenWorldState;
+  /** 从存档恢复时回调（上层据此更新 state + 地图位置） */
+  onLoad: (s: EdenWorldState) => void;
+  /** 加载流程结束（无论有无存档）时回调 */
+  onAfterLoad: () => void;
+  /** 重置时回调（上层重置 state 与所有 UI 状态） */
+  onReset: () => void;
+};
+
 function normalizeWorldStateForClient(s: EdenWorldState): EdenWorldState {
   return normalizePuzzleState({
     ...s,
     apMaxBonusBase: s.apMaxBonusBase ?? 0,
     apMaxBonusDay: s.apMaxBonusDay ?? 0,
     divineThresholdModifier: s.divineThresholdModifier ?? 0,
+    playerName: s.playerName ?? "",
     unlockMapNpcLocations: s.unlockMapNpcLocations ?? false,
     unlockTreeNames: s.unlockTreeNames ?? false,
     itemCounts: { ...(s.itemCounts ?? {}) },
@@ -32,31 +88,14 @@ function normalizeWorldStateForClient(s: EdenWorldState): EdenWorldState {
   });
 }
 
-/** 与原有完全一致的 localStorage 键名 */
-export const WORLD_STATE_STORAGE_KEY = "eden:chapter1:world-state:v2";
-
-function formatClock(d: Date = new Date()): string {
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mm = String(d.getMinutes()).padStart(2, "0");
-  return `${hh}:${mm}`;
-}
-
-type UseWorldSaveOptions = {
-  state: EdenWorldState;
-  /** 从存档恢复时回调（上层据此更新 state + 地图位置） */
-  onLoad: (s: EdenWorldState) => void;
-  /** 加载流程结束（无论有无存档）时回调 */
-  onAfterLoad: () => void;
-  /** 重置时回调（上层重置 state 与所有 UI 状态） */
-  onReset: () => void;
-};
-
-function tryNormalize(raw: string | null): EdenWorldState | null {
-  if (!raw) return null;
+/** 读取单个槽位（校验章节一致） */
+function readSlotRaw(i: SaveSlotIndex): WorldSaveSlotData | null {
   try {
-    const parsed = JSON.parse(raw) as EdenWorldState;
-    if (parsed.chapterId !== "chapter1_garden_voices") return null;
-    return normalizeWorldStateForClient(parsed);
+    const raw = window.localStorage.getItem(slotKey(i));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as WorldSaveSlotData;
+    if (parsed?.state?.chapterId !== "chapter1_garden_voices") return null;
+    return parsed;
   } catch {
     return null;
   }
@@ -75,19 +114,40 @@ export function useWorldSave({
   const stateRef = useRef(state);
   stateRef.current = state;
   const firstApply = useRef(true);
+  const lastActiveSlotRef = useRef<SaveSlotIndex | null>(null);
+  const [lastActiveSlot, setLastActiveSlot] = useState<SaveSlotIndex | null>(null);
 
-  // ---- 挂载时读取存档 ----
+  /** 旧单存档 -> 槽位 1 迁移（读档链路 normalizer，不用 withNpcWorldDefaults） */
+  const migrateLegacy = useCallback(() => {
+    try {
+      const legacy = window.localStorage.getItem(LEGACY_WORLD_STATE_KEY);
+      if (!legacy) return;
+      if (window.localStorage.getItem(slotKey(1))) return; // 槽位 1 已有，不覆盖
+      const parsed = JSON.parse(legacy) as EdenWorldState;
+      if (parsed?.chapterId !== "chapter1_garden_voices") return;
+      const normalized = normalizeWorldStateForClient(parsed);
+      const data: WorldSaveSlotData = {
+        state: normalized,
+        savedAt: new Date().toISOString(),
+        slotIndex: 1,
+      };
+      window.localStorage.setItem(slotKey(1), JSON.stringify(data));
+      window.localStorage.removeItem(LEGACY_WORLD_STATE_KEY);
+    } catch {
+      /* noop */
+    }
+  }, []);
+
+  // ---- 挂载：迁移旧存档 + 自动读取上次活跃槽（默认槽位 1）----
   useEffect(() => {
-    const normalized = tryNormalize(window.localStorage.getItem(WORLD_STATE_STORAGE_KEY));
-    if (normalized) {
-      onLoad(normalized);
-    } else if (window.localStorage.getItem(WORLD_STATE_STORAGE_KEY)) {
-      // 旧版本 / 不兼容存档 → 清除
-      try {
-        window.localStorage.removeItem(WORLD_STATE_STORAGE_KEY);
-      } catch {
-        /* noop */
-      }
+    migrateLegacy();
+    const target: SaveSlotIndex = lastActiveSlotRef.current ?? 1;
+    const data = readSlotRaw(target);
+    if (data) {
+      onLoad(normalizeWorldStateForClient(data.state));
+      setLastActiveSlot(target);
+      lastActiveSlotRef.current = target;
+      setLastSavedAt(formatClock(new Date(data.savedAt)));
     }
     setLoaded(true);
     onAfterLoad();
@@ -106,14 +166,17 @@ export function useWorldSave({
     setDirty(true);
   }, [state, loaded]);
 
-  // ---- 每 5 分钟自动保存一次（不依赖手动保存） ----
+  // ---- 每 5 分钟自动保存一次（写入上次活跃槽，无则槽位 1）----
   useEffect(() => {
     const id = window.setInterval(() => {
+      const target = lastActiveSlotRef.current ?? 1;
       try {
-        window.localStorage.setItem(
-          WORLD_STATE_STORAGE_KEY,
-          JSON.stringify(stateRef.current),
-        );
+        const data: WorldSaveSlotData = {
+          state: stateRef.current,
+          savedAt: new Date().toISOString(),
+          slotIndex: target,
+        };
+        window.localStorage.setItem(slotKey(target), JSON.stringify(data));
         setLastSavedAt(formatClock());
         dirtyRef.current = false;
         setDirty(false);
@@ -124,12 +187,16 @@ export function useWorldSave({
     return () => window.clearInterval(id);
   }, []);
 
-  const save = useCallback(() => {
+  const save = useCallback((i: SaveSlotIndex) => {
     try {
-      window.localStorage.setItem(
-        WORLD_STATE_STORAGE_KEY,
-        JSON.stringify(stateRef.current),
-      );
+      const data: WorldSaveSlotData = {
+        state: stateRef.current,
+        savedAt: new Date().toISOString(),
+        slotIndex: i,
+      };
+      window.localStorage.setItem(slotKey(i), JSON.stringify(data));
+      setLastActiveSlot(i);
+      lastActiveSlotRef.current = i;
       setLastSavedAt(formatClock());
       dirtyRef.current = false;
       setDirty(false);
@@ -138,26 +205,80 @@ export function useWorldSave({
     }
   }, []);
 
-  const load = useCallback(() => {
-    const normalized = tryNormalize(window.localStorage.getItem(WORLD_STATE_STORAGE_KEY));
-    if (normalized) onLoad(normalized);
-  }, [onLoad]);
+  const load = useCallback(
+    (i: SaveSlotIndex) => {
+      const data = readSlotRaw(i);
+      if (data) {
+        onLoad(normalizeWorldStateForClient(data.state));
+        setLastActiveSlot(i);
+        lastActiveSlotRef.current = i;
+        setLastSavedAt(formatClock(new Date(data.savedAt)));
+        dirtyRef.current = false;
+        setDirty(false);
+      }
+    },
+    [onLoad],
+  );
 
   const reset = useCallback(() => {
+    SAVE_SLOTS.forEach((i) => {
+      try {
+        window.localStorage.removeItem(slotKey(i));
+      } catch {
+        /* noop */
+      }
+    });
     try {
-      window.localStorage.removeItem(WORLD_STATE_STORAGE_KEY);
-      // 模块1：重置后重新显示开场弹窗
-      window.localStorage.removeItem("eden:world:global_intro_shown");
-      // 模块4：重置词元统计
-      window.localStorage.removeItem("eden:world:polish-tokens");
+      window.localStorage.removeItem(LEGACY_WORLD_STATE_KEY);
+      AUX_KEYS_TO_CLEAR.forEach((k) => window.localStorage.removeItem(k));
     } catch {
       /* noop */
     }
     setLastSavedAt(null);
+    setLastActiveSlot(null);
+    lastActiveSlotRef.current = null;
     dirtyRef.current = false;
     setDirty(false);
     onReset();
   }, [onReset]);
 
-  return { lastSavedAt, dirty, loaded, save, load, reset };
+  /** 槽位摘要（UI 用），每次调用读取 4 个槽位 */
+  const getSlotMetas = useCallback((): SaveSlotMeta[] => {
+    return SAVE_SLOTS.map((i) => {
+      const data = readSlotRaw(i);
+      if (!data) {
+        return {
+          index: i,
+          empty: true,
+          savedAtLabel: null,
+          chapterSceneLabel: null,
+          timeSlotLabel: null,
+        };
+      }
+      const s = data.state;
+      return {
+        index: i,
+        empty: false,
+        savedAtLabel: formatClock(new Date(data.savedAt)),
+        chapterSceneLabel: `第一章 · ${LOCATION_NAMES[s.locationId] ?? s.locationId}`,
+        timeSlotLabel: timeSlotDisplay(s.timeSlot, s.dayIndex, s.timeOfDay),
+      };
+    });
+  }, []);
+
+  const hasAnySave = useCallback((): boolean => {
+    return SAVE_SLOTS.some((i) => readSlotRaw(i) !== null);
+  }, []);
+
+  return {
+    lastSavedAt,
+    dirty,
+    loaded,
+    lastActiveSlot,
+    save,
+    load,
+    reset,
+    getSlotMetas,
+    hasAnySave,
+  };
 }

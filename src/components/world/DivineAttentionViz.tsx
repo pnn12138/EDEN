@@ -67,6 +67,13 @@ export default function DivineAttentionViz({
             <Droplet key={i} active={i < safeLevel} index={i} />
           ))}
         </span>
+        {/* 可见标签：明确当前神的注视等级（与下方「注视值：X/Y」区分） */}
+        <span
+          className="eden-attention-stage-label"
+          aria-hidden="true"
+        >
+          注视等级 {safeLevel}/4
+        </span>
 
         {/* T6：累计注视进度（驱动三选一） */}
         {showProgress && !capstone && (

@@ -28,6 +28,7 @@ import { bestowResonance, type PrepareResonanceResult } from "@/game/world/reson
 import { getItemById } from "@/content/world/items";
 import { NPC_NAMES } from "@/content/world/npcs";
 import { computeDivineAttentionReduction } from "@/game/world/divineAttentionRules";
+import { recordEncounterForVisibleNpcs } from "@/game/world/npcRelationRules";
 
 export type WorldActionResult = {
   /** 玩家可见叙事 */
@@ -55,6 +56,9 @@ export function executeMoveToLocation(
   } else {
     state.npcLocations[caller] = targetLocation;
   }
+
+  // 移动后把玩家当前所在地点可见 NPC 标记为已见（万物名录即时刷新）
+  recordEncounterForVisibleNpcs(state, state.locationId);
 
   const loc = EDEN_LOCATIONS[targetLocation];
   const npcName =

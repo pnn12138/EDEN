@@ -302,6 +302,7 @@ function cloneWorldState(s: EdenWorldState): EdenWorldState {
     apMaxBonusBase: s.apMaxBonusBase ?? 0,
     apMaxBonusDay: s.apMaxBonusDay ?? 0,
     divineThresholdModifier: s.divineThresholdModifier ?? 0,
+    playerName: s.playerName ?? "",
     unlockMapNpcLocations: s.unlockMapNpcLocations ?? false,
     unlockTreeNames: s.unlockTreeNames ?? false,
   };

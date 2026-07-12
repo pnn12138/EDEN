@@ -47,9 +47,10 @@ export function normalizePuzzleState(state: EdenWorldState): EdenWorldState {
     apMaxBonusBase: state.apMaxBonusBase ?? 0,
     apMaxBonusDay: state.apMaxBonusDay ?? 0,
     divineThresholdModifier: state.divineThresholdModifier ?? 0,
+    playerName: state.playerName ?? "",
     unlockMapNpcLocations: state.unlockMapNpcLocations ?? false,
     unlockTreeNames: state.unlockTreeNames ?? false,
-    completedScenePuzzleIds: [...(state.completedScenePuzzleIds ?? [])],
+    completedScenePuzzleIds: migrateEastPathPuzzleIds(state.completedScenePuzzleIds ?? []),
     hasDismissedObjectiveHint: state.hasDismissedObjectiveHint ?? false,
   };
 }
@@ -85,6 +86,7 @@ function cloneWorldStateForPuzzle(state: EdenWorldState): EdenWorldState {
     apMaxBonusBase: state.apMaxBonusBase ?? 0,
     apMaxBonusDay: state.apMaxBonusDay ?? 0,
     divineThresholdModifier: state.divineThresholdModifier ?? 0,
+    playerName: state.playerName ?? "",
     unlockMapNpcLocations: state.unlockMapNpcLocations ?? false,
     unlockTreeNames: state.unlockTreeNames ?? false,
   });
@@ -92,6 +94,19 @@ function cloneWorldStateForPuzzle(state: EdenWorldState): EdenWorldState {
 
 export function isScenePuzzleCompleted(state: EdenWorldState, puzzleId: string): boolean {
   return (state.completedScenePuzzleIds ?? []).includes(puzzleId);
+}
+
+/**
+ * 旧东园幽径谜题（单 id）拆为昼夜两个独立谜题后的读档迁移。
+ * 旧存档只记录过一次「东园幽径」交互，保守视为「白天已完成」（夜晚仍可做一次）。
+ */
+function migrateEastPathPuzzleIds(ids: string[]): string[] {
+  if (!ids.includes("puzzle_east_path_cautious_presence")) return [...ids];
+  const next = ids.filter((id) => id !== "puzzle_east_path_cautious_presence");
+  if (!next.includes("puzzle_east_path_cautious_presence_day")) {
+    next.push("puzzle_east_path_cautious_presence_day");
+  }
+  return next;
 }
 
 export function isScenePuzzleAvailable(puzzle: ScenePuzzle, state: EdenWorldState): boolean {
@@ -378,6 +393,11 @@ function applyFreeTextAnswer(
 
   const grade = result?.grade ?? "wrong";
   const success = grade === "correct" || grade === "close";
+
+  // 刻名石留名：成功时把玩家输入持久化到 state（存档保留玩家名称）
+  if (puzzle.id === "puzzle_naming_stone_identity" && success && answerText.trim()) {
+    next.playerName = answerText.trim();
+  }
 
   if (!success) {
     const hint = result?.feedback ?? puzzle.failure.hint;

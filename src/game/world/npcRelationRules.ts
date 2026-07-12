@@ -12,10 +12,11 @@
 // 不允许直接使用 Agent 返回的 affinityDelta。
 // ============================================================
 
-import type { EdenWorldState, EdenNpcId, WorldInputTag, NpcRelationState, AngelNpcId } from "@/game/world/types";
+import type { EdenWorldState, EdenNpcId, WorldInputTag, NpcRelationState, AngelNpcId, EdenLocationId } from "@/game/world/types";
 import { getNpcRelationProfile } from "@/content/world/npcRelations";
 import { isAngel } from "@/game/world/npcLanguageRules";
 import { getNpcChallengeConfig } from "@/content/world/npcChallenges";
+import { EDEN_LOCATIONS } from "@/content/world/locations";
 
 const THREAT_SIGNALS = ["威胁", "杀", "毁", "灭", "否则就", "惩罚你", "逼", "强迫你"];
 
@@ -41,6 +42,26 @@ export function ensureRelation(state: EdenWorldState, npcId: EdenNpcId): NpcRela
 export function recordNpcEncounter(state: EdenWorldState, npcId: EdenNpcId): void {
   if (!state.encounteredNpcIds.includes(npcId)) {
     state.encounteredNpcIds = [...state.encounteredNpcIds, npcId];
+  }
+}
+
+/**
+ * 标记当前地点可见 NPC 为「已见」（进入场景 / 进入游戏 / 读档后调用）。
+ * 与低语时的 recordNpcEncounter 共用，使「万物名录」对同场出现过的角色即时生效。
+ * 刺猬等所有 NPC 走同一逻辑，不写特殊分支。
+ */
+export function recordEncounterForVisibleNpcs(
+  state: EdenWorldState,
+  locationId: EdenLocationId,
+): void {
+  const loc = EDEN_LOCATIONS[locationId];
+  if (!loc) return;
+  const visible = state.timeOfDay === "night" ? loc.nightNpcs : loc.dayNpcs;
+  for (const npcId of visible) {
+    // 仅标记真正在此地的 NPC（与 getVisibleNpcsAtLocation 一致）
+    if (state.npcLocations[npcId] === locationId) {
+      recordNpcEncounter(state, npcId);
+    }
   }
 }
 

@@ -5,7 +5,11 @@ import Link from "next/link";
 import Image from "next/image";
 import { CHAPTER0_IMAGES } from "@/game/assets";
 import GardenCodex from "@/components/world/GardenCodex";
-import { WORLD_STATE_STORAGE_KEY } from "@/hooks/useWorldSave";
+import {
+  SAVE_SLOTS,
+  slotKey,
+  LEGACY_WORLD_STATE_KEY,
+} from "@/hooks/useWorldSave";
 import {
   getUnlockedCrossSessionMarkIds,
   getCollectedResonanceIds,
@@ -14,19 +18,37 @@ import {
 } from "@/services/achievement/globalTracker";
 import type { EdenWorldState } from "@/game/world/types";
 
-/** 从游戏存档读取本局已解锁的印记 ID */
-function readSavedUnlockedIds(): string[] {
+/** 读取所有存档槽位（含旧单存档）中的世界状态，用于汇总已解锁印记 */
+function readAllSavedWorldStates(): EdenWorldState[] {
   if (typeof window === "undefined") return [];
-  try {
-    const raw = window.localStorage.getItem(WORLD_STATE_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as Partial<EdenWorldState>;
-    return Array.isArray(parsed.unlockedAchievementIds)
-      ? (parsed.unlockedAchievementIds as string[])
-      : [];
-  } catch {
-    return [];
+  const results: EdenWorldState[] = [];
+  const raws: (string | null)[] = SAVE_SLOTS.map((i) =>
+    window.localStorage.getItem(slotKey(i)),
+  );
+  raws.push(window.localStorage.getItem(LEGACY_WORLD_STATE_KEY));
+  for (const raw of raws) {
+    if (!raw) continue;
+    try {
+      const parsed = JSON.parse(raw) as Partial<EdenWorldState>;
+      if (parsed?.chapterId === "chapter1_garden_voices" && parsed.unlockedAchievementIds) {
+        results.push(parsed as EdenWorldState);
+      }
+    } catch {
+      /* noop */
+    }
   }
+  return results;
+}
+
+/** 从所有游戏存档读取已解锁的印记 ID */
+function readSavedUnlockedIds(): string[] {
+  const ids: string[] = [];
+  for (const s of readAllSavedWorldStates()) {
+    if (Array.isArray(s.unlockedAchievementIds)) {
+      ids.push(...s.unlockedAchievementIds);
+    }
+  }
+  return ids;
 }
 
 export default function GardenPage() {
@@ -35,17 +57,9 @@ export default function GardenPage() {
   const [triggeredEndingIds, setTriggeredEndingIds] = useState<string[]>([]);
 
   useEffect(() => {
-    // 用存档状态刷新跨局累计（如已通关）
-    try {
-      const raw = window.localStorage.getItem(WORLD_STATE_STORAGE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as EdenWorldState;
-        if (parsed.chapterId === "chapter1_garden_voices") {
-          syncFromWorldState(parsed);
-        }
-      }
-    } catch {
-      /* noop */
+    // 用所有存档状态刷新跨局累计（如已通关）
+    for (const s of readAllSavedWorldStates()) {
+      syncFromWorldState(s);
     }
     const saved = readSavedUnlockedIds();
     const cross = getUnlockedCrossSessionMarkIds();

@@ -127,14 +127,74 @@ export const SCENE_PUZZLES: ScenePuzzle[] = [
     },
   },
   {
-    id: "puzzle_east_path_cautious_presence",
+    id: "puzzle_east_path_cautious_presence_day",
     locationId: "east_garden_path",
+    timeOfDay: "day",
     trigger: "explicit_interaction",
     inputMode: "choice",
     resolutionMode: "per_option",
     title: "幽径尽头的问题",
     prompt:
-      "小道在这里戛然而止。前方没有墙，也没有树木阻挡，但无论怎样凝望，都看不见更远的地方。\n四周安静得有些不自然，仿佛只要做出某个选择，眼前的一切就会发生变化。你准备怎么做？",
+      "白天的小道在这里戛然而止。前方没有墙，也没有树木阻挡，但无论怎样凝望，都看不见更远的地方。\n四周安静得有些不自然，仿佛只要做出某个选择，眼前的一切就会发生变化。你准备怎么做？",
+    options: [
+      {
+        id: "echo_of_beings",
+        text: "闭上眼睛，记住远处传来的每一道声音。",
+        tags: ["echo", "presence"],
+        effect: {
+          itemId: "resonance_echo_of_beings",
+          unlockMapNpcLocations: true,
+          feedback:
+            "你闭上眼，远处的声音一一落下位置。即使看不见他们，你也能从回声里分辨出每个人所在的地方。",
+        },
+      },
+      {
+        id: "sober_eye",
+        text: "睁大眼睛，尝试看清那些不自然的细节。",
+        tags: ["observation", "clarity"],
+        effect: {
+          itemId: "resonance_sober_eye",
+          apMaxBonusDay: 1,
+          feedback: "光影与时间之间细微的不协调，开始在你眼里显形。",
+        },
+      },
+      {
+        id: "twin_tree_memory",
+        text: "回想园子中央那两棵始终看不真切的树。",
+        tags: ["memory", "trees"],
+        effect: {
+          itemId: "resonance_twin_tree_memory",
+          unlockTreeNames: true,
+          feedback: "两棵树的轮廓逐渐在你的记忆中变得清晰，你终于能分清左侧与右侧。",
+        },
+      },
+      {
+        id: "futile_struggle",
+        text: "不顾一切地向前冲去，试图撞破眼前的一切。",
+        tags: ["struggle", "force"],
+        effect: {
+          zeroActionPoints: true,
+          resultTitle: "徒劳的挣扎",
+          feedback:
+            "你向前冲去，却像撞进了一片无形的深水。等你重新站稳时，眼前的景象没有任何改变，力气却已经消耗殆尽。",
+        },
+      },
+    ],
+    // per_option 模式不使用以下字段，仅为满足类型占位
+    successFeedback: "",
+    rewards: {},
+    failure: { hint: "" },
+  },
+  {
+    id: "puzzle_east_path_cautious_presence_night",
+    locationId: "east_garden_path",
+    timeOfDay: "night",
+    trigger: "explicit_interaction",
+    inputMode: "choice",
+    resolutionMode: "per_option",
+    title: "幽径尽头的问题",
+    prompt:
+      "夜晚的小道在这里戛然而止。月光下前方没有墙，也没有树木阻挡，但无论怎样凝望，都看不见更远的地方。\n四周安静得有些不自然，仿佛只要做出某个选择，眼前的一切就会发生变化。你准备怎么做？",
     options: [
       {
         id: "echo_of_beings",

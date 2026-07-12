@@ -11,6 +11,7 @@
 
 import { useState, useCallback, useRef, useEffect, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   initialEdenWorldState,
@@ -71,7 +72,8 @@ import {
 } from "@/services/achievement/globalTracker";
 import NpcStatusHint from "@/components/world/NpcStatusHint";
 import { computeWhisperFeedback } from "@/content/world/whisperFeedback";
-import { useWorldSave } from "@/hooks/useWorldSave";
+import { useWorldSave, type SaveSlotIndex, type SaveSlotMeta } from "@/hooks/useWorldSave";
+import { recordEncounterForVisibleNpcs } from "@/game/world/npcRelationRules";
 
 // ---- 对话历史条目（按 NPC 区分） ----
 type HistoryEntry = { role: "serpent" | "npc"; text: string };
@@ -372,13 +374,13 @@ function getLocationBg(locationId: EdenLocationId, timeOfDay: TimeOfDay, timeSlo
 }
 
 // ---- NPC 立绘映射（女人/亚当复用 Chapter 0 立绘，刺猬用第一章圆润版） ----
-const NPC_SPRITE: Partial<Record<EdenNpcId, { src: string; alt: string; w: number; h: number }>> = {
-  eve: { src: CHAPTER0_IMAGES.eveFullbodySprite, alt: "女人", w: 380, h: 760 },
-  adam: { src: CHAPTER0_IMAGES.adamFullbodySprite, alt: "亚当", w: 320, h: 640 },
-  hedgehog: { src: CHAPTER1_IMAGES.hedgehogRoundedSprite, alt: "刺猬", w: 1254, h: 1254 },
-  gabriel: { src: CHAPTER1_IMAGES.gabrielSprite, alt: "加百列", w: 1023, h: 1537 },
-  michael: { src: CHAPTER1_IMAGES.michaelSprite, alt: "米迦勒", w: 1023, h: 1537 },
-  lucifer: { src: CHAPTER1_IMAGES.luciferSprite, alt: "路西法", w: 1023, h: 1537 },
+const NPC_SPRITE: Partial<Record<EdenNpcId, { src: string; alt: string; w: number; h: number; objectPosition?: string }>> = {
+  eve: { src: CHAPTER0_IMAGES.eveFullbodySprite, alt: "女人", w: 380, h: 760, objectPosition: "50% 18%" },
+  adam: { src: CHAPTER0_IMAGES.adamFullbodySprite, alt: "亚当", w: 320, h: 640, objectPosition: "50% 20%" },
+  hedgehog: { src: CHAPTER1_IMAGES.hedgehogRoundedSprite, alt: "刺猬", w: 1254, h: 1254, objectPosition: "50% 35%" },
+  gabriel: { src: CHAPTER1_IMAGES.gabrielSprite, alt: "加百列", w: 1023, h: 1537, objectPosition: "50% 15%" },
+  michael: { src: CHAPTER1_IMAGES.michaelSprite, alt: "米迦勒", w: 1023, h: 1537, objectPosition: "50% 15%" },
+  lucifer: { src: CHAPTER1_IMAGES.luciferSprite, alt: "路西法", w: 1023, h: 1537, objectPosition: "50% 15%" },
 };
 
 // ---- 地图热点配置（百分比坐标，贴合最终地图） ----
@@ -453,7 +455,7 @@ function normalizeWorldStateForClient(s: EdenWorldState): EdenWorldState {
 
 // ---- 深拷贝初始状态 ----
 function makeInitialState(): EdenWorldState {
-  return normalizeWorldStateForClient({
+  const next = normalizeWorldStateForClient({
     ...initialEdenWorldState,
     actionPoints: initialEdenWorldState.actionPoints,
     maxActionPoints: initialEdenWorldState.maxActionPoints,
@@ -490,6 +492,9 @@ function makeInitialState(): EdenWorldState {
     calmWhisperStreak: initialEdenWorldState.calmWhisperStreak,
     lastInputTag: initialEdenWorldState.lastInputTag,
   });
+  // 初始即把当前地点（万物受名处）可见 NPC 标记为已见，使万物名录对初始在场角色即时生效
+  recordEncounterForVisibleNpcs(next, next.locationId);
+  return next;
 }
 
 // ---- SSE 流式响应消费（仅对白逐字；尾帧携带完整 state） ----
@@ -1384,7 +1389,8 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
       if (!puzzle) return;
       if (state.completedScenePuzzleIds.includes(puzzle.id)) {
         const completedHint: Record<string, string> = {
-          puzzle_east_path_cautious_presence: "前方仍旧空无一物。",
+          puzzle_east_path_cautious_presence_day: "前方仍旧空无一物。",
+          puzzle_east_path_cautious_presence_night: "前方仍旧空无一物。",
           puzzle_river_words_belonging: "水声依旧，却不再回应你的选择。",
         };
         setSystemHint(
@@ -1509,19 +1515,49 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
     }
   }, []);
 
-  // ---- 存档：抽取到 useWorldSave（键名与数据格式与原有完全一致） ----
+  // ---- 存档：抽取到 useWorldSave（四槽位独立，旧单存档自动迁移） ----
   const handleSaveLoad = useCallback((s: EdenWorldState) => {
+    // 读档后把当前地点可见 NPC 标记为已见（万物名录即时刷新）
+    recordEncounterForVisibleNpcs(s, s.locationId);
     setState(s);
     setSelectedMapLocationId(s.locationId);
     lastPuzzleLocationRef.current = s.locationId;
   }, []);
   const handleSaveAfterLoad = useCallback(() => {}, []);
-  const { lastSavedAt, dirty, save, load, reset } = useWorldSave({
+  const { lastSavedAt, dirty, save, load, reset, getSlotMetas } = useWorldSave({
     state,
     onLoad: handleSaveLoad,
     onAfterLoad: handleSaveAfterLoad,
     onReset: handleRestart,
   });
+
+  const [slotMetas, setSlotMetas] = useState<SaveSlotMeta[]>([]);
+  const router = useRouter();
+
+  const handleSaveToSlot = useCallback(
+    (i: SaveSlotIndex) => {
+      save(i);
+      setSlotMetas(getSlotMetas());
+    },
+    [save, getSlotMetas],
+  );
+  const handleLoadFromSlot = useCallback(
+    (i: SaveSlotIndex) => {
+      load(i);
+      setSlotMetas(getSlotMetas());
+    },
+    [load, getSlotMetas],
+  );
+  const handleResetAll = useCallback(() => {
+    reset();
+    setSlotMetas(getSlotMetas());
+  }, [reset, getSlotMetas]);
+
+  // 打开设置弹窗时刷新槽位摘要
+  useEffect(() => {
+    if (settingsOpen) setSlotMetas(getSlotMetas());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settingsOpen]);
 
 // ---- 时段显示辅助 ----
 function getTimeSlotDisplay(timeSlot: number, dayIndex: number, timeOfDay: TimeOfDay): string {
@@ -1564,7 +1600,11 @@ const riverPuzzle = getScenePuzzleById("puzzle_river_words_belonging");
 const riverCompleted = riverPuzzle
   ? state.completedScenePuzzleIds.includes(riverPuzzle.id)
   : false;
-const eastPathPuzzle = getScenePuzzleById("puzzle_east_path_cautious_presence");
+const eastPathPuzzleId =
+  state.timeOfDay === "day"
+    ? "puzzle_east_path_cautious_presence_day"
+    : "puzzle_east_path_cautious_presence_night";
+const eastPathPuzzle = getScenePuzzleById(eastPathPuzzleId);
 const eastPathCompleted = eastPathPuzzle
   ? state.completedScenePuzzleIds.includes(eastPathPuzzle.id)
   : false;
@@ -1923,14 +1963,16 @@ const whisperCountForActiveNpc = activeNpc
             </button>
           )}
 
-          {/* 东园幽径：显式可点击，不自动弹窗 */}
+          {/* 东园幽径：显式可点击，不自动弹窗（昼夜独立谜题） */}
           {state.locationId === "east_garden_path" && (
             <button
               type="button"
-              className={`eden-east-path-entry ${eastPathCompleted ? "eden-east-path-entry--completed" : ""}`}
+              className={`eden-east-path-entry eden-east-path-entry--${state.timeOfDay} ${
+                eastPathCompleted ? "eden-east-path-entry--completed" : ""
+              }`}
               onClick={(event) => {
                 event.stopPropagation();
-                handleScenePuzzleClick("puzzle_east_path_cautious_presence");
+                handleScenePuzzleClick(eastPathPuzzleId);
               }}
               disabled={isLoading || !isExploreActive}
               aria-label={eastPathCompleted ? "幽径尽头，前方空无一物" : "走向幽径尽头"}
@@ -2213,9 +2255,11 @@ const whisperCountForActiveNpc = activeNpc
           setLoginOpen(true);
         }}
         onLogout={handleLogout}
-        onSave={save}
-        onLoad={load}
-        onReset={reset}
+        onSave={handleSaveToSlot}
+        onLoad={handleLoadFromSlot}
+        onReset={handleResetAll}
+        onGoHome={() => router.push("/")}
+        slotMetas={slotMetas}
         lastSavedAt={lastSavedAt}
         dirty={dirty}
       />
@@ -3013,6 +3057,7 @@ const whisperCountForActiveNpc = activeNpc
                                 height={28}
                                 className="eden-map-hotspot-avatar"
                                 title={EDEN_NPCS[id].name}
+                                style={{ objectPosition: sprite.objectPosition ?? "50% 20%" }}
                               />
                             );
                           })}

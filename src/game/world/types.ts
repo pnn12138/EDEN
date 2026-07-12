@@ -351,6 +351,9 @@ export type EdenWorldState = {
   /** 当前蛇所在地点 */
   locationId: EdenLocationId;
 
+  /** 玩家名称（刻名石留名，持久化到存档） */
+  playerName: string;
+
   /** 神的注视（0-4，作为可视化当前等级；累计量见 divineAttentionCumulative） */
   divineAttention: DivineAttentionLevel;
 
@@ -506,6 +509,7 @@ export const initialEdenWorldState: EdenWorldState = {
     hasWhisperedToWoman: false,
   },
   locationId: "adam_garden_work",
+  playerName: "",
   divineAttention: 0,
   activeNpcId: null,
   npcLocations: {
@@ -623,6 +627,16 @@ export function withNpcWorldDefaults(
   ) {
     base.inventory.push("resonance_living_names");
     base.itemCounts["resonance_living_names"] = 1;
+  }
+
+  // 旧东园幽径谜题（单 id）拆为昼夜两个独立谜题：旧存档完成过则视为白天已完成
+  if (base.completedScenePuzzleIds.includes("puzzle_east_path_cautious_presence")) {
+    if (!base.completedScenePuzzleIds.includes("puzzle_east_path_cautious_presence_day")) {
+      base.completedScenePuzzleIds.push("puzzle_east_path_cautious_presence_day");
+    }
+    base.completedScenePuzzleIds = base.completedScenePuzzleIds.filter(
+      (id) => id !== "puzzle_east_path_cautious_presence",
+    );
   }
 
   // 旧存档迁移：uriel -> lucifer（路西法正名）

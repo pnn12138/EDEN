@@ -7,9 +7,16 @@ import { useRouter } from "next/navigation";
 import { CHAPTER0_IMAGES } from "@/game/assets";
 import LoginModal from "@/components/world/LoginModal";
 import { getAuth, logout, type AuthState } from "@/lib/auth";
+import { SAVE_SLOTS, slotKey, LEGACY_WORLD_STATE_KEY, AUX_KEYS_TO_CLEAR } from "@/hooks/useWorldSave";
 
-// 与 useWorldSave 完全一致的 localStorage 键名（仅用于首页判断是否存在存档）
-const WORLD_SAVE_KEY = "eden:chapter1:world-state:v2";
+// 首页仅判断是否存在任一存档（四槽位中任一有存档即视为有存档）
+function hasAnyWorldSave(): boolean {
+  try {
+    return SAVE_SLOTS.some((i) => !!window.localStorage.getItem(slotKey(i)));
+  } catch {
+    return false;
+  }
+}
 
 export default function HomePage() {
   const router = useRouter();
@@ -22,11 +29,7 @@ export default function HomePage() {
   // 挂载后读取登录态与存档标记（localStorage 仅在客户端访问）
   useEffect(() => {
     setAuth(getAuth());
-    try {
-      setHasSave(!!window.localStorage.getItem(WORLD_SAVE_KEY));
-    } catch {
-      setHasSave(false);
-    }
+    setHasSave(hasAnyWorldSave());
   }, []);
 
   // 点击外部关闭用户下拉菜单
@@ -38,11 +41,7 @@ export default function HomePage() {
   }, [menuOpen]);
 
   const refreshHasSave = () => {
-    try {
-      setHasSave(!!window.localStorage.getItem(WORLD_SAVE_KEY));
-    } catch {
-      setHasSave(false);
-    }
+    setHasSave(hasAnyWorldSave());
   };
 
   const handleAdventure = () => {
@@ -57,7 +56,10 @@ export default function HomePage() {
 
   const handleNewGame = () => {
     try {
-      window.localStorage.removeItem(WORLD_SAVE_KEY);
+      // 新游戏：清除全部四槽位 + 旧单存档 + 辅助 key，进入 /world 即全新开局
+      SAVE_SLOTS.forEach((i) => window.localStorage.removeItem(slotKey(i)));
+      window.localStorage.removeItem(LEGACY_WORLD_STATE_KEY);
+      AUX_KEYS_TO_CLEAR.forEach((k) => window.localStorage.removeItem(k));
     } catch {
       /* noop */
     }
