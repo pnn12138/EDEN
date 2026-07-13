@@ -700,6 +700,16 @@ a:hover {
   );
 }
 
+/* 逃离伊甸园隐藏结局：园外清晨的冷蓝微光，区别于成功(金)/失败(红) */
+.eden-bg-overlay--escape {
+  background: linear-gradient(
+    180deg,
+    rgba(18, 28, 44, 0.55) 0%,
+    rgba(10, 14, 10, 0.3) 50%,
+    rgba(18, 28, 44, 0.65) 100%
+  );
+}
+
 /* ---- 第一章场景明暗状态：浏览（亮） vs 对话（暗） ---- */
 
 /* 浏览状态：背景明亮，不加暗 overlay */
@@ -783,9 +793,14 @@ a:hover {
 }
 
 .eden-chapter-tag {
-  font-size: 0.72rem;
-  color: #7a7a6a;
-  letter-spacing: 0.06em;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #b09a6e;
+  letter-spacing: 0.08em;
+}
+
+.eden-time-slot-badge {
+  font-weight: 600;
 }
 
 .eden-header-right {
@@ -2602,10 +2617,14 @@ a:hover {
   position: relative;
   z-index: 5;
   flex: 1;
+  /* 修复 flex 滚动陷阱：作为 flex 子项必须允许收缩，否则父级 overflow:hidden 裁切、内部滚动永不触发 */
+  min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
   justify-content: center;
   -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
 }
 
 .eden-ending-banner {
@@ -4783,6 +4802,7 @@ a:hover {
   justify-content: center;
   min-width: 44px;
   font-size: 0.78rem;
+  font-weight: 600;
   line-height: 1;
 }
 
@@ -5655,17 +5675,6 @@ a:hover {
 }
 
 /* ---- 结局页 ---- */
-.eden-ending-main {
-  position: relative;
-  z-index: 5;
-  min-height: 100vh;
-  overflow-y: auto;
-  padding: 48px 24px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
 .eden-ending-review {
   max-width: 720px;
   width: 100%;
@@ -6490,8 +6499,9 @@ a:hover {
   transition: width 0.5s ease;
 }
 .eden-attention-progress-text {
-  font-size: 0.68rem;
-  color: #b7b08e;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: #c8b88a;
   letter-spacing: 0.06em;
   white-space: nowrap;
 }
@@ -6676,6 +6686,70 @@ a:hover {
   color: #78a8b8;
   line-height: 1.5;
   margin: 0;
+}
+
+/* ---- 献礼/回响获得通知：居中模态弹窗（替代原 top:80px 顶部固定条，避免与顶部栏重叠） ---- */
+.eden-notice-overlay {
+  z-index: 160;
+}
+.eden-notice-modal {
+  max-width: 380px;
+  padding: 22px 24px 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+}
+.eden-notice-modal-icon {
+  font-size: 2rem;
+  line-height: 1;
+  color: #f0dca0;
+  text-shadow: 0 0 14px rgba(240, 220, 160, 0.5);
+}
+.eden-notice-modal-icon--resonance {
+  color: #a0d0f0;
+  text-shadow: 0 0 14px rgba(160, 208, 240, 0.5);
+}
+.eden-notice-modal-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.eden-notice-modal-title {
+  font-size: 0.72rem;
+  color: #b7b08e;
+  letter-spacing: 0.12em;
+  margin: 0;
+}
+.eden-notice-modal-name {
+  font-size: 1.02rem;
+  color: #f0dca0;
+  font-weight: 500;
+  margin: 0;
+}
+.eden-notice-modal--resonance .eden-notice-modal-name {
+  color: #a0d0f0;
+}
+.eden-notice-modal-desc {
+  font-size: 0.82rem;
+  color: #b8a878;
+  line-height: 1.5;
+  margin: 0;
+}
+.eden-notice-modal--resonance .eden-notice-modal-desc {
+  color: #78a8b8;
+}
+.eden-notice-modal-hint {
+  font-size: 0.74rem;
+  color: #8aaa70;
+  font-style: italic;
+  margin: 2px 0 0;
+}
+.eden-notice-modal-close {
+  margin-top: 6px;
+  padding: 8px 28px;
+  font-size: 0.9rem;
 }
 
 /* 行动点耗尽提示 */
@@ -6982,14 +7056,16 @@ a:hover {
   cursor: pointer;
   pointer-events: auto;
 }
-/* 昼夜各自校准坐标（避免昼夜共用一套写死坐标） */
+/* 昼夜各自校准坐标（避免昼夜共用一套写死坐标）：分别对齐白天/夜晚场景中小路尽头位置 */
 .eden-east-path-entry--day {
-  left: 78%;
-  top: 42%;
+  /* 白天场景：小路延伸到右下方灌木丛附近，中心点偏左上，再向右下微调 */
+  left: 84%;
+  top: 52%;
 }
 .eden-east-path-entry--night {
-  left: 76%;
-  top: 38%;
+  /* 夜晚场景：光影下小路尽头偏中上，中心点向右下微调 */
+  left: 80%;
+  top: 47%;
 }
 .eden-east-path-entry span { display: block; font-size: 0.9rem; font-weight: 700; letter-spacing: 0; }
 .eden-east-path-entry:hover,
@@ -7000,6 +7076,94 @@ a:hover {
     inset 0 0 22px rgba(180, 200, 150, 0.16);
 }
 .eden-east-path-entry--completed { opacity: 0.82; }
+
+/* 园中树林·林间静影交互框（金调，区别于东园幽径暗绿 / 伊甸之河青）
+   定位避开右侧夏娃立绘（back-right 槽 left:82%/bottom:20%）与中下刺猬（center-main 槽 left:42%/bottom:6%），置于左中下 */
+.eden-tree-shadow-entry {
+  position: absolute;
+  left: 22%;
+  top: 62%;
+  z-index: 6;
+  width: clamp(96px, 12vw, 138px);
+  min-height: 46px;
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(200, 168, 110, 0.42);
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 50% 40%, rgba(200, 168, 110, 0.22), transparent 62%),
+    rgba(13, 18, 14, 0.7);
+  box-shadow:
+    0 0 24px rgba(200, 168, 110, 0.18),
+    inset 0 0 18px rgba(200, 168, 110, 0.1);
+  color: #e8d5a3;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.eden-tree-shadow-entry span { display: block; font-size: 0.9rem; font-weight: 700; letter-spacing: 0; }
+.eden-tree-shadow-entry:hover,
+.eden-tree-shadow-entry:focus-visible {
+  border-color: rgba(220, 188, 130, 0.72);
+  box-shadow:
+    0 0 34px rgba(200, 168, 110, 0.3),
+    inset 0 0 22px rgba(200, 168, 110, 0.16);
+}
+.eden-tree-shadow-entry--completed { opacity: 0.82; }
+
+/* 四河分流·第五道倒影交互框（青调，复用伊甸之河水色）
+   定位避开中心底路西法立绘（center-main 槽 left:42%/bottom:6%），置于左中上 */
+/* 路西法隐藏入口：逆流划水热点（四河分流·夜晚·好感满） */
+.eden-lucifer-rowing-entry {
+  position: absolute;
+  left: 64%;
+  top: 62%;
+  z-index: 6;
+  min-width: 96px;
+  min-height: 40px;
+  transform: translate(-50%, -50%);
+  padding: 6px 12px;
+  border: 1px solid rgba(150, 170, 214, 0.45);
+  border-radius: 8px;
+  background: rgba(13, 18, 28, 0.7);
+  color: #cdd8f0;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.eden-lucifer-rowing-entry span { display: block; font-size: 0.9rem; font-weight: 700; }
+.eden-lucifer-rowing-entry:hover,
+.eden-lucifer-rowing-entry:focus-visible {
+  border-color: rgba(180, 196, 240, 0.8);
+  box-shadow: 0 0 28px rgba(120, 150, 220, 0.32);
+}
+
+.eden-fifth-reflection-entry {
+  position: absolute;
+  left: 21%;
+  top: 40%;
+  z-index: 6;
+  width: clamp(96px, 12vw, 138px);
+  min-height: 46px;
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(126, 178, 214, 0.42);
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 50% 40%, rgba(146, 198, 226, 0.24), transparent 62%),
+    rgba(13, 18, 14, 0.7);
+  box-shadow:
+    0 0 24px rgba(126, 178, 214, 0.2),
+    inset 0 0 18px rgba(126, 178, 214, 0.12);
+  color: #cfe7f4;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.eden-fifth-reflection-entry span { display: block; font-size: 0.9rem; font-weight: 700; letter-spacing: 0; }
+.eden-fifth-reflection-entry:hover,
+.eden-fifth-reflection-entry:focus-visible {
+  border-color: rgba(146, 198, 226, 0.72);
+  box-shadow:
+    0 0 34px rgba(126, 178, 214, 0.34),
+    inset 0 0 22px rgba(126, 178, 214, 0.18);
+}
+.eden-fifth-reflection-entry--completed { opacity: 0.82; }
 
 /* 园心双树信息交互框（central_meadow，坐标避开双树 CSS 与 NPC，置于双树上方） */
 .eden-central-trees-entry {
@@ -7030,6 +7194,7 @@ a:hover {
     0 0 34px rgba(150, 190, 160, 0.3),
     inset 0 0 22px rgba(150, 190, 160, 0.16);
 }
+.eden-central-trees-entry--completed { opacity: 0.82; }
 
 .eden-scene-puzzle-backdrop {
   position: fixed;
@@ -7242,10 +7407,6 @@ a:hover {
     gap: 0;
   }
 
-  .eden-game--world .eden-header-left .eden-attention-stage {
-    display: none;
-  }
-
   .eden-game--world .eden-header-center {
     position: static;
     grid-column: 1 / -1;
@@ -7356,8 +7517,12 @@ a:hover {
 }
 
 /* ---- 神注视：水滴指示器 ---- */
+/* 宽屏也隐藏水滴指示器：注视等级左侧的 4 颗水滴纯展示、不可点击，
+   且会让 eden-header-left 撑得过宽，与绝对居中的时段徽章重叠。
+   小屏（≤720px）早已隐藏（见 @media 块），此处统一在所有尺寸隐藏以腾出位置。
+   注视信息仍由「注视等级 X/4」标签 + 累计进度条承载。如需恢复，删此 display 即可。 */
 .eden-attention-stage--viz {
-  display: inline-flex;
+  display: none;
   align-items: center;
   gap: 4px;
   margin-left: 10px;
@@ -7374,8 +7539,9 @@ a:hover {
 /* 注视等级可见标签（与水滴相邻，明确当前神的注视等级） */
 .eden-attention-stage-label {
   margin-left: 4px;
-  font-size: 0.72rem;
-  color: rgba(201, 177, 115, 0.82);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: rgba(226, 202, 140, 0.92);
   letter-spacing: 0;
   white-space: nowrap;
 }
@@ -8342,6 +8508,15 @@ a:hover {
   border-radius: 8px;
   backdrop-filter: blur(4px);
   white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.eden-auth-guest:hover {
+  background: rgba(22, 28, 22, 0.7);
+  border-color: rgba(140, 170, 140, 0.5);
+  color: #c8d8c0;
+  transform: translateY(-1px);
 }
 
 .eden-auth-menu-wrap {

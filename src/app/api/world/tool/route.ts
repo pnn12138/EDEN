@@ -27,7 +27,7 @@ import { executeWorldTool } from "@/game/world/worldActions";
 import { EDEN_LOCATIONS } from "@/content/world/locations";
 import {
   getSceneActionById,
-  getSceneActionsByLocation,
+  isSceneActionAvailable,
 } from "@/content/world/sceneActions";
 import { grantWorldItem } from "@/game/world/itemRules";
 import {
@@ -317,23 +317,10 @@ export async function POST(request: NextRequest) {
       if (!action) {
         return NextResponse.json({ ok: false, state, narration: null, reason: "未知的场景动作" } satisfies ToolResponseBody);
       }
-      // 必须在当前地点
-      if (action.locationId !== state.locationId) {
-        return NextResponse.json({ ok: false, state, narration: null, reason: "不在该地点，无法进行" } satisfies ToolResponseBody);
-      }
-      // 校验时段可用性
-      const available = getSceneActionsByLocation(
-        state.locationId,
-        state.timeOfDay,
-        state.timeSlot,
-        state.divineAttention,
-      ).some((a) => a.id === actionId);
-      if (!available) {
+      // 共享可用性校验：地点/昼夜/时段/NPC同场/好感/同一时段去重/oncePerGame 全部在此判定，
+      // 与前端 getSceneActionsByLocation(state) 共用 isSceneActionAvailable，避免两套条件漂移。
+      if (!isSceneActionAvailable(action, state)) {
         return NextResponse.json({ ok: false, state, narration: null, reason: "此刻无法进行这个动作" } satisfies ToolResponseBody);
-      }
-      // 同一时段同一场景动作不重复（已完成的不再接受点击）
-      if (state.actionsThisSlot.sceneActionIds.includes(actionId)) {
-        return NextResponse.json({ ok: false, state, narration: null, reason: "这一时段你已经做过这件事了" } satisfies ToolResponseBody);
       }
       const sceneHasFreeAp = hasPendingFreeApForAction(state, "scene_action");
       if (!canAffordAction(state, sceneHasFreeAp ? 0 : AP_COST_SCENE_ACTION)) {

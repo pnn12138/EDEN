@@ -436,5 +436,15 @@ check("useWorldSave.ts normalizeWorldStateForClient 深拷贝 hiddenTopicIds", h
 // normalize/clone 两处都应出现（normalizePuzzleState + cloneWorldStateForPuzzle）
 check("puzzleRules.ts hiddenTopicIds 展开出现至少 2 次", (puzzleRulesSrc.match(/\[\.\.\.\((?:base|s|state)\.hiddenTopicIds/g) || []).length >= 2);
 
+// ---- 路西法隐藏入口：逆流划水与共享可用性校验 ----
+const sceneActionsSrc = read("src/content/world/sceneActions.ts");
+check("sceneActions.ts 导出 isSceneActionAvailable", sceneActionsSrc.includes("export function isSceneActionAvailable"));
+check("sceneActions.ts getSceneActionsByLocation 只收 state", sceneActionsSrc.includes("getSceneActionsByLocation(state: EdenWorldState)"));
+check("sceneActions.ts 含 interact_lucifer_rowing 动作", sceneActionsSrc.includes("interact_lucifer_rowing"));
+check("sceneActions.ts 划水动作 oncePerGame", sceneActionsSrc.includes("oncePerGame: true"));
+check("page.tsx 渲染划水热点 testid", worldPage.includes('data-testid="scene-action-lucifer-rowing"'));
+check("page.tsx getSceneActionsByLocation 改用 state 单参", worldPage.includes("getSceneActionsByLocation(state)"));
+check("tool/route.ts 调用 isSceneActionAvailable", toolRouteSrc.includes("isSceneActionAvailable(action, state)"));
+
 console.log(`\n结果: ${pass} 通过, ${fail} 失败`);
 process.exit(fail > 0 ? 1 : 0);

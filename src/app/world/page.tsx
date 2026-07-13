@@ -1664,8 +1664,7 @@ const isExploreActive = state.phase === "explore" && !state.isEnded;
 const divineNarrationText = divineNarration ?? DIVINE_ATTENTION_NARRATIONS[state.divineAttention];
 const currentLocationBg = getLocationBg(state.locationId, state.timeOfDay, state.timeSlot);
 const availableSceneActions: SceneAction[] = isExploreActive
-  ? getSceneActionsByLocation(state.locationId, state.timeOfDay, state.timeSlot, state.divineAttention)
-      .filter((a) => !state.actionsThisSlot.sceneActionIds.includes(a.id))
+  ? getSceneActionsByLocation(state)
   : [];
 const namingStonePuzzle = getScenePuzzleById("puzzle_naming_stone_identity");
 const namingStoneCompleted = namingStonePuzzle
@@ -2119,6 +2118,24 @@ const whisperCountForActiveNpc = activeNpc
               data-testid="scene-action-fifth-reflection"
             >
               <span>第五道倒影</span>
+            </button>
+          )}
+
+          {/* 四河分流·路西法隐藏入口：逆流划水（仅在共享校验通过时渲染） */}
+          {availableSceneActions.some((a) => a.id === "interact_lucifer_rowing") && (
+            <button
+              type="button"
+              className="eden-lucifer-rowing-entry"
+              data-testid="scene-action-lucifer-rowing"
+              onClick={(event) => {
+                event.stopPropagation();
+                void handleToolCall("scene_action", { sceneActionId: "interact_lucifer_rowing" });
+              }}
+              disabled={isLoading || !isExploreActive}
+              aria-label="逆流划水"
+              title="把身体横在第五道倒影上"
+            >
+              <span>逆流划水</span>
             </button>
           )}
 
