@@ -1344,6 +1344,43 @@ async function scenarioEndedContracts() {
   }
 }
 
+// ---- 场景 38：旧存档缺隐藏结局字段时补默认值 ----
+async function scenarioOldSaveDefaults() {
+  console.log("\n[场景 38] 旧存档缺隐藏结局字段时补默认值");
+  // /api/world
+  {
+    const base = makeInitialState();
+    delete base.michaelSlayClaimed;
+    delete base.luciferAwakenClaimed;
+    delete base.hiddenTopicIds;
+    const data = await postWorld(base, "你这里都做些什么？", "adam");
+    check("/api/world 旧存档 michaelSlayClaimed=false", data.state && data.state.michaelSlayClaimed === false, `actual=${data.state?.michaelSlayClaimed}`);
+    check("/api/world 旧存档 luciferAwakenClaimed=false", data.state && data.state.luciferAwakenClaimed === false);
+    check("/api/world 旧存档 hiddenTopicIds=[]", data.state && Array.isArray(data.state.hiddenTopicIds) && data.state.hiddenTopicIds.length === 0);
+  }
+  // /api/world/tool (move)
+  {
+    const base = makeInitialState();
+    delete base.michaelSlayClaimed;
+    delete base.luciferAwakenClaimed;
+    delete base.hiddenTopicIds;
+    const data = await postTool(base, "move_to_location", { locationId: "central_meadow" });
+    check("/api/world/tool 旧存档 michaelSlayClaimed=false", data.state && data.state.michaelSlayClaimed === false);
+    check("/api/world/tool 旧存档 hiddenTopicIds=[]", data.state && Array.isArray(data.state.hiddenTopicIds) && data.state.hiddenTopicIds.length === 0);
+  }
+  // /api/world/puzzle
+  {
+    const base = makeInitialState();
+    base.locationId = "east_garden_path";
+    base.timeOfDay = "day";
+    delete base.michaelSlayClaimed;
+    delete base.luciferAwakenClaimed;
+    delete base.hiddenTopicIds;
+    const r = await postPuzzleWithStatus(base, "puzzle_east_path_cautious_presence_day", "echo_of_beings");
+    check("/api/world/puzzle 旧存档 hiddenTopicIds=[]", r.data && r.data.result && Array.isArray(r.data.result.state.hiddenTopicIds) && r.data.result.state.hiddenTopicIds.length === 0, `result=${!!r.data?.result}`);
+  }
+}
+
 // ---- 运行 ----
 console.log(`目标: ${BASE}`);
 try {
@@ -1382,6 +1419,7 @@ try {
   await scenarioLuciferRowing();
   await scenarioEscapeEden();
   await scenarioEndedContracts();
+  await scenarioOldSaveDefaults();
   }
 } catch (e) {
   console.error("运行异常:", e.message);

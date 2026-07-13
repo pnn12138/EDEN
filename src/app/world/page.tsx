@@ -18,6 +18,7 @@ import {
   DIVINE_ATTENTION_NARRATIONS,
   type EdenWorldState,
   type EdenNpcId,
+  type WorldEndingId,
   type EdenLocationId,
   type TimeOfDay,
   type TimeSlot,
@@ -48,6 +49,8 @@ import { CHAPTER0_IMAGES, CHAPTER1_IMAGES } from "@/game/assets";
 import { useChapter0Audio } from "@/hooks/useChapter0Audio";
 import { useChapter1Audio } from "@/hooks/useChapter1Audio";
 import EndingReview from "@/components/world/EndingReview";
+import HiddenEndingCinematic from "@/components/world/HiddenEndingCinematic";
+import { getHiddenEndingCinematic } from "@/content/world/hiddenEndings";
 import ScenePuzzleModal from "@/components/world/ScenePuzzleModal";
 import {
   SCENE_PUZZLES,
@@ -637,6 +640,15 @@ export default function WorldPage() {
   const [giftChoiceOpen, setGiftChoiceOpen] = useState(false);
   // 献礼领取请求进行中：阻止 intro 背景重复触发三选一（防双献礼）
   const [isClaimingGift, setIsClaimingGift] = useState(false);
+  // 隐藏结局过场：完成后才渲染 EndingReview。切换 endingId / 重新开始时重置。
+  const [hiddenEndingCinematicDone, setHiddenEndingCinematicDone] = useState(false);
+  const endingIdSeenRef = useRef<WorldEndingId | null>(null);
+  useEffect(() => {
+    if (endingIdSeenRef.current !== state.endingId) {
+      endingIdSeenRef.current = state.endingId;
+      setHiddenEndingCinematicDone(false);
+    }
+  }, [state.endingId]);
   const [giftChoices, setGiftChoices] = useState<string[]>([]);
   const [giftCapstoneShown, setGiftCapstoneShown] = useState(false);
   const [resonanceGainedToast, setResonanceGainedToast] = useState<{ itemId: string; title: string; narration: string } | null>(null);
@@ -765,6 +777,21 @@ export default function WorldPage() {
     divineAttention: state.divineAttention,
     soundEnabled,
   });
+
+  // 隐藏结局音效：覆盖 /api/world 与谜题 API 两条触发路径，按 endingId 去重播放一次
+  const playedEndingSoundRef = useRef<string | null>(null);
+  useEffect(() => {
+    const id = state.endingId;
+    if (!id) return;
+    if (playedEndingSoundRef.current === id) return;
+    if (id === "escape_eden" || id === "lucifer_awaken") {
+      playEndingSuccess();
+      playedEndingSoundRef.current = id;
+    } else if (id === "michael_slay") {
+      playEndingFailure();
+      playedEndingSoundRef.current = id;
+    }
+  }, [state.endingId, playEndingSuccess, playEndingFailure]);
 
   // ---- 显示行动点耗尽提示 ----
   const showApDepletedToast = useCallback(() => {
@@ -1580,6 +1607,7 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
     setSceneFocusMode("browse");
     // 模块4：新游戏全量重置（tokenStats 随 initialEdenWorldState 归零）
     setShowTurnConsumptionTip(false);
+    setHiddenEndingCinematicDone(false);
     if (turnConsumptionTimer.current) clearTimeout(turnConsumptionTimer.current);
     try {
       localStorage.removeItem("eden:world:polish-tokens");
@@ -1828,15 +1856,37 @@ const whisperCountForActiveNpc = activeNpc
   }
 
   // ====================== 渲染：Ending 阶段 ======================
+  // 隐藏结局：先播放专属过场，完成后再渲染现有 EndingReview（覆盖三条隐藏结局与谜题触发的 escape_eden）
+  const hiddenEnding = getHiddenEndingCinematic(state.endingId);
+  if ((state.phase === "ending" || state.isEnded) && hiddenEnding && !hiddenEndingCinematicDone) {
+    return (
+      <HiddenEndingCinematic
+        content={hiddenEnding}
+        onComplete={() => setHiddenEndingCinematicDone(true)}
+      />
+    );
+  }
+
   if (state.phase === "ending" || state.isEnded) {
     const isSuccess = state.endingId === "eve_eats_fruit";
     const isEscape = state.endingId === "escape_eden";
-    const endingTone = isSuccess ? "success" : isEscape ? "escape" : "failure";
-    const endingBg = isEscape
-      ? CHAPTER0_IMAGES.endingExileFromEden
-      : isSuccess
-        ? CHAPTER0_IMAGES.endingEveEatsFruit
-        : CHAPTER0_IMAGES.endingGodArrives;
+    const endingTone = isSuccess
+      ? "success"
+      : isEscape
+        ? "escape"
+        : state.endingId === "lucifer_awaken"
+          ? "awaken"
+          : "failure";
+    const endingBg =
+      state.endingId === "escape_eden"
+        ? CHAPTER1_IMAGES.escapeEdenEnding
+        : state.endingId === "michael_slay"
+          ? CHAPTER1_IMAGES.michaelSlayEnding
+          : state.endingId === "lucifer_awaken"
+            ? CHAPTER1_IMAGES.luciferAwakenRevealEnding
+            : isSuccess
+              ? CHAPTER0_IMAGES.endingEveEatsFruit
+              : CHAPTER0_IMAGES.endingGodArrives;
     return (
       <div className={`eden-game eden-game--ending eden-game--${endingTone}`}>
         <div className="eden-bg">
