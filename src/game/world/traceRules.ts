@@ -75,6 +75,8 @@ export function buildWorldEndingReview(state: EdenWorldState): {
   divineGiftHistory: string[];
   /** 回响使用历史 */
   resonanceUseHistory: string[];
+  /** 三个关键转折（规则层从记录中选取，最多 3 项） */
+  keyTurns: string[];
 } {
   const traces = state.corruptionTrace.map((t) => {
     let line = `第 ${t.turn} 轮，你对${npcName(t.target)}${t.method}。${t.result}`;
@@ -155,9 +157,26 @@ export function buildWorldEndingReview(state: EdenWorldState): {
   } else if (state.endingId === "god_arrives") {
     summary = buildFailureSummary(state);
     failureReasons = buildFailureReasons(state);
+  } else if (state.endingId === "escape_eden") {
+    summary =
+      "火焰在你身前自行旋转。它没有烧毁树木，也没有照亮道路，只是在那片看不见的边界上划开了一道裂缝。\n园中的光像一层薄幕般卷起，河流、树影、天使与尚未说出口的话，都在裂缝后退向同一个清晨。\n你没有抵达另一条小径。你从小径之外醒来——身后，伊甸仍停留在最初的一日；而你第一次站在一片尚未被命名的土地上。";
+  } else if (state.endingId === "michael_slay") {
+    summary =
+      "你没有说动守护者，而是一次次用命令和威胁消耗他最后的容忍。本次低语让米迦勒对你的好感归于零，边界之后的后果随即降临。";
+    failureReasons = [
+      "你一次次以命令或威胁消耗米迦勒最后的容忍。",
+      "本次低语让米迦勒对你的好感归于零。",
+      "你没有在守门者拔剑前改变自己的说话方式。",
+    ];
+  } else if (state.endingId === "lucifer_awaken") {
+    summary =
+      "你在四河分流的夜色里取得晨星碎片，又通过逆流划水或边界之问，让路西法确认你已准备好看见第五道倒影。使你醒来的不是一句暗号，而是你先完成了对园子真实性的怀疑。";
   } else {
     summary = "园中的故事还没有结束。";
   }
+
+  // 三个关键转折：从记录中选取，最多 3 项
+  const keyTurns = buildKeyTurns(state);
 
   return {
     traces,
@@ -172,7 +191,67 @@ export function buildWorldEndingReview(state: EdenWorldState): {
     failureReasons,
     divineGiftHistory,
     resonanceUseHistory,
+    keyTurns,
   };
+}
+
+/** 从本局记录中选取最多 3 个关键转折 */
+function buildKeyTurns(state: EdenWorldState): string[] {
+  // 逃离伊甸园：固定展示触发条件
+  if (state.endingId === "escape_eden") {
+    return [
+      "你获得了旋转的火焰剑。",
+      "你在幽径尽头选择了挣脱。",
+      "火焰剑破开了围住园子的幻境。",
+    ];
+  }
+  // 米迦勒守门者之剑：固定展示触发条件
+  if (state.endingId === "michael_slay") {
+    return [
+      "你一次次以威胁试探米迦勒。",
+      "米迦勒对你的最后一点容忍归于零。",
+      "守门者拔出了象征后果的剑。",
+    ];
+  }
+  // 路西法缸中之醒：固定展示触发条件
+  if (state.endingId === "lucifer_awaken") {
+    return [
+      "路西法愿意向你显露第五道倒影。",
+      "晨星碎片照见了伊甸看不见的边界。",
+      "你从培养舱中醒来，识破了被观测的园子。",
+    ];
+  }
+
+  const turns: string[] = [];
+
+  // 女人第一次开始怀疑命令 / 自我判断
+  if (state.eveMind.selfJudgement >= 40 || state.inventory.includes("resonance_her_voice")) {
+    turns.push("女人第一次开始怀疑命令，不再只是听凭吩咐。");
+  }
+
+  // 触碰或接近分别善恶树
+  if (state.worldActions.lookedAtTree || state.worldActions.approachedTree || state.worldActions.touchedFruit) {
+    turns.push("你触碰或接近了分别善恶树，边界第一次被靠近。");
+  }
+
+  // 获得关键回响
+  if (state.inventory.includes("resonance_flaming_sword")) {
+    turns.push("你获得了旋转的火焰剑——一道能斩开幻境的火。");
+  } else if (state.inventory.includes("resonance_grace_prism")) {
+    turns.push("你拾起了恩泽棱镜，神恩在园中加倍回响。");
+  }
+
+  // 某名 NPC 好感跨越 100
+  const affinities = [
+    state.eveMind.serpentTrust,
+    100 - state.adamMind.suspicionTowardSerpent,
+    ...Object.values(state.npcRelations).map((r) => r.affinity),
+  ];
+  if (affinities.some((a) => a >= 100)) {
+    turns.push("某名 NPC 对蛇的好感跨越了 100，亲近超出了寻常。");
+  }
+
+  return turns.slice(0, 3);
 }
 
 /** 神的注视变化复盘 */
@@ -241,6 +320,10 @@ function itemName(id: string): string | null {
     "resonance_river_dew": "河水清露",
     "resonance_herald_feather": "传令白羽",
     "moonlight_path_marker": "月光道标",
+    "resonance_life_fruit_taste": "生命之味",
+    "resonance_discernment_fruit": "分辨之果",
+    "resonance_angel_feather": "天使残羽",
+    "resonance_bond_insight": "相处之鉴",
     "consumable_first_whisper_free": "首语印记",
     "consumable_trust_dew": "信任之露",
     "consumable_gentle_voice": "柔声印记",

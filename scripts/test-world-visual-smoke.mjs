@@ -446,5 +446,19 @@ check("page.tsx 渲染划水热点 testid", worldPage.includes('data-testid="sce
 check("page.tsx getSceneActionsByLocation 改用 state 单参", worldPage.includes("getSceneActionsByLocation(state)"));
 check("tool/route.ts 调用 isSceneActionAvailable", toolRouteSrc.includes("isSceneActionAvailable(action, state)"));
 
+// ---- 隐藏结局印记 / 图鉴 / 普通结局集合 ----
+const achievementsSrc = read("src/content/world/achievements.ts");
+const endingsGallerySrc = read("src/components/world/EndingsGallery.tsx");
+const globalTrackerSrc = read("src/services/achievement/globalTracker.ts");
+check("achievements 含 mark_michael_slay", achievementsSrc.includes('"mark_michael_slay"'));
+check("achievements mark_michael_slay 为 hidden", /id:\s*"mark_michael_slay"[\s\S]*?hidden:\s*true/.test(achievementsSrc));
+check("achievements 结局类注释为 7", /结局类（7）/.test(achievementsSrc));
+check("EndingsGallery 含 michael_slay", endingsGallerySrc.includes('"michael_slay"'));
+check("EndingsGallery 含 lucifer_awaken", endingsGallerySrc.includes('"lucifer_awaken"'));
+check("EndingsGallery 锁定态不泄露标题", endingsGallerySrc.includes('"尚未达成的结局"'));
+check("globalTracker NORMAL_ENDING_IDS 仅 3 项普通结局", globalTrackerSrc.includes('["eve_eats_fruit", "god_arrives", "life_fruit"]'));
+check("globalTracker NORMAL_ENDING_IDS 不含隐藏结局", !/NORMAL_ENDING_IDS[\s\S]*michael_slay/.test(globalTrackerSrc) && !/NORMAL_ENDING_IDS[\s\S]*lucifer_awaken/.test(globalTrackerSrc));
+check("achievementRules mark_hidden_ending 查 endingId", /endingId === "lucifer_awaken"/.test(puzzleRulesSrc) || /endingId === "lucifer_awaken"/.test(read("src/game/world/achievementRules.ts")));
+
 console.log(`\n结果: ${pass} 通过, ${fail} 失败`);
 process.exit(fail > 0 ? 1 : 0);
