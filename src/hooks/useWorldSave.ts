@@ -80,9 +80,53 @@ type UseWorldSaveOptions = {
   onReset: () => void;
 };
 
+/**
+ * 清空全部本地存档（四手动槽 + 旧单存档 + 辅助 key + 自动保存 + 最近活跃槽）。
+ * 主页「开始新游戏」与 useWorldSave.reset 共用，杜绝漏清某一类存档
+ * （早期 bug：漏清 autosave，导致新游戏仍加载到旧 autosave 进度、跳过开场白）。
+ */
+export function clearAllWorldSaves(): void {
+  try {
+    SAVE_SLOTS.forEach((i) => window.localStorage.removeItem(slotKey(i)));
+    window.localStorage.removeItem(LEGACY_WORLD_STATE_KEY);
+    AUX_KEYS_TO_CLEAR.forEach((k) => window.localStorage.removeItem(k));
+    window.localStorage.removeItem(AUTOSAVE_KEY);
+    window.localStorage.removeItem(LAST_ACTIVE_KEY);
+  } catch {
+    /* localStorage 不可用时静默忽略 */
+  }
+}
+
 function normalizeWorldStateForClient(s: EdenWorldState): EdenWorldState {
+  // 旧版润色 token 累计迁移到 tokenStats.polishTotal（仅当本局润色累计为 0 时补，避免重复累加）
+  let migratedPolish = 0;
+  try {
+    const legacy = window.localStorage.getItem("eden:world:polish-tokens");
+    if (legacy) migratedPolish = Number(legacy) || 0;
+  } catch {
+    /* localStorage 不可用时静默忽略 */
+  }
+  const tokenStats = s.tokenStats ?? {
+    dialogueThisSlot: 0,
+    dialogueTotal: 0,
+    polishTotal: 0,
+    lastDialogueTokens: 0,
+    lastPolishTokens: 0,
+    hasEstimate: false,
+    dialoguePromptTotal: 0,
+    dialogueCompletionTotal: 0,
+  };
+  if (migratedPolish > 0 && tokenStats.polishTotal === 0) {
+    tokenStats.polishTotal = migratedPolish;
+    try {
+      window.localStorage.removeItem("eden:world:polish-tokens");
+    } catch {
+      /* ignore */
+    }
+  }
   return normalizePuzzleState({
     ...s,
+    tokenStats,
     apMaxBonusBase: s.apMaxBonusBase ?? 0,
     apMaxBonusDay: s.apMaxBonusDay ?? 0,
     divineThresholdModifier: s.divineThresholdModifier ?? 0,
@@ -93,6 +137,9 @@ function normalizeWorldStateForClient(s: EdenWorldState): EdenWorldState {
     pendingConsumableEffects: (s.pendingConsumableEffects ?? []).map((effect) => ({ ...effect })),
     resonanceUseHistory: (s.resonanceUseHistory ?? []).map((record) => ({ ...record })),
     divineGiftHistory: (s.divineGiftHistory ?? []).map((record) => ({ ...record })),
+    michaelSlayClaimed: s.michaelSlayClaimed ?? false,
+    luciferAwakenClaimed: s.luciferAwakenClaimed ?? false,
+    hiddenTopicIds: [...(s.hiddenTopicIds ?? [])],
     actionsThisSlot: {
       whisperedNpcIds: [...(s.actionsThisSlot?.whisperedNpcIds ?? [])],
       sceneActionIds: [...(s.actionsThisSlot?.sceneActionIds ?? [])],
@@ -317,21 +364,7 @@ export function useWorldSave({
   );
 
   const reset = useCallback(() => {
-    SAVE_SLOTS.forEach((i) => {
-      try {
-        window.localStorage.removeItem(slotKey(i));
-      } catch {
-        /* noop */
-      }
-    });
-    try {
-      window.localStorage.removeItem(LEGACY_WORLD_STATE_KEY);
-      window.localStorage.removeItem(LAST_ACTIVE_KEY);
-      window.localStorage.removeItem(AUTOSAVE_KEY);
-      AUX_KEYS_TO_CLEAR.forEach((k) => window.localStorage.removeItem(k));
-    } catch {
-      /* noop */
-    }
+    clearAllWorldSaves();
     setLastSavedAt(null);
     setLastActiveSlot(null);
     lastActiveSlotRef.current = null;

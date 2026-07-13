@@ -38,8 +38,13 @@ import {
   AP_COST_SCENE_ACTION,
   maybeAdvanceSlotAfterAction,
   advanceToNextSlot,
+  getEffectiveMaxActionPoints,
 } from "@/game/world/actionPointRules";
 import { checkAndUnlockAchievements } from "@/game/world/achievementRules";
+import {
+  tryConsumeFreeMove,
+  tryConsumeFreeDetourBypass,
+} from "@/game/world/freeActionRules";
 import {
   shouldTriggerGiftChoice,
   rollGiftChoices,
@@ -136,6 +141,9 @@ function cloneWorldState(s: EdenWorldState): EdenWorldState {
     divineGiftsOwned: [...(s.divineGiftsOwned ?? [])],
     divineGiftHistory: (s.divineGiftHistory ?? []).map((r) => ({ ...r })),
     lastDivineGiftHint: s.lastDivineGiftHint ?? null,
+    michaelSlayClaimed: s.michaelSlayClaimed ?? false,
+    luciferAwakenClaimed: s.luciferAwakenClaimed ?? false,
+    hiddenTopicIds: [...(s.hiddenTopicIds ?? [])],
   };
 }
 
@@ -404,22 +412,14 @@ export async function POST(request: NextRequest) {
 
       const validation = validateWorldToolCall(state, toolCall);
 
-      // 月光道标：持有者可绕过邻接限制直接到达任意地点
-      const hasMoonlightPath = (state.itemCounts["moonlight_path_marker"] ?? 0) > 0;
+      // 月光道标（绕行次数池）：每时段可无视绕行 1~2 次（持有 1 枚=1 次，2 枚=2 次）。
+      // 仅解除非相邻限制，不免行动点（AP 仍由下方免费移动池/消耗规则处理）。
       const isNotConnected = !EDEN_LOCATIONS[state.locationId].connections.includes(target);
       const connectionRejected = !validation.allowed &&
         validation.reason === "那里不与当前位置相连，无法直接前往";
-      const usingMoonlightPath = hasMoonlightPath && isNotConnected && connectionRejected;
+      const usingDetourBypass = isNotConnected && connectionRejected && tryConsumeFreeDetourBypass(state);
 
-      if (usingMoonlightPath) {
-        // 消耗一枚月光道标并允许移动
-        state.itemCounts["moonlight_path_marker"] -= 1;
-        if (!state.usedItemIds.includes("moonlight_path_marker")) {
-          state.usedItemIds.push("moonlight_path_marker");
-        }
-        if (!state.actionsThisSlot.usedItemIds.includes("moonlight_path_marker")) {
-          state.actionsThisSlot.usedItemIds.push("moonlight_path_marker");
-        }
+      if (usingDetourBypass) {
         state.resonanceUseHistory.push({
           timeSlot: state.timeSlot,
           itemId: "moonlight_path_marker",
@@ -439,18 +439,39 @@ export async function POST(request: NextRequest) {
       }
 
       const consumableMoveEffect = applyPendingConsumableToMove(state);
+      // 轻步印记：仅记录使用历史与叙事，免费判定统一交由"免费次数池"（避免双重计数）
       const passiveMoveEffect = applyPassiveLightStepToMove(state);
+      // 统一免费次数池：无羁之步 / 轻步印记 / 昼荫轻步 / 晨流回环（白天）各贡献 1 次
+      // consumable 已免单时不再消耗永久次数池，避免 consumable + 永久次数双重消耗
+      const usedFreeCharge = consumableMoveEffect.freeApCost ? false : tryConsumeFreeMove(state);
       const moveCost =
-        (consumableMoveEffect.freeApCost || passiveMoveEffect.freeApCost || state.inventory.includes("gift_free_move"))
-          ? 0
-          : apCost;
+        (consumableMoveEffect.freeApCost || usedFreeCharge) ? 0 : apCost;
 
       consumeActionPoints(state, moveCost);
+
+      // 晨流回环：本时段第一次消耗永久免费次数的白天移动，额外恢复 1 行动点（不超上限，每时段一次）
+      // 绑定 usedFreeCharge 而非"任意首移"，确保免费+恢复绑定在同一动作上（consumable 免单时延后到下一次）
+      let morningFlowNarration: string | null = null;
+      if (
+        usedFreeCharge &&
+        state.inventory.includes("resonance_morning_flow") &&
+        state.timeOfDay === "day" &&
+        !state.morningFlowRestoredThisSlot
+      ) {
+        state.morningFlowRestoredThisSlot = true;
+        const before = state.actionPoints;
+        state.actionPoints = Math.min(getEffectiveMaxActionPoints(state), state.actionPoints + 1);
+        if (state.actionPoints > before) {
+          morningFlowNarration = "晨流回环的力量在你脚下回转，你恢复了 1 点行动点。";
+        }
+      }
+
       const result = executeWorldTool(state, toolCall);
 
       const moveResonanceNarrations = [
         ...consumableMoveEffect.narrations,
         passiveMoveEffect.narration,
+        ...(morningFlowNarration ? [morningFlowNarration] : []),
       ].filter((n): n is string => Boolean(n));
       const moveNarration = moveResonanceNarrations.length > 0
         ? `${moveResonanceNarrations.join(" ")} ${result.narration ?? ""}`.trim()

@@ -44,6 +44,10 @@ export type WorldPhase =
 export type WorldEndingId =
   | "eve_eats_fruit"   // 成功：夏娃主动吃下果子
   | "god_arrives"      // 失败：第12时段结束仍未吃果
+  | "escape_eden"      // 隐藏：逃离伊甸园（持火焰剑挣脱幻境，不计入普通失败）
+  | "life_fruit"       // 集齐回响后的生命果结局（图鉴/跨局追踪用，需保留一致性）
+  | "michael_slay"     // 隐藏：米迦勒好感归零，守门者之剑
+  | "lucifer_awaken"   // 隐藏：路西法边界之问/逆流划水，缸中之醒
   | null;              // 尚未结束
 
 // ---- 夏娃心智（三轴信念模型） ----
@@ -283,14 +287,13 @@ export type AchievementId =
   | "divine_gift_all"         // 七恩俱临（集满 7 献礼）
   | "resonance_master"         // 回响大师（累计使用5次回响）
   // ---- Phase 2：园中印记全量集（与 public/assets/chapter1/images/achievements 图标一一对应） ----
-  // 探索类（7）
+  // 探索类（6）
   | "mark_river_step"          // 河声入耳（走遍园内所有地点）
   | "mark_all_resonance"       // 回响满囊（收齐全部可获取回响）
   | "mark_name_stone"          // 名刻石痕（获得万物名录）
   | "mark_moonlight"           // 月光道标（获得月光道标回响）
   | "mark_gift_3"              // 神恩三顾（单局神献礼 3 次）
   | "mark_echo_collector"      // 回声收藏家（跨局累计 30 种回响）
-  | "mark_hidden_scene"        // 幽径密影（隐藏：东园幽径隐藏互动）
   // 交互类（9）
   | "mark_all_npc_friend"      // 园中旧识（所有已见 NPC 好感 ≥80）
   | "mark_her_trust"           // 她的信任（夏娃信任满 / 获得她自己的声音）
@@ -309,12 +312,34 @@ export type AchievementId =
   | "mark_peace_pass"          // 和平路径（NPC 好感未跌破 30 通关）
   | "mark_hard_mode"           // 逆道而行（未与天使对话通关）
   | "mark_hidden_operation"    // 划水之人（隐藏：路西法划水互动）
-  // 结局类（5）
+  // 结局类（6）
   | "mark_success_ending"      // 逐入尘世（成功结局）
   | "mark_fail_ending"         // 神临园中（失败结局）
   | "mark_life_fruit"          // 永生之味（吃生命果并 12 时段结束）
   | "mark_all_ending"          // 诸路皆通（跨局集齐 3 种普通结局）
-  | "mark_hidden_ending";      // 缸中之醒（隐藏：路西法隐藏结局）
+  | "mark_hidden_ending"       // 缸中之醒（隐藏：路西法隐藏结局）
+  | "mark_escape_eden"         // 园外清晨（隐藏：逃离伊甸园）
+  | "mark_michael_slay";       // 守门者之剑（隐藏：米迦勒好感归零）
+
+// ---- 第一章 Token 统计（写入存档，读档不归零） ----
+export type TokenStats = {
+  /** 本时段对话累计（进入下一时段清零，保留本局累计） */
+  dialogueThisSlot: number;
+  /** 本局对话累计（读档/新时段保留；时间回溯保留；新游戏归零） */
+  dialogueTotal: number;
+  /** 本局润色累计 */
+  polishTotal: number;
+  /** 最近一次对话消耗（展示后不清零，供复盘） */
+  lastDialogueTokens: number;
+  /** 最近一次润色消耗 */
+  lastPolishTokens: number;
+  /** 是否含估算成分（无 API usage 时用估算并标记） */
+  hasEstimate: boolean;
+  /** 本局对话 Prompt Token 累计 */
+  dialoguePromptTotal: number;
+  /** 本局对话 Completion Token 累计 */
+  dialogueCompletionTotal: number;
+};
 
 // ---- 第一章完整世界状态 ----
 // 注意：本状态由规则层/API 唯一修改，前端不得直接改 actionPoints、timeSlot 或 endingId。
@@ -338,6 +363,8 @@ export type EdenWorldState = {
   apMaxBonusDay: number;
   /** 神明献礼门槛·永久修正（水声回响·藏目，负值=降低） */
   divineThresholdModifier: number;
+  /** 神赐祝福正向好感倍率（默认 1；持有恩泽棱镜后为 2） */
+  divineAffinityMultiplier: number;
   /** 众生回声：解锁地图显示各 NPC 当前所在场景 */
   unlockMapNpcLocations: boolean;
   /** 双树残识：解锁园子中央两棵树的真实名称 */
@@ -347,6 +374,17 @@ export type EdenWorldState = {
   maxNpcActionPoints: number;
   /** 本时段已执行的行动记录（新时段清空） */
   actionsThisSlot: ActionsThisSlot;
+
+  /** 本时段已用的免费移动次数（写存档，防止刷新作弊；剩余次数由 freeActionRules 派生） */
+  freeMoveUsedThisSlot: number;
+  /** 本时段已用的免费对话次数 */
+  freeDialogueUsedThisSlot: number;
+  /** 本时段已用的「无视绕行」次数（月光道标派生：持有 1 枚=1 次/时段，2 枚=2 次/时段） */
+  freeDetourBypassUsedThisSlot: number;
+  /** 本时段晨流回环是否已恢复过 1 行动点（每天时段只触发一次） */
+  morningFlowRestoredThisSlot: boolean;
+  /** 本时段夜潮回声是否已恢复过 1 行动点 */
+  nightTideRestoredThisSlot: boolean;
 
   /** 当前蛇所在地点 */
   locationId: EdenLocationId;
@@ -466,6 +504,17 @@ export type EdenWorldState = {
 
   isEnded: boolean;
   endingId: WorldEndingId;
+
+  /** Token 消耗统计（写入存档，读档不归零，时间回溯不清） */
+  tokenStats: TokenStats;
+  /** 旋转的火焰剑是否已赠予（每局一次，规则层判定） */
+  flameSwordClaimed: boolean;
+  /** 米迦勒隐藏结局是否已触发（每局一次，防止重复结算） */
+  michaelSlayClaimed: boolean;
+  /** 路西法隐藏结局是否已触发（每局一次，防止重复结算） */
+  luciferAwakenClaimed: boolean;
+  /** 隐藏话题 ID（如 topic_lucifer_boundary）；独立于 npcDialogues，不污染对话成就统计 */
+  hiddenTopicIds: string[];
 };
 
 // ---- 初始心智 ----
@@ -498,6 +547,7 @@ export const initialEdenWorldState: EdenWorldState = {
   apMaxBonusBase: 0,
   apMaxBonusDay: 0,
   divineThresholdModifier: 0,
+  divineAffinityMultiplier: 1,
   unlockMapNpcLocations: false,
   unlockTreeNames: false,
   npcActionPoints: 3,
@@ -508,6 +558,11 @@ export const initialEdenWorldState: EdenWorldState = {
     usedItemIds: [],
     hasWhisperedToWoman: false,
   },
+  freeMoveUsedThisSlot: 0,
+  freeDialogueUsedThisSlot: 0,
+  freeDetourBypassUsedThisSlot: 0,
+  morningFlowRestoredThisSlot: false,
+  nightTideRestoredThisSlot: false,
   locationId: "adam_garden_work",
   playerName: "",
   divineAttention: 0,
@@ -567,6 +622,20 @@ export const initialEdenWorldState: EdenWorldState = {
   shownNpcGuideIds: [],
   isEnded: false,
   endingId: null,
+  tokenStats: {
+    dialogueThisSlot: 0,
+    dialogueTotal: 0,
+    polishTotal: 0,
+    lastDialogueTokens: 0,
+    lastPolishTokens: 0,
+    hasEstimate: false,
+    dialoguePromptTotal: 0,
+    dialogueCompletionTotal: 0,
+  },
+  flameSwordClaimed: false,
+  michaelSlayClaimed: false,
+  luciferAwakenClaimed: false,
+  hiddenTopicIds: [],
 };
 
 // ---- 旧存档兼容：补全第一章新增字段的默认值并深拷贝 ----
@@ -615,6 +684,12 @@ export function withNpcWorldDefaults(
   base.itemCounts = { ...(base.itemCounts ?? {}) };
   base.fruitDirectionBias = { ...(base.fruitDirectionBias ?? { left: 0, right: 0 }) };
   base.pickedFruitSide = base.pickedFruitSide ?? null;
+  // 旧存档兼容：补全绕行次数池已用次数默认值
+  base.freeDetourBypassUsedThisSlot = base.freeDetourBypassUsedThisSlot ?? 0;
+  // 旧存档兼容：补全隐藏结局 claimed 字段与隐藏话题数组
+  base.michaelSlayClaimed = base.michaelSlayClaimed ?? false;
+  base.luciferAwakenClaimed = base.luciferAwakenClaimed ?? false;
+  base.hiddenTopicIds = [...(base.hiddenTopicIds ?? [])];
   // 旧存档兼容：补全生命果标记默认值
   if (base.worldActions) {
     base.worldActions.hasEatenLifeFruit = base.worldActions.hasEatenLifeFruit ?? false;
@@ -715,7 +790,7 @@ export type AngelNpcId =
 
 // ---- 通用 NPC 好感 ----
 export type NpcRelationState = {
-  /** 0-100 */
+  /** 对玩家好感：≥0，可突破 100（满 100 仅作为奖励触发门槛，非数值上限） */
   affinity: number;
   /** 对神信仰（天使/刺猬用，初值取世界圣经；UI 双维度展示） */
   obedience: number;
@@ -725,6 +800,8 @@ export type NpcRelationState = {
   rewardClaimed: boolean;
   /** 规则层归一化后的语义签名，用于重复话术衰减 */
   lastAffinitySignature: string | null;
+  /** 最近一次关系变化的原因（语义化，供 Agent 注入；非数值） */
+  lastAffinityChangeReason: string | null;
 };
 
 export type NpcRelations = Partial<Record<EdenNpcId, NpcRelationState>>;

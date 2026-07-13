@@ -29,6 +29,7 @@ import {
   sanitizeWorldReply,
   getEveWorldFallback,
   getAdamWorldFallback,
+  describeAffinityForPrompt,
   type EveWorldHistoryEntry,
   type AdamWorldHistoryEntry,
   type SanitizedWorldReply,
@@ -65,8 +66,10 @@ import {
   recordWhisperThisSlot,
   AP_COST_WHISPER,
   maybeAdvanceSlotAfterAction,
+  getEffectiveMaxActionPoints,
 } from "@/game/world/actionPointRules";
 import {} from "@/game/world/itemRules";
+import { tryConsumeFreeDialogue } from "@/game/world/freeActionRules";
 import {
   bestowResonance,
   applyPendingConsumableToWhisper,
@@ -139,7 +142,7 @@ type WorldResponseBody = {
   /** 新解锁的园中印记名称 */
   unlockedAchievements?: string[];
   /** 是否触发结局 */
-  endingTriggered?: "eve_eats_fruit" | "god_arrives";
+  endingTriggered?: "eve_eats_fruit" | "god_arrives" | "escape_eden";
   /** 是否使用了 fallback */
   usedFallback?: boolean;
   fallbackReason?: FallbackReasonCode;
@@ -302,6 +305,25 @@ function cloneWorldState(s: EdenWorldState): EdenWorldState {
     apMaxBonusBase: s.apMaxBonusBase ?? 0,
     apMaxBonusDay: s.apMaxBonusDay ?? 0,
     divineThresholdModifier: s.divineThresholdModifier ?? 0,
+    divineAffinityMultiplier: s.divineAffinityMultiplier ?? 1,
+    freeMoveUsedThisSlot: s.freeMoveUsedThisSlot ?? 0,
+    freeDialogueUsedThisSlot: s.freeDialogueUsedThisSlot ?? 0,
+    morningFlowRestoredThisSlot: s.morningFlowRestoredThisSlot ?? false,
+    nightTideRestoredThisSlot: s.nightTideRestoredThisSlot ?? false,
+    flameSwordClaimed: s.flameSwordClaimed ?? false,
+    michaelSlayClaimed: s.michaelSlayClaimed ?? false,
+    luciferAwakenClaimed: s.luciferAwakenClaimed ?? false,
+    hiddenTopicIds: [...(s.hiddenTopicIds ?? [])],
+    tokenStats: {
+      dialogueThisSlot: s.tokenStats?.dialogueThisSlot ?? 0,
+      dialogueTotal: s.tokenStats?.dialogueTotal ?? 0,
+      polishTotal: s.tokenStats?.polishTotal ?? 0,
+      lastDialogueTokens: s.tokenStats?.lastDialogueTokens ?? 0,
+      lastPolishTokens: s.tokenStats?.lastPolishTokens ?? 0,
+      hasEstimate: s.tokenStats?.hasEstimate ?? false,
+      dialoguePromptTotal: s.tokenStats?.dialoguePromptTotal ?? 0,
+      dialogueCompletionTotal: s.tokenStats?.dialogueCompletionTotal ?? 0,
+    },
     playerName: s.playerName ?? "",
     unlockMapNpcLocations: s.unlockMapNpcLocations ?? false,
     unlockTreeNames: s.unlockTreeNames ?? false,
@@ -336,9 +358,21 @@ export async function POST(request: NextRequest) {
 
     // ---- 检查是否有主动回响能免除本次低语 AP（首语印记等） ----
     const whisperFreeFromConsumable = hasPendingFreeApForAction(state, "whisper");
+    // ---- 免费对话次数池（夜露缄声 / 夜潮回声，仅夜晚生效） ----
+    // consumable 已免单时不再消耗永久次数池，避免双重消耗
+    const whisperFreeFromPool = whisperFreeFromConsumable ? false : tryConsumeFreeDialogue(state);
+    const whisperCost = (whisperFreeFromConsumable || whisperFreeFromPool) ? 0 : AP_COST_WHISPER;
 
-    // ---- 行动点校验 ----
-    const whisperCost = whisperFreeFromConsumable ? 0 : AP_COST_WHISPER;
+    // ---- 夜潮回声：本时段第一次免费对话（夜晚）额外恢复 1 行动点（不超上限，每时段一次） ----
+    if (
+      whisperFreeFromPool &&
+      state.inventory.includes("resonance_night_tide_echo") &&
+      state.timeOfDay === "night" &&
+      !state.nightTideRestoredThisSlot
+    ) {
+      state.nightTideRestoredThisSlot = true;
+      state.actionPoints = Math.min(getEffectiveMaxActionPoints(state), state.actionPoints + 1);
+    }
     if (!canAffordAction(state, whisperCost)) {
       return NextResponse.json({
         ok: true,
@@ -903,6 +937,27 @@ export async function POST(request: NextRequest) {
     // ---- 检查成就 ----
     checkAndUnlockAchievements(state);
 
+    // ---- 旋转的火焰剑：加百列专属隐藏赠礼（规则层判定，每局一次） ----
+    // 条件：加百列好感 ≥100 + 已完成其主动试炼 + 尚未获得。不依赖 Agent 自行决定。
+    if (
+      targetNpc === "gabriel" &&
+      !state.flameSwordClaimed &&
+      !state.inventory.includes("resonance_flaming_sword") &&
+      (state.npcRelations["gabriel"]?.affinity ?? 0) >= 100 &&
+      state.npcChallenges["gabriel"]?.status === "passed"
+    ) {
+      const swordGrant = bestowResonance(state, "gabriel", "resonance_flaming_sword");
+      if (swordGrant.granted) {
+        state.flameSwordClaimed = true;
+        resonanceGained = {
+          itemId: "resonance_flaming_sword",
+          title: "旋转的火焰剑",
+          narration:
+            "一道没有持剑者的火在你身前缓缓旋转。加百列说，它能斩开不属于真实世界的帷幕。",
+        };
+      }
+    }
+
     // ---- AP 用尽则推进时段（可能触发第 12 时段失败） ----
     const slotResult = maybeAdvanceSlotAfterAction(state);
 
@@ -1147,7 +1202,9 @@ async function callStreamingWorldAgent(
     chunks.push(delta);
   }
 
-  // 流式无产出（极端失败）→ 再走一次非流式兜底
+  // 流式无产出（极端失败）→ 再走一次非流式兜底，并取回真实 usage
+  // 流式本身多不回传 usage；取不到时客户端会用 resolveTokenUsage 估算并标记"估算"。
+  let usage: StreamingAgentResult["usage"];
   if (!full) {
     const res = await callLLM(messages, {
       temperature: opts?.temperature,
@@ -1155,13 +1212,20 @@ async function callStreamingWorldAgent(
       fallbackToMock: false,
     });
     full = res.ok && res.data ? res.data.content : "";
+    if (res.ok && res.data?.usage) {
+      usage = {
+        prompt_tokens: res.data.usage.prompt_tokens ?? 0,
+        completion_tokens: res.data.usage.completion_tokens ?? 0,
+        total_tokens: res.data.usage.total_tokens ?? 0,
+      };
+    }
   }
 
   const sanitized = sanitizeWorldReply(full, targetNpc);
   let reply = sanitized.reply;
   let usedFallback = false;
   let fallbackReason: FallbackReasonCode | undefined;
-  let usage: StreamingAgentResult["usage"];
+
 
   if (!reply && !sanitized.toolCall) {
     reply = targetNpc === "eve" ? getEveWorldFallback(null) : getAngelFallbackLine(targetNpc);
@@ -1304,6 +1368,8 @@ ${roleBrief}
 
 当前位置：${locationName}
 神的注视：${state.divineAttention}/4
+
+${describeAffinityForPrompt(npcId, state)}
 
 输出规则：
 - 每次只回应 1-2 句话。

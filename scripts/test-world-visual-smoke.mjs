@@ -253,7 +253,7 @@ check("scene_action 端点不再保留旧热点多击参数", !worldToolRoute.in
 check("scenePuzzles.ts 文件存在", exists("src/content/world/scenePuzzles.ts"));
 check("puzzleRules.ts 文件存在", exists("src/game/world/puzzleRules.ts"));
 const scenePuzzlesContent = read("src/content/world/scenePuzzles.ts");
-check("scenePuzzles 配置三个问答", ["puzzle_naming_stone_identity", "puzzle_east_path_cautious_presence", "puzzle_river_words_belonging"].every((id) => scenePuzzlesContent.includes(id)));
+check("scenePuzzles 含东园幽径昼夜双变体（共 6 个问答）", ["puzzle_naming_stone_identity", "puzzle_east_path_cautious_presence_day", "puzzle_east_path_cautious_presence_night", "puzzle_river_words_belonging", "puzzle_tree_court_shadow"].every((id) => scenePuzzlesContent.includes(id)));
 check("/world 不再定义旧场景热点配置", !worldPage.includes("SCENE_FOCUS_HOTSPOTS") && !worldPage.includes("SceneFocusHotspot"));
 check("/world 有刻名石显式问答入口", worldPage.includes("eden-naming-stone-entry") && worldPage.includes("handleNamingStoneClick"));
 check("/world 刻名石不再依赖多次点击", !worldPage.includes("naming-stone-center") && !worldPage.includes("点击中间的刻名石 3 次"));
@@ -416,6 +416,25 @@ check("CSS 定义浏览状态明亮背景", css.includes(".eden-game--world-brow
 check("CSS 定义浏览状态 overlay", css.includes(".eden-bg-overlay--browse"));
 check("CSS 浏览状态覆盖 scene-progress 暗色", css.includes(".eden-game--world-browse.scene-progress-0 .eden-bg img"));
 check("CSS 浏览状态 NPC 不暗化", css.includes(".eden-game--world-browse .eden-stage-character--dim") && css.includes("filter: none"));
+
+// ---- 隐藏结局状态深拷贝防回归（7 处 normalizer/clone 必须展开 hiddenTopicIds 数组）----
+// 直接赋值（hiddenTopicIds: state.hiddenTopicIds）会共享引用，导致跨请求状态别名。
+function hasHiddenTopicSpread(src) {
+  return /\[\.\.\.\((?:base|s|state)\.hiddenTopicIds/.test(src);
+}
+const typesSrc = read("src/game/world/types.ts");
+const worldRouteSrc = read("src/app/api/world/route.ts");
+const toolRouteSrc = read("src/app/api/world/tool/route.ts");
+const puzzleRulesSrc = read("src/game/world/puzzleRules.ts");
+const useWorldSaveSrc = read("src/hooks/useWorldSave.ts");
+check("types.ts withNpcWorldDefaults 深拷贝 hiddenTopicIds", hasHiddenTopicSpread(typesSrc));
+check("route.ts cloneWorldState 深拷贝 hiddenTopicIds", hasHiddenTopicSpread(worldRouteSrc));
+check("tool/route.ts cloneWorldState 深拷贝 hiddenTopicIds", hasHiddenTopicSpread(toolRouteSrc));
+check("puzzleRules.ts normalize/clone 深拷贝 hiddenTopicIds", hasHiddenTopicSpread(puzzleRulesSrc));
+check("page.tsx normalizeWorldStateForClient 深拷贝 hiddenTopicIds", hasHiddenTopicSpread(worldPage));
+check("useWorldSave.ts normalizeWorldStateForClient 深拷贝 hiddenTopicIds", hasHiddenTopicSpread(useWorldSaveSrc));
+// normalize/clone 两处都应出现（normalizePuzzleState + cloneWorldStateForPuzzle）
+check("puzzleRules.ts hiddenTopicIds 展开出现至少 2 次", (puzzleRulesSrc.match(/\[\.\.\.\((?:base|s|state)\.hiddenTopicIds/g) || []).length >= 2);
 
 console.log(`\n结果: ${pass} 通过, ${fail} 失败`);
 process.exit(fail > 0 ? 1 : 0);

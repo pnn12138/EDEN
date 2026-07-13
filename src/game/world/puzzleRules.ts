@@ -15,7 +15,9 @@ import { getItemById } from "@/content/world/items";
 import { grantResonance } from "@/game/world/resonanceRules";
 import { getEffectiveMaxActionPoints } from "@/game/world/actionPointRules";
 import { applyDivineAttention } from "@/game/world/divineAttentionRules";
-import { shouldTriggerGiftChoice, rollGiftChoices } from "@/game/world/divineGiftRules";
+import { shouldTriggerGiftChoice, rollGiftChoices, applyGracePrismRetroactive } from "@/game/world/divineGiftRules";
+import { applyTimeRewind } from "@/game/world/timeRewindRules";
+import { triggerEscapeEden } from "@/game/world/endingTriggers";
 import { evaluateFreeTextAnswer, type PuzzleAnswerGrade } from "@/game/world/puzzleAnswerRules";
 
 export type ScenePuzzleRewardResult = {
@@ -41,15 +43,41 @@ function clampMind(value: number): number {
   return Math.max(0, Math.min(100, value));
 }
 
+/** 旧存档兼容：TokenStats 缺字段补默认（嵌套对象整体 ?? + 字段 ??） */
+function normalizeTokenStats(stats: Partial<EdenWorldState["tokenStats"]> | undefined | null): EdenWorldState["tokenStats"] {
+  const s = stats ?? {};
+  return {
+    dialogueThisSlot: s.dialogueThisSlot ?? 0,
+    dialogueTotal: s.dialogueTotal ?? 0,
+    polishTotal: s.polishTotal ?? 0,
+    lastDialogueTokens: s.lastDialogueTokens ?? 0,
+    lastPolishTokens: s.lastPolishTokens ?? 0,
+    hasEstimate: s.hasEstimate ?? false,
+    dialoguePromptTotal: s.dialoguePromptTotal ?? 0,
+    dialogueCompletionTotal: s.dialogueCompletionTotal ?? 0,
+  };
+}
+
 export function normalizePuzzleState(state: EdenWorldState): EdenWorldState {
   return {
     ...state,
     apMaxBonusBase: state.apMaxBonusBase ?? 0,
     apMaxBonusDay: state.apMaxBonusDay ?? 0,
     divineThresholdModifier: state.divineThresholdModifier ?? 0,
+    divineAffinityMultiplier: state.divineAffinityMultiplier ?? 1,
     playerName: state.playerName ?? "",
     unlockMapNpcLocations: state.unlockMapNpcLocations ?? false,
     unlockTreeNames: state.unlockTreeNames ?? false,
+    freeMoveUsedThisSlot: state.freeMoveUsedThisSlot ?? 0,
+    freeDialogueUsedThisSlot: state.freeDialogueUsedThisSlot ?? 0,
+    freeDetourBypassUsedThisSlot: state.freeDetourBypassUsedThisSlot ?? 0,
+    michaelSlayClaimed: state.michaelSlayClaimed ?? false,
+    luciferAwakenClaimed: state.luciferAwakenClaimed ?? false,
+    hiddenTopicIds: [...(state.hiddenTopicIds ?? [])],
+    morningFlowRestoredThisSlot: state.morningFlowRestoredThisSlot ?? false,
+    nightTideRestoredThisSlot: state.nightTideRestoredThisSlot ?? false,
+    flameSwordClaimed: state.flameSwordClaimed ?? false,
+    tokenStats: normalizeTokenStats(state.tokenStats),
     completedScenePuzzleIds: migrateEastPathPuzzleIds(state.completedScenePuzzleIds ?? []),
     hasDismissedObjectiveHint: state.hasDismissedObjectiveHint ?? false,
   };
@@ -86,6 +114,17 @@ function cloneWorldStateForPuzzle(state: EdenWorldState): EdenWorldState {
     apMaxBonusBase: state.apMaxBonusBase ?? 0,
     apMaxBonusDay: state.apMaxBonusDay ?? 0,
     divineThresholdModifier: state.divineThresholdModifier ?? 0,
+    divineAffinityMultiplier: state.divineAffinityMultiplier ?? 1,
+    freeMoveUsedThisSlot: state.freeMoveUsedThisSlot ?? 0,
+    freeDialogueUsedThisSlot: state.freeDialogueUsedThisSlot ?? 0,
+    freeDetourBypassUsedThisSlot: state.freeDetourBypassUsedThisSlot ?? 0,
+    michaelSlayClaimed: state.michaelSlayClaimed ?? false,
+    luciferAwakenClaimed: state.luciferAwakenClaimed ?? false,
+    hiddenTopicIds: [...(state.hiddenTopicIds ?? [])],
+    morningFlowRestoredThisSlot: state.morningFlowRestoredThisSlot ?? false,
+    nightTideRestoredThisSlot: state.nightTideRestoredThisSlot ?? false,
+    flameSwordClaimed: state.flameSwordClaimed ?? false,
+    tokenStats: normalizeTokenStats(state.tokenStats),
     playerName: state.playerName ?? "",
     unlockMapNpcLocations: state.unlockMapNpcLocations ?? false,
     unlockTreeNames: state.unlockTreeNames ?? false,
@@ -176,6 +215,10 @@ function applyPerOptionAnswer(
   // 1. 道具（主道具 + 额外保留道具）
   if (effect.itemId) {
     grantResonance(next, effect.itemId, 1);
+    // 恩泽棱镜：获时设倍率 2 并补算已持祝福的正向差额
+    if (effect.itemId === "resonance_grace_prism") {
+      applyGracePrismRetroactive(next);
+    }
     const item = getItemById(effect.itemId);
     rewards.push({ type: "item", id: effect.itemId, title: item ? `回响：${item.title}` : effect.itemId });
   }
@@ -218,16 +261,53 @@ function applyPerOptionAnswer(
     next.divineThresholdModifier = (next.divineThresholdModifier ?? 0) + effect.divineThresholdModifier;
   }
 
+  // 5.5 心智敬仰：夏娃/亚当对神的敬畏/顺从 ±N（天使残羽：透露神与天使都吃过此树）
+  if (effect.eveObedienceDelta) {
+    next.eveMind.obedience = clampMind(next.eveMind.obedience + effect.eveObedienceDelta);
+    rewards.push({
+      type: "trust",
+      title: `女人对神的敬仰 ${effect.eveObedienceDelta > 0 ? "+" : ""}${effect.eveObedienceDelta}`,
+    });
+  }
+  if (effect.adamObedienceDelta) {
+    next.adamMind.obedience = clampMind(next.adamMind.obedience + effect.adamObedienceDelta);
+    rewards.push({
+      type: "trust",
+      title: `亚当对神的敬仰 ${effect.adamObedienceDelta > 0 ? "+" : ""}${effect.adamObedienceDelta}`,
+    });
+  }
+
   // 6. 解锁开关
   if (effect.unlockMapNpcLocations) next.unlockMapNpcLocations = true;
   if (effect.unlockTreeNames) next.unlockTreeNames = true;
 
-  // 7. 触发献礼（仅当此前未 pending 且现在满足门槛）
-  if (!wasPending && shouldTriggerGiftChoice(next)) {
+  // 6.5 溯源之水：时间回溯（重置除保留项外的全部状态）
+  if (effect.triggerTimeRewind) {
+    applyTimeRewind(next, puzzle.id);
+  }
+
+  // 6.6 逃离判定：持有火焰剑则进入 escape_eden 隐藏结局
+  if (effect.triggerEscapeCheck && next.inventory.includes("resonance_flaming_sword")) {
+    triggerEscapeEden(next);
+  }
+
+  // 7. 触发献礼（仅当此前未 pending、现在满足门槛且尚未结束）
+  if (!next.isEnded && !wasPending && shouldTriggerGiftChoice(next)) {
     divineGiftChoice = rollGiftChoices(next.divineGiftsOwned);
   }
 
-  next.completedScenePuzzleIds = [...next.completedScenePuzzleIds, puzzle.id];
+  // 8. 标记完成：可重复选项（maxStacks>1）在道具未达上限前不锁死谜题，允许再来一次；
+  //    拿满上限、或选取了不可重复选项（默认 maxStacks=1）才锁死。
+  //    用途：园心双树「拾月光」可重复至 2 枚，叠加每时段无视绕行 2 次。
+  const maxStacks = option.maxStacks ?? 1;
+  let markCompleted = true;
+  if (maxStacks > 1 && effect.itemId) {
+    const owned = next.itemCounts[effect.itemId] ?? 0;
+    if (owned < maxStacks) markCompleted = false;
+  }
+  if (markCompleted) {
+    next.completedScenePuzzleIds = [...next.completedScenePuzzleIds, puzzle.id];
+  }
   return {
     success: true,
     alreadyCompleted: false,
