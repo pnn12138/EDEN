@@ -113,7 +113,7 @@ type WorldAgentResponse = {
   toolNarration?: string;
   slotNarrations?: string[];
   unlockedAchievements?: string[];
-  endingTriggered?: "eve_eats_fruit" | "god_arrives" | "escape_eden";
+  endingTriggered?: "eve_eats_fruit" | "god_arrives" | "michael_slay" | "lucifer_awaken";
   usedFallback?: boolean;
   fallbackReason?: string;
   usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };

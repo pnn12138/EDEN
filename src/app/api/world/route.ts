@@ -86,6 +86,8 @@ import {
   applyNpcAffinity,
   validateRelationGrant,
 } from "@/game/world/npcRelationRules";
+import { canTriggerMichaelSlay } from "@/game/world/hiddenEndingRules";
+import { triggerMichaelSlay } from "@/game/world/endingTriggers";
 import { getNpcRelationProfile } from "@/content/world/npcRelations";
 import { selectNpcGuide, markGuideShown, getGuideFallback } from "@/game/world/npcGuideRules";
 import {
@@ -142,7 +144,7 @@ type WorldResponseBody = {
   /** 新解锁的园中印记名称 */
   unlockedAchievements?: string[];
   /** 是否触发结局 */
-  endingTriggered?: "eve_eats_fruit" | "god_arrives" | "escape_eden";
+  endingTriggered?: "eve_eats_fruit" | "god_arrives" | "michael_slay" | "lucifer_awaken";
   /** 是否使用了 fallback */
   usedFallback?: boolean;
   fallbackReason?: FallbackReasonCode;
@@ -482,6 +484,23 @@ export async function POST(request: NextRequest) {
       }
       const aff = applyNpcAffinity(state, targetNpc, playerInput, mindUpdate.inputTag);
       affinityFeedback = aff.feedback;
+
+      // 隐藏结局：米迦勒好感归零立即触发（紧接 applyNpcAffinity，早于 Agent/注视/AP/工具/奖励/时段）
+      if (canTriggerMichaelSlay({ targetNpc, affinity: aff, state })) {
+        triggerMichaelSlay(state);
+        checkAndUnlockAchievements(state);
+        return NextResponse.json({
+          ok: true,
+          state,
+          reply: null,
+          systemHint: null,
+          unlockedAchievements: state.unlockedAchievementIds.length > 0
+            ? state.unlockedAchievementIds.map((id) => id)
+            : undefined,
+          endingTriggered: "michael_slay",
+        } satisfies WorldResponseBody);
+      }
+
       const relation = state.npcRelations[targetNpc];
       // 天使：好感已达 100 且具备赠礼资格（含上次已达或本回合刚达）→ 开启主动试炼
       const angelCanChallenge =
