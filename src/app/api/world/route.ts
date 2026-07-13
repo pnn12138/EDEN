@@ -86,8 +86,8 @@ import {
   applyNpcAffinity,
   validateRelationGrant,
 } from "@/game/world/npcRelationRules";
-import { canTriggerMichaelSlay } from "@/game/world/hiddenEndingRules";
-import { triggerMichaelSlay } from "@/game/world/endingTriggers";
+import { canTriggerMichaelSlay, canTriggerLuciferAwaken, recordLuciferBoundaryTopic } from "@/game/world/hiddenEndingRules";
+import { triggerMichaelSlay, triggerLuciferAwaken } from "@/game/world/endingTriggers";
 import { getNpcRelationProfile } from "@/content/world/npcRelations";
 import { selectNpcGuide, markGuideShown, getGuideFallback } from "@/game/world/npcGuideRules";
 import {
@@ -498,6 +498,40 @@ export async function POST(request: NextRequest) {
             ? state.unlockedAchievementIds.map((id) => id)
             : undefined,
           endingTriggered: "michael_slay",
+        } satisfies WorldResponseBody);
+      }
+
+      // 隐藏结局：路西法边界话题记录 + 觉醒快速路径
+      // 顺序固定：applyNpcAffinity -> recordLuciferBoundaryTopic -> canTriggerLuciferAwaken
+      // -> 专用非流式最终回复 -> triggerLuciferAwaken -> 立即返回。
+      // 该快速路径位于消耗品、注视、工具、普通失败、AP、奖励和时段推进之前；
+      // 任何 Provider 失败都保留 state 并用本地 fallback 句触发结局，绝不返回 state:null。
+      if (targetNpc === "lucifer") {
+        recordLuciferBoundaryTopic(state, playerInput);
+      }
+      if (targetNpc === "lucifer" && canTriggerLuciferAwaken(state, targetNpc)) {
+        const finalAgent = await callWorldAgent(
+          "lucifer",
+          playerInput,
+          state,
+          body.conversationHistory,
+          "你已经决定让蛇看见第五道倒影。只用一句克制的话回应，然后让世界安静下来。",
+        );
+        const reply = finalAgent.reply || getAngelFallbackLine("lucifer");
+        triggerLuciferAwaken(state);
+        checkAndUnlockAchievements(state);
+        return NextResponse.json({
+          ok: true,
+          state,
+          reply,
+          systemHint: null,
+          unlockedAchievements: state.unlockedAchievementIds.length > 0
+            ? state.unlockedAchievementIds.map((id) => id)
+            : undefined,
+          endingTriggered: "lucifer_awaken",
+          usedFallback: finalAgent.usedFallback || undefined,
+          fallbackReason: finalAgent.fallbackReason || undefined,
+          usage: finalAgent.usage || undefined,
         } satisfies WorldResponseBody);
       }
 
@@ -968,12 +1002,16 @@ export async function POST(request: NextRequest) {
       const swordGrant = bestowResonance(state, "gabriel", "resonance_flaming_sword");
       if (swordGrant.granted) {
         state.flameSwordClaimed = true;
-        resonanceGained = {
-          itemId: "resonance_flaming_sword",
-          title: "旋转的火焰剑",
-          narration:
-            "一道没有持剑者的火在你身前缓缓旋转。加百列说，它能斩开不属于真实世界的帷幕。",
-        };
+        // 火焰剑是试炼赠礼之外的额外隐藏赠礼；若本轮已公示其它回响（如传令白羽），
+        // 不覆盖 resonanceGained，避免吞掉试炼奖励通知。
+        if (!resonanceGained) {
+          resonanceGained = {
+            itemId: "resonance_flaming_sword",
+            title: "旋转的火焰剑",
+            narration:
+              "一道没有持剑者的火在你身前缓缓旋转。加百列说，它能斩开不属于真实世界的帷幕。",
+          };
+        }
       }
     }
 
