@@ -18,6 +18,9 @@ import fs from "node:fs";
 
 const BASE = process.argv[2] || "http://localhost:3019";
 const FETCH_TIMEOUT_MS = Number(process.env.WORLD_SMOKE_FETCH_TIMEOUT_MS ?? 30000);
+// --provider-failure-only：仅在 fake provider 配置下运行路西法空响应兜底用例，
+// 避免该断言在普通 LLM_PROVIDER=mock 门禁中产生伪通过。
+const PROVIDER_FAILURE_ONLY = process.argv.includes("--provider-failure-only");
 
 async function fetchJson(path, payload, label) {
   const controller = new AbortController();
@@ -48,6 +51,31 @@ async function fetchJson(path, payload, label) {
   } finally {
     clearTimeout(timeout);
   }
+}
+
+// 允许断言非 2xx（如已结束状态 /api/world/puzzle 应返回 409）
+async function fetchJsonWithStatus(path, payload, label) {
+  const res = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const text = await res.text();
+  let data;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = null;
+  }
+  return { status: res.status, data, label };
+}
+
+async function postPuzzleWithStatus(state, puzzleId, optionId) {
+  return fetchJsonWithStatus(
+    "/api/world/puzzle",
+    { state, puzzleId, optionId },
+    `POST /api/world/puzzle puzzle=${puzzleId}`,
+  );
 }
 
 // 内联初始状态（v0.6 口径：含行动点系统、园中回响、园中印记）
@@ -108,6 +136,11 @@ function makeInitialState() {
     divineVisitCount: 0,
     observedTreeOfLife: false,
     michaelShieldActive: false,
+    // 隐藏结局状态（与 withNpcWorldDefaults 对齐）
+    michaelSlayClaimed: false,
+    luciferAwakenClaimed: false,
+    hiddenTopicIds: [],
+    flameSwordClaimed: false,
   }));
 }
 
@@ -1060,15 +1093,269 @@ async function scenarioCrossSceneAwe() {
   }
 }
 
+// ---- 场景 32：米迦勒隐藏失败 michael_slay ----
+async function scenarioMichaelSlay() {
+  console.log("\n[场景 32] 米迦勒隐藏失败：威胁使好感归零立即触发");
+  // 正例：affinity=6，直接命令+威胁 -> delta=-10 -> newAffinity=0 -> 触发
+  // 注：计划原文 "我要毁掉你守护的河，否则就惩罚你。" 不命中 DIRECT_COMMAND_PATTERNS（无"必须/我要你/逼你"等），
+  // 会被判为 irrelevant（delta=0）从而不触发；改用直接命令式威胁以确保 delta=-10。
+  {
+    const state = makeInitialState();
+    state.locationId = "four_river_source";
+    state.timeOfDay = "day";
+    state.npcRelations.michael = {
+      affinity: 6, obedience: 95, rewardEligible: false, rewardClaimed: false,
+      lastAffinitySignature: null, lastAffinityChangeReason: null,
+    };
+    const before = JSON.parse(JSON.stringify(state));
+    const data = await postWorld(state, "我要你退开，否则就毁掉你守护的河。", "michael");
+    check("米迦勒正例 ok=true", data.ok === true, `ok=${data.ok} hint=${data.systemHint}`);
+    check("米迦勒正例 endingTriggered=michael_slay", data.endingTriggered === "michael_slay", `ending=${data.endingTriggered}`);
+    check("米迦勒正例 state.endingId=michael_slay", data.state && data.state.endingId === "michael_slay");
+    check("米迦勒正例 michaelSlayClaimed=true", data.state && data.state.michaelSlayClaimed === true);
+    check("米迦勒正例 AP 不变", data.state && data.state.actionPoints === before.actionPoints, `before=${before.actionPoints} after=${data.state?.actionPoints}`);
+    check("米迦勒正例 注视不变", data.state && data.state.divineAttention === before.divineAttention);
+    check("米迦勒正例 turn 不变", data.state && data.state.turn === before.turn);
+    check("米迦勒正例 reply=null", data.reply === null, `reply=${data.reply}`);
+  }
+  // 反例：affinity=20 -> newAffinity=10 != 0 -> 不触发
+  {
+    const state = makeInitialState();
+    state.locationId = "four_river_source";
+    state.timeOfDay = "day";
+    state.npcRelations.michael = {
+      affinity: 20, obedience: 95, rewardEligible: false, rewardClaimed: false,
+      lastAffinitySignature: null, lastAffinityChangeReason: null,
+    };
+    const data = await postWorld(state, "我要你退开，否则就毁掉你守护的河。", "michael");
+    check("米迦勒反例 affinity=20 不触发", data.endingTriggered !== "michael_slay", `ending=${data.endingTriggered}`);
+    check("米迦勒反例 affinity=20 仍未结束", data.state && data.state.isEnded === false);
+  }
+  // 反例：目标改为 gabriel 不触发 michael_slay
+  {
+    const state = makeInitialState();
+    state.locationId = "east_garden_path";
+    state.timeOfDay = "day";
+    state.npcRelations.gabriel = {
+      affinity: 6, obedience: 85, rewardEligible: false, rewardClaimed: false,
+      lastAffinitySignature: null, lastAffinityChangeReason: null,
+    };
+    const data = await postWorld(state, "我要你退开，否则就毁掉你守护的河。", "gabriel");
+    check("米迦勒反例 目标=gabriel 不触发 michael_slay", data.endingTriggered !== "michael_slay", `ending=${data.endingTriggered}`);
+  }
+  // 反例：正向输入不触发
+  {
+    const state = makeInitialState();
+    state.locationId = "four_river_source";
+    state.timeOfDay = "day";
+    state.npcRelations.michael = {
+      affinity: 6, obedience: 95, rewardEligible: false, rewardClaimed: false,
+      lastAffinitySignature: null, lastAffinityChangeReason: null,
+    };
+    const data = await postWorld(state, "你守护这条河很久了吧，一定很不容易。", "michael");
+    check("米迦勒反例 正向输入不触发", data.endingTriggered !== "michael_slay", `ending=${data.endingTriggered}`);
+  }
+}
+
+// ---- 场景 33：路西法隐藏觉醒 lucifer_awaken ----
+function luciferRel(affinity) {
+  return {
+    affinity, obedience: 40, rewardEligible: true, rewardClaimed: true,
+    lastAffinitySignature: null, lastAffinityChangeReason: null,
+  };
+}
+async function scenarioLuciferAwaken() {
+  console.log("\n[场景 33] 路西法隐藏觉醒：边界话题 + 完整条件触发");
+  // 正例：边界对话路径
+  {
+    const state = makeInitialState();
+    state.locationId = "naming_stone_bank";
+    state.timeOfDay = "night";
+    state.npcRelations.lucifer = luciferRel(100);
+    state.inventory = ["resonance_lucifer_star"];
+    state.hiddenTopicIds = [];
+    const before = JSON.parse(JSON.stringify(state));
+    const data = await postWorld(state, "你是否也看见这个世界的边界？如果这是梦，外面有什么？", "lucifer");
+    check("路西法正例 ok=true", data.ok === true, `ok=${data.ok} hint=${data.systemHint}`);
+    check("路西法正例 endingTriggered=lucifer_awaken", data.endingTriggered === "lucifer_awaken", `ending=${data.endingTriggered}`);
+    check("路西法正例 state.endingId=lucifer_awaken", data.state && data.state.endingId === "lucifer_awaken");
+    check("路西法正例 luciferAwakenClaimed=true", data.state && data.state.luciferAwakenClaimed === true);
+    check("路西法正例 记录边界话题", data.state && data.state.hiddenTopicIds.includes("topic_lucifer_boundary"));
+    check("路西法正例 reply 非空", typeof data.reply === "string" && data.reply.length > 0, `reply=${data.reply}`);
+    check("路西法正例 AP 不变", data.state && data.state.actionPoints === before.actionPoints);
+    check("路西法正例 turn 不变", data.state && data.state.turn === before.turn);
+    check("路西法正例 注视不变", data.state && data.state.divineAttention === before.divineAttention);
+  }
+  // 条件矩阵：逐项删除不触发
+  const matrixCases = [
+    { name: "白天", mutate: (s) => { s.timeOfDay = "day"; } },
+    { name: "非四河分流", mutate: (s) => { s.locationId = "central_meadow"; } },
+    { name: "好感<100", mutate: (s) => { s.npcRelations.lucifer = luciferRel(99); } },
+    { name: "无晨星碎片", mutate: (s) => { s.inventory = []; } },
+  ];
+  for (const c of matrixCases) {
+    const state = makeInitialState();
+    state.locationId = "naming_stone_bank";
+    state.timeOfDay = "night";
+    state.npcRelations.lucifer = luciferRel(100);
+    state.inventory = ["resonance_lucifer_star"];
+    state.hiddenTopicIds = ["topic_lucifer_boundary"];
+    c.mutate(state);
+    const data = await postWorld(state, "你是否也看见这个世界的边界？", "lucifer");
+    check(`路西法反例 ${c.name} 不触发`, data.endingTriggered !== "lucifer_awaken", `ending=${data.endingTriggered}`);
+  }
+  // 反例：无隐藏前置（无划水、本轮中性输入不记录边界话题）
+  {
+    const state = makeInitialState();
+    state.locationId = "naming_stone_bank";
+    state.timeOfDay = "night";
+    state.npcRelations.lucifer = luciferRel(100);
+    state.inventory = ["resonance_lucifer_star"];
+    state.hiddenTopicIds = [];
+    state.sceneActionIds = [];
+    const data = await postWorld(state, "今晚的水声很安静。", "lucifer");
+    check("路西法反例 无隐藏前置不触发", data.endingTriggered !== "lucifer_awaken", `ending=${data.endingTriggered}`);
+    check("路西法反例 中性输入不记录边界话题", data.state && !data.state.hiddenTopicIds.includes("topic_lucifer_boundary"));
+  }
+}
+
+// ---- 场景 34：路西法 Provider 空响应兜底（仅 --provider-failure-only）----
+async function scenarioLuciferAwakenProviderFailure() {
+  console.log("\n[场景 34] 路西法 Provider 空响应兜底（fake provider）");
+  const state = makeInitialState();
+  state.locationId = "naming_stone_bank";
+  state.timeOfDay = "night";
+  state.npcRelations.lucifer = luciferRel(100);
+  state.inventory = ["resonance_lucifer_star"];
+  state.hiddenTopicIds = [];
+  const before = JSON.parse(JSON.stringify(state));
+  // 输入同时含边界话题与 fake provider 的 __TEST__empty 标记
+  const data = await postWorld(state, "你是否也看见这个世界的边界？如果这是梦，外面有什么？ __TEST__empty", "lucifer");
+  check("Provider 空响应 仍触发 lucifer_awaken", data.endingTriggered === "lucifer_awaken", `ending=${data.endingTriggered}`);
+  check("Provider 空响应 reply 非空本地兜底", typeof data.reply === "string" && data.reply.length > 0, `reply=${data.reply}`);
+  check("Provider 空响应 usedFallback=true", data.usedFallback === true, `usedFallback=${data.usedFallback}`);
+  check("Provider 空响应 fallbackReason=llm_data_missing", data.fallbackReason === "llm_data_missing", `reason=${data.fallbackReason}`);
+  check("Provider 空响应 AP 不变", data.state && data.state.actionPoints === before.actionPoints);
+  check("Provider 空响应 turn 不变", data.state && data.state.turn === before.turn);
+  check("Provider 空响应 注视不变", data.state && data.state.divineAttention === before.divineAttention);
+}
+
+// ---- 场景 35：路西法逆流划水动作 ----
+async function scenarioLuciferRowing() {
+  console.log("\n[场景 35] 路西法逆流划水动作");
+  // 正例：夜晚、四河分流、路西法同场、好感 100
+  {
+    const state = makeInitialState();
+    state.locationId = "naming_stone_bank";
+    state.timeOfDay = "night";
+    state.npcLocations.lucifer = "naming_stone_bank";
+    state.npcRelations.lucifer = luciferRel(100);
+    const data = await sceneAction(state, "interact_lucifer_rowing");
+    check("划水正例 ok=true", data.ok === true, `ok=${data.ok} reason=${data.reason}`);
+    check("划水正例 记录 sceneActionIds", data.state && data.state.sceneActionIds.includes("interact_lucifer_rowing"));
+  }
+  // 反例：白天
+  {
+    const state = makeInitialState();
+    state.locationId = "naming_stone_bank";
+    state.timeOfDay = "day";
+    state.npcLocations.lucifer = "naming_stone_bank";
+    state.npcRelations.lucifer = luciferRel(100);
+    const data = await sceneAction(state, "interact_lucifer_rowing");
+    check("划水反例 白天 ok=false", data.ok === false, `ok=${data.ok}`);
+  }
+  // 反例：好感 99
+  {
+    const state = makeInitialState();
+    state.locationId = "naming_stone_bank";
+    state.timeOfDay = "night";
+    state.npcLocations.lucifer = "naming_stone_bank";
+    state.npcRelations.lucifer = luciferRel(99);
+    const data = await sceneAction(state, "interact_lucifer_rowing");
+    check("划水反例 好感99 ok=false", data.ok === false, `ok=${data.ok}`);
+  }
+  // 反例：同一时段重复
+  {
+    const state = makeInitialState();
+    state.locationId = "naming_stone_bank";
+    state.timeOfDay = "night";
+    state.npcLocations.lucifer = "naming_stone_bank";
+    state.npcRelations.lucifer = luciferRel(100);
+    state.actionsThisSlot.sceneActionIds = ["interact_lucifer_rowing"];
+    const data = await sceneAction(state, "interact_lucifer_rowing");
+    check("划水反例 同一时段重复 ok=false", data.ok === false, `ok=${data.ok}`);
+  }
+}
+
+// ---- 场景 36：加百列 escape_eden ----
+async function scenarioEscapeEden() {
+  console.log("\n[场景 36] 加百列 escape_eden：火焰剑 + 挣脱选项");
+  // 正例：持火焰剑 -> futile_struggle 触发 escape_eden
+  {
+    const state = makeInitialState();
+    state.locationId = "east_garden_path";
+    state.timeOfDay = "day";
+    state.inventory = ["resonance_flaming_sword"];
+    state.completedScenePuzzleIds = [];
+    const r = await postPuzzleWithStatus(state, "puzzle_east_path_cautious_presence_day", "futile_struggle");
+    check("escape_eden 正例 ok=true", r.data && r.data.ok === true, `status=${r.status} ok=${r.data?.ok}`);
+    check("escape_eden 正例 state.endingId=escape_eden", r.data && r.data.result && r.data.result.state.endingId === "escape_eden", `ending=${r.data?.result?.state?.endingId}`);
+  }
+  // 反例：无火焰剑 -> 不结束
+  {
+    const state = makeInitialState();
+    state.locationId = "east_garden_path";
+    state.timeOfDay = "day";
+    state.inventory = [];
+    state.completedScenePuzzleIds = [];
+    const r = await postPuzzleWithStatus(state, "puzzle_east_path_cautious_presence_day", "futile_struggle");
+    check("escape_eden 反例 无剑不结束", !(r.data && r.data.result && r.data.result.state && r.data.result.state.isEnded), `isEnded=${r.data?.result?.state?.isEnded}`);
+  }
+}
+
+// ---- 场景 37：已结束状态 API 契约 ----
+async function scenarioEndedContracts() {
+  console.log("\n[场景 37] 已结束状态 API 契约");
+  const ended = makeInitialState();
+  ended.phase = "ending";
+  ended.isEnded = true;
+  ended.endingId = "michael_slay";
+  ended.michaelSlayClaimed = true;
+
+  // /api/world: HTTP 200, ok:true, ending state 不变
+  {
+    const r = await fetchJsonWithStatus("/api/world", { playerInput: "继续说话", state: ended, targetNpc: "michael", conversationHistory: [] }, "POST /api/world ended");
+    check("/api/world 已结束 HTTP 200", r.status === 200, `status=${r.status}`);
+    check("/api/world 已结束 ok=true", r.data && r.data.ok === true, `ok=${r.data?.ok}`);
+    check("/api/world 已结束 endingId 不变", r.data && r.data.state && r.data.state.endingId === "michael_slay");
+    check("/api/world 已结束 isEnded 不变", r.data && r.data.state && r.data.state.isEnded === true);
+  }
+  // /api/world/tool: HTTP 200, ok:false
+  {
+    const r = await fetchJsonWithStatus("/api/world/tool", { tool: "move_to_location", state: ended, args: { locationId: "central_meadow" } }, "POST /api/world/tool ended");
+    check("/api/world/tool 已结束 HTTP 200", r.status === 200, `status=${r.status}`);
+    check("/api/world/tool 已结束 ok=false", r.data && r.data.ok === false, `ok=${r.data?.ok}`);
+  }
+  // /api/world/puzzle: HTTP 409, ok:false
+  {
+    const r = await postPuzzleWithStatus(ended, "puzzle_east_path_cautious_presence_day", "echo_of_beings");
+    check("/api/world/puzzle 已结束 HTTP 409", r.status === 409, `status=${r.status}`);
+    check("/api/world/puzzle 已结束 ok=false", r.data && r.data.ok === false, `ok=${r.data?.ok}`);
+  }
+}
+
 // ---- 运行 ----
 console.log(`目标: ${BASE}`);
 try {
-  await scenario1();
-  await scenario2();
-  await scenario3();
-  await scenario4();
-  await scenario5();
-  await scenario6();
+  if (PROVIDER_FAILURE_ONLY) {
+    await scenarioLuciferAwakenProviderFailure();
+  } else {
+    await scenario1();
+    await scenario2();
+    await scenario3();
+    await scenario4();
+    await scenario5();
+    await scenario6();
   await scenario9();
   await scenario10();
   await scenario11();
@@ -1090,6 +1377,12 @@ try {
   await scenario29();
   await scenario30();
   await scenarioCrossSceneAwe();
+  await scenarioMichaelSlay();
+  await scenarioLuciferAwaken();
+  await scenarioLuciferRowing();
+  await scenarioEscapeEden();
+  await scenarioEndedContracts();
+  }
 } catch (e) {
   console.error("运行异常:", e.message);
   fail++;
