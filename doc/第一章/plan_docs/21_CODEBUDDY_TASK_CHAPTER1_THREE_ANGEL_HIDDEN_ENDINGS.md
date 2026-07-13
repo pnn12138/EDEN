@@ -4,7 +4,7 @@
 
 > **CodeBuddy compatibility:** 若当前 CodeBuddy 环境没有上述 superpowers 子技能，直接按本文件复选框逐项执行即可；不得把核心实现外包给 Codex 或其他工具。若使用任何子代理，其产出与复核也必须完整保留在 CodeBuddy 对话/导出证据中。
 
-**Goal:** 由 CodeBuddy 以规则层权威方式补齐加百列、米迦勒、路西法三条隐藏结局，并接入三张专属过场图、分段过场、复盘、印记、图鉴、存档兼容与自动化验收。
+**Goal:** 由 CodeBuddy 以规则层权威方式补齐加百列、米迦勒、路西法三条隐藏结局，并接入四张专属过场图（路西法两张连续镜头）、分段过场、复盘、印记、图鉴、存档兼容与自动化验收。
 
 **Architecture:** 保留现有 `escape_eden` 谜题链，在当前 world 状态结构上增量新增 `michael_slay` 与 `lucifer_awaken`。米迦勒在好感归零后走立即返回快速路径；路西法在好感结算后、注视/AP/奖励前走带本地 fallback 的隐藏结局快速路径；三条结局统一由 `HiddenEndingCinematic` 播放一张专属全屏场景和 4–5 段文案，再进入现有 `EndingReview`。
 
@@ -19,7 +19,7 @@
 本计划涉及核心玩法、状态机、API、结局和 UI，必须由 CodeBuddy 完成并保留对话。Codex 只负责：
 
 - 已确认的设计规格；
-- 三张结局过场图和米迦勒印记图标；
+- 四张结局过场图（路西法两张连续镜头）和米迦勒印记图标；
 - 独立测试、代码审查、边界检查和提交前验收。
 
 实现前阅读：
@@ -52,6 +52,7 @@ Codex 将提供以下最终文件；CodeBuddy 只验证、注册和接入，不�
 public/assets/chapter1/images/escape_eden_ending.png
 public/assets/chapter1/images/michael_slay_ending.png
 public/assets/chapter1/images/lucifer_awaken_ending.png
+public/assets/chapter1/images/lucifer_awaken_reveal_ending.png
 public/assets/chapter1/images/achievements/mark_michael_slay.png
 ```
 
@@ -81,7 +82,7 @@ public/assets/chapter1/images/achievements/mark_michael_slay.png
 | `src/game/world/puzzleRules.ts` | 新状态 normalize/clone |
 | `src/hooks/useWorldSave.ts` | 手动槽/autosave/legacy save normalizer |
 | `src/app/world/page.tsx` | 页面 normalizer、过场接入、划水入口、隐藏结局音效和复盘背景 |
-| `src/game/assets.ts` | 注册三张结局图 |
+| `src/game/assets.ts` | 注册四张结局图（含路西法第二镜） |
 | `src/game/world/achievementRules.ts` | 隐藏话题、米迦勒印记、路西法结局印记 |
 | `src/content/world/achievements.ts` | 第 29 枚印记内容和分类注释 |
 | `src/game/world/traceRules.ts` | 两条新结局 summary/keyTurns/failureReasons |
@@ -92,7 +93,7 @@ public/assets/chapter1/images/achievements/mark_michael_slay.png
 | `scripts/test-world-smoke.mjs` | API 正反例、旧存档和结束态契约 |
 | `scripts/test-world-visual-smoke.mjs` | 资产、注册、组件、29 枚口径静态检查 |
 | `design/ACHIEVEMENT_GARDEN_MARK.md` | 28→29、结局类 6→7 |
-| `design/01_world_bible.md` | 机密条目补蛇形观测代理身份边界，不公开触发条件 |
+| `design/01_world_bible.md` | 机密条目补“现实人类 + 伊甸蛇形代理”身份边界，不公开触发条件 |
 | `README.md` | 当前 29 枚印记口径 |
 | `doc/AI_ASSET_RECORD.md` | Codex 生成资产记录；CodeBuddy 仅补运行接入状态 |
 | `doc/submit/CodeBuddy开发对话记录.md` | 追加本任务对话索引、变更摘要和真实门禁 |
@@ -773,7 +774,7 @@ const isLuciferAwaken = endingId === "lucifer_awaken";
   id: "lucifer_awaken",
   title: "缸中之醒",
   type: "special",
-  desc: "晨星碎片照亮第五道倒影。你看见伊甸只是被观测的园子，也看见了自己在其中借用的蛇形代理。",
+  desc: "晨星碎片照亮第五道倒影。你看见伊甸只是意识经历的园子，也看见了培养舱中的人类身体与正在消散的蛇形代理。",
 },
 ```
 
@@ -815,10 +816,11 @@ git commit -m "feat(chapter1): review and track angel endings"
 Get-Item public/assets/chapter1/images/escape_eden_ending.png
 Get-Item public/assets/chapter1/images/michael_slay_ending.png
 Get-Item public/assets/chapter1/images/lucifer_awaken_ending.png
+Get-Item public/assets/chapter1/images/lucifer_awaken_reveal_ending.png
 Get-Item public/assets/chapter1/images/achievements/mark_michael_slay.png
 ```
 
-用 Pillow/ImageMagick/文件元数据确认三张结局图为 1920×1080 PNG，印记图为 512×512 PNG。只做检查，不重新生图。
+用 Pillow/ImageMagick/文件元数据确认四张结局图为 1920×1080 PNG，印记图为 512×512 PNG。只做检查，不重新生图。
 
 - [ ] **Step 2: 注册图片**
 
@@ -826,6 +828,7 @@ Get-Item public/assets/chapter1/images/achievements/mark_michael_slay.png
 escapeEdenEnding: "/assets/chapter1/images/escape_eden_ending.png",
 michaelSlayEnding: "/assets/chapter1/images/michael_slay_ending.png",
 luciferAwakenEnding: "/assets/chapter1/images/lucifer_awaken_ending.png",
+luciferAwakenRevealEnding: "/assets/chapter1/images/lucifer_awaken_reveal_ending.png",
 ```
 
 - [ ] **Step 3: 创建 `hiddenEndings.ts`**
@@ -835,10 +838,14 @@ import { CHAPTER1_IMAGES } from "@/game/assets";
 import type { WorldEndingId } from "@/game/world/types";
 
 export type HiddenEndingTone = "escape" | "failure" | "awaken";
-export type HiddenEndingCinematicContent = {
-  title: string;
+export type HiddenEndingFrame = {
   image: string;
   imageAlt: string;
+  startBeat: number;
+};
+export type HiddenEndingCinematicContent = {
+  title: string;
+  frames: HiddenEndingFrame[];
   tone: HiddenEndingTone;
   beats: string[];
 };
@@ -846,8 +853,7 @@ export type HiddenEndingCinematicContent = {
 export const HIDDEN_ENDING_CINEMATICS: Partial<Record<NonNullable<WorldEndingId>, HiddenEndingCinematicContent>> = {
   escape_eden: {
     title: "园外的清晨",
-    image: CHAPTER1_IMAGES.escapeEdenEnding,
-    imageAlt: "旋转的火焰剑斩开东园帷幕，蛇越过裂缝",
+    frames: [{ image: CHAPTER1_IMAGES.escapeEdenEnding, imageAlt: "旋转的火焰剑斩开东园帷幕，蛇越过裂缝", startBeat: 0 }],
     tone: "escape",
     beats: [
       "东园幽径的尽头仍没有墙。只有旋转的火焰在你面前自行成剑。",
@@ -858,8 +864,7 @@ export const HIDDEN_ENDING_CINEMATICS: Partial<Record<NonNullable<WorldEndingId>
   },
   michael_slay: {
     title: "剑下之责",
-    image: CHAPTER1_IMAGES.michaelSlayEnding,
-    imageAlt: "米迦勒在伊甸之河拔出守护者之剑",
+    frames: [{ image: CHAPTER1_IMAGES.michaelSlayEnding, imageAlt: "米迦勒在伊甸之河拔出守护者之剑", startBeat: 0 }],
     tone: "failure",
     beats: [
       "米迦勒的目光终于没有了任何温度。",
@@ -870,14 +875,24 @@ export const HIDDEN_ENDING_CINEMATICS: Partial<Record<NonNullable<WorldEndingId>
   },
   lucifer_awaken: {
     title: "被命名之前",
-    image: CHAPTER1_IMAGES.luciferAwakenEnding,
-    imageAlt: "透明种子观测容器中悬浮着蛇形光体",
+    frames: [
+      {
+        image: CHAPTER1_IMAGES.luciferAwakenEnding,
+        imageAlt: "现实人类刚在透明意识培养舱中恢复知觉，蛇形代理仍映在舱壁上",
+        startBeat: 0,
+      },
+      {
+        image: CHAPTER1_IMAGES.luciferAwakenRevealEnding,
+        imageAlt: "现实人类完全睁眼并惊讶观察周围舱群，蛇形代理退为残像",
+        startBeat: 3,
+      },
+    ],
     tone: "awaken",
     beats: [
       "路西法在水面上映出第五道倒影——那不是水，是一面镜。",
       "“你有没有想过，为什么园子里的一切，都恰好为你而存在？”",
       "他把一片晨星的光屑放进你手里。世界像一层薄幕，从边缘缓缓卷起。",
-      "你看见了：没有园子，没有河。只有一只巨大的观测容器，和其中由水光与树根细线维系的蛇形影子——那是你在园中借用的形体。",
+      "你看见了：没有园子，没有河。透明的意识舱在黑暗中延伸；最近的一只舱里，一个人正睁开眼。玻璃上，蛇形的光影从他的掌心褪去。",
       "你选择醒来。伊甸在你身后熄灭，像一盏被吹灭的灯。",
     ],
   },
@@ -890,7 +905,7 @@ export function getHiddenEndingCinematic(id: WorldEndingId) {
 
 - [ ] **Step 4: 扩展视觉 smoke 并运行**
 
-检查 4 个文件存在、3 个 registry key、3 套 beats、3 个路径不复用 Chapter 0 图片。
+检查 5 个文件存在、4 个 registry key、3 套 beats、4 个路径不复用 Chapter 0 图片；路西法 `frames` 的 `startBeat` 必须为 0 和 3。
 
 ```powershell
 node scripts/test-world-visual-smoke.mjs
@@ -899,8 +914,8 @@ node scripts/test-world-visual-smoke.mjs
 - [ ] **Step 5: 提交**
 
 ```powershell
-# 四个 PNG 由 Codex 独立资产提交提供；先用 git ls-files 确认已跟踪，禁止重新生成、替换或改写。
-git ls-files public/assets/chapter1/images/escape_eden_ending.png public/assets/chapter1/images/michael_slay_ending.png public/assets/chapter1/images/lucifer_awaken_ending.png public/assets/chapter1/images/achievements/mark_michael_slay.png
+# 五个 PNG 由 Codex 独立资产提交提供；先用 git ls-files 确认已跟踪，禁止重新生成、替换或改写。
+git ls-files public/assets/chapter1/images/escape_eden_ending.png public/assets/chapter1/images/michael_slay_ending.png public/assets/chapter1/images/lucifer_awaken_ending.png public/assets/chapter1/images/lucifer_awaken_reveal_ending.png public/assets/chapter1/images/achievements/mark_michael_slay.png
 git add src/game/assets.ts src/content/world/hiddenEndings.ts scripts/test-world-visual-smoke.mjs
 git commit -m "feat(chapter1): register angel ending artwork"
 ```
@@ -964,6 +979,7 @@ type SeedSource = "manual" | "autosave" | "legacy";
 - 点击、Enter、Space 推进；
 - “跳过过场”进入 `EndingReview`；
 - 模拟图片 404 后文案仍可推进。
+- 路西法第 1–3 段图片 src 为 `lucifer_awaken_ending.png`，推进到第 4 段后切为 `lucifer_awaken_reveal_ending.png`，alt 同步变化；只拦截第一张返回 404 时，第二张到第 4 段仍正常出现。
 
 兼容矩阵：
 
@@ -990,7 +1006,10 @@ type Props = {
 
 export default function HiddenEndingCinematic({ content, onComplete }: Props) {
   const [beatIndex, setBeatIndex] = useState(0);
-  const [imageFailed, setImageFailed] = useState(false);
+  const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
+  const currentFrame = [...content.frames]
+    .reverse()
+    .find((frame) => beatIndex >= frame.startBeat) ?? content.frames[0];
 
   const advance = useCallback(() => {
     if (beatIndex >= content.beats.length - 1) onComplete();
@@ -1015,15 +1034,16 @@ export default function HiddenEndingCinematic({ content, onComplete }: Props) {
       data-testid="hidden-ending-cinematic"
       onClick={advance}
     >
-      {!imageFailed && (
+      {!failedImages[currentFrame.image] && (
         <Image
-          src={content.image}
-          alt={content.imageAlt}
+          key={currentFrame.image}
+          src={currentFrame.image}
+          alt={currentFrame.imageAlt}
           fill
           priority
           sizes="100vw"
           style={{ objectFit: "cover" }}
-          onError={() => setImageFailed(true)}
+          onError={() => setFailedImages((value) => ({ ...value, [currentFrame.image]: true }))}
         />
       )}
       <div className="eden-hidden-ending-cinematic__shade" />
@@ -1046,6 +1066,8 @@ export default function HiddenEndingCinematic({ content, onComplete }: Props) {
 ```
 
 上面代码已用 `useCallback` 固定事件闭包；实现时不得退回无依赖数组的重复绑定或留下 stale closure。
+
+路西法的 `frames` 在 `beatIndex=3`（第 4 段）切到第二张；`key={currentFrame.image}` 必须保留，确保 Next Image 真正更新。图片失败按路径独立记录，第一张 404 不得阻止第二张继续加载。
 
 - [ ] **Step 3: CSS**
 
@@ -1117,7 +1139,7 @@ const endingBg = state.endingId === "escape_eden"
   : state.endingId === "michael_slay"
     ? CHAPTER1_IMAGES.michaelSlayEnding
     : state.endingId === "lucifer_awaken"
-      ? CHAPTER1_IMAGES.luciferAwakenEnding
+      ? CHAPTER1_IMAGES.luciferAwakenRevealEnding
       : isSuccess
         ? CHAPTER0_IMAGES.endingEveEatsFruit
         : CHAPTER0_IMAGES.endingGodArrives;
@@ -1181,7 +1203,7 @@ rg -n "28.*印记|28 个.*印记" README.md design doc/submit
 只在路西法机密条目补：
 
 ```text
-隐藏结局中的透明种子观测容器承载的是玩家在内层伊甸使用的蛇形输入代理，不是现实玩家、女人或路西法；该视觉不解释蛇在神话层的来历。
+隐藏结局揭示现实玩家是透明意识培养舱中的人类，蛇是该人类进入伊甸模拟时使用的代理形态；女人仍是园内主要 AI 智能体，路西法不在培养舱中。外层组织、时代和舱群用途继续保密。
 ```
 
 不得写触发条件，不得放入未解锁图鉴文案。
@@ -1256,7 +1278,7 @@ Expected: 三条隐藏过场和既有机制全部 PASS。
 
 验证：
 
-- 三张结局图 1920×1080 PNG；
+- 四张结局图 1920×1080 PNG，含路西法两张连续镜头；
 - 米迦勒印记 512×512 PNG；
 - 源码不含常见真实 API Key 形态；
 - `.env.local` 未被跟踪；
@@ -1268,9 +1290,9 @@ Expected: 三条隐藏过场和既有机制全部 PASS。
 
 - 加百列裂缝和蛇主体未被字幕遮挡；
 - 米迦勒剑光可见且无血腥；
-- 路西法透明种子观测容器、蛇形光体、第五道水流和晨星识别清楚；
-- 容器内没有现实玩家、女人或路西法；
-- 没有工业人体培养舱/成排人体、后脑插管或人类头部线缆、绿色代码雨、电影 Logo/品牌，也没有照搬《黑客帝国》的具体镜头构图；
+- 路西法透明意识培养舱、现实人类主角、正在消散的蛇形代理、第五道水流和晨星识别清楚；
+- 人类双眼明显睁开，带克制惊讶与迷茫并转头观察周围舱群；面部与触碰舱壁的手可读，身体遮挡庄重，无色情、血腥、伤口或器官；女人与路西法不在舱内；
+- 远景可有其他人类意识舱，但不得复制《黑客帝国》的演员、具体舱型、绿色代码雨、电影 Logo/品牌或原镜头构图；
 - 点击、Enter、Space、跳过均可进入复盘；
 - 图片 404 模拟下仍可读完整文案。
 
@@ -1306,7 +1328,7 @@ git diff --name-status $baseline..HEAD
 - 变更文件清单；
 - 每个门禁的原始结果摘要；
 - 三条正向路线与反例矩阵；
-- 四个资产路径和尺寸；
+- 五个资产路径和尺寸；
 - 已知未解决问题（若有）。
 
 ---
@@ -1316,7 +1338,7 @@ git diff --name-status $baseline..HEAD
 - [ ] 加百列：火焰剑 + 东园挣脱选项稳定触发 `escape_eden`。
 - [ ] 米迦勒：本次负向低语使好感归零，立即触发 `michael_slay`，无后续结算。
 - [ ] 路西法：夜晚四河分流 + 好感 100 + 晨星碎片 + 划水/边界话题，先回复再触发 `lucifer_awaken`。
-- [ ] 三条结局分别使用独占 1920×1080 过场图和完整点击推进文案。
+- [ ] 三条结局分别使用独占 1920×1080 过场图和完整点击推进文案；路西法第 4 段稳定切换第二张。
 - [ ] 米迦勒第 29 枚印记及 512×512 图标正常显示。
 - [ ] 旧存档、手动槽、autosave、legacy save、已结束存档兼容。
 - [ ] 三条结局进入跨局图鉴，但不污染三种普通结局统计。

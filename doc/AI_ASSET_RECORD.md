@@ -311,19 +311,21 @@
 | --- | --- | --- | --- | --- | --- | --- |
 | IMG223 | `escape_eden_ending.png` | Ending CG / 1920×1080 RGB PNG | 加百列隐藏结局「园外的清晨」单场景过场与复盘背景 | `/assets/chapter1/images/escape_eden_ending.png` | Codex 内置 `image_gen` + Pillow Lanczos 定尺寸 | READY_FOR_CODEBUDDY |
 | IMG224 | `michael_slay_ending.png` | Ending CG / 1920×1080 RGB PNG | 米迦勒隐藏失败结局「剑下之责」单场景过场与复盘背景 | `/assets/chapter1/images/michael_slay_ending.png` | Codex 内置 `image_gen` + Pillow Lanczos 定尺寸 | READY_FOR_CODEBUDDY |
-| IMG225 | `lucifer_awaken_ending.png` | Ending CG / 1920×1080 RGB PNG | 路西法隐藏识破结局「被命名之前」单场景过场与复盘背景 | `/assets/chapter1/images/lucifer_awaken_ending.png` | Codex 内置 `image_gen` + Pillow Lanczos 定尺寸 | READY_FOR_CODEBUDDY |
+| IMG225 | `lucifer_awaken_ending.png` | Ending CG / 1920×1080 RGB PNG | 路西法隐藏识破结局连续镜头 1：人类刚恢复知觉，蛇形代理仍清晰 | `/assets/chapter1/images/lucifer_awaken_ending.png` | Codex 内置 `image_gen` 参考图编辑 + Pillow Lanczos 定尺寸 | READY_FOR_CODEBUDDY（v2 人类主角版） |
 | IMG226 | `mark_michael_slay.png` | Achievement icon / 512×512 RGBA PNG | 米迦勒隐藏结局第 29 枚候选印记「守门者之剑」 | `/assets/chapter1/images/achievements/mark_michael_slay.png` | Codex 内置 `image_gen` + 洋红 chroma-key 本地去背 + Pillow Lanczos 定尺寸 | READY_FOR_CODEBUDDY |
+| IMG227 | `lucifer_awaken_reveal_ending.png` | Ending CG / 1920×1080 RGB PNG | 路西法隐藏识破结局连续镜头 2：人类睁眼惊讶观察周围舱群 | `/assets/chapter1/images/lucifer_awaken_reveal_ending.png` | Codex 内置 `image_gen` 定向表情/姿态编辑 + Pillow Lanczos 定尺寸 | READY_FOR_CODEBUDDY |
 
 ### Prompt 摘要与视觉边界
 
 - **IMG223 / 加百列**：`16:9 fullscreen EDEN ending cinematic; eastern path has no wall; rotating sacred flaming sword opens an invisible veil; small dark serpent crosses from warm golden-green Eden into cool nameless blue dawn; semi-realistic cinematic storybook painting; dark lower subtitle space; no text/logo/watermark, no gore, no modern or cyberpunk objects.`
 - **IMG224 / 米迦勒**：`16:9 hidden-failure cinematic; Michael in deep navy and muted antique-gold armor with white wings draws a guardian sword beside Eden's headwaters; cold white blade light severs the river reflection above a small serpent shadow; solemn consequence, non-graphic; dark lower subtitle space; no text/logo/watermark or combat spectacle.`
-- **IMG225 / 路西法**：`16:9 EDEN-original mind-in-a-vessel reveal; giant transparent vessel shaped like seed/fruit/waterdrop; inside is a serpent observation/input proxy made only of cyan water-light, fifth-river currents and tree-root filaments; broken Eden reflection, distant empty seed vessels and one warm morning-star mote; teal/cold-blue/deep-violet palette.` 概念只参考“构造世界之外存在意识承载容器”的缸中脑命题；明确禁止现实玩家、女人或路西法置于容器内，也禁止工业人体舱/成排人体、后脑插管、绿色代码雨、电影角色/品牌和照搬《黑客帝国》镜头。
+- **IMG225 / 路西法连续镜头 1**：`16:9 EDEN hidden-ending cinematic; the outer-world protagonist has just recovered consciousness inside a transparent organic-biotechnological tank, face in three-quarter side view, one hand touching curved glass; cyan serpent avatar reflection remains clear beside broken Eden and the fifth river; receding original seed/fruit-shaped human support vessels; respectful nonsexual concealment; no text, watermark, gore, recognizable actor, exact Matrix pod or copied film composition.` 使用用户提供的《黑客帝国》截图作为“人类身体在构造世界之外由培养舱承载”的概念参考，同时保留 EDEN 原创种子舱、树根河网与晨星语言。
+- **IMG227 / 路西法连续镜头 2**：`Preserve the consciousness tank and chamber; change the human to both eyes clearly open with restrained surprise and disorientation, head turned to scan the surrounding pod chamber, one hand testing the glass; the viewer must immediately read that a human has awakened and is checking the unfamiliar outer reality; serpent reflection becomes secondary; no screaming, horror, text, watermark, gore or copied film frame.`
 - **IMG226 / 米迦勒印记**：`centered watercolor achievement emblem; cold-white sword beam cutting a blue river-ripple shield, muted antique gold and one tiny dark-crimson accent; flat #ff00ff removable background; no text, character, blood or shadow.` 去背后检查为 RGBA，四角透明，图形在 64px 显示下仍保持剑与水纹盾的可读轮廓。
 
 ### 生成与验收记录
 
 - 生成日期：2026-07-13；场景源图由内置工具输出为 1672×941 RGB PNG，再以高质量 Lanczos 轻微裁切/缩放为精确 1920×1080 PNG。
 - 印记源图为 1254×1254 洋红底 PNG；使用安装的 `remove_chroma_key.py` 进行 soft matte、despill 与边缘透明处理，再缩放为 512×512 RGBA PNG。
-- 人工视觉检查：三张 CG 均无文字、Logo、水印和血腥内容；主体避开底部字幕暗区。路西法图仅包含蛇形水光代理与空种子容器，没有现实人体、女人、路西法、工业人类培养舱、头部线缆或绿色代码雨。
+- 人工视觉检查：四张 CG 均无文字、Logo、水印和血腥内容；主体避开底部字幕暗区。路西法两镜连续：第一镜为人类刚恢复知觉、蛇影仍清晰，第二镜为人类完全睁眼后惊讶地转头观察周围舱群、一手触碰舱壁，蛇影退为次要残像；女人与路西法不在舱内，无色情裸露、伤口、器官、绿色代码雨、电影品牌或原镜头复制。
 - Demo 接入状态：待 CodeBuddy 按 `doc/第一章/plan_docs/21_CODEBUDDY_TASK_CHAPTER1_THREE_ANGEL_HIDDEN_ENDINGS.md` 注册与接入；接入完成后由 CodeBuddy 将本节状态补为 USED_IN_DEMO，并由 Codex 独立验收。
