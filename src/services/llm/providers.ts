@@ -124,9 +124,10 @@ export async function callOpenAICompatible(
         data?.choices?.[0]?.message?.content ?? undefined;
 
       if (typeof content !== "string" || content.trim().length === 0) {
+        // 请求本身成功（HTTP 200），但模型返回空内容 -> 视为数据缺失，便于上层走本地 fallback。
         return {
           ok: false,
-          error: "provider_request_failed",
+          error: "llm_data_missing",
           usedFallback: false,
         };
       }

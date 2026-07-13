@@ -81,7 +81,9 @@ export async function callLLM(
       const fallbackReason: FallbackReasonCode =
         result.error === "provider_timeout"
           ? "provider_timeout"
-          : "provider_request_failed";
+          : result.error === "llm_data_missing"
+            ? "llm_data_missing"
+            : "provider_request_failed";
 
       if (options?.fallbackToMock === false) {
         return {
