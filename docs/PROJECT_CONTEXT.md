@@ -810,3 +810,11 @@ Codex 每轮测试或审查后必须维护本文件：
 - `AchievementGarden` 的 `compact` 分支保留原有 DOM、筛选结构、emoji 锁标与隐藏文案；所有新视觉规则均限定在 `.eden-garden-page`，游戏内印记浮窗不受影响。
 - 新增 `scripts/test-garden-codex-ui.mjs` 和 `tests/e2e/garden-codex.spec.ts`。复验通过：园中档案静态 smoke 8/8、世界视觉 smoke 230/230、`npm run lint`、`npm run build`、1920×1080 Playwright 3/3（含 `/world` compact 回归）。
 - 比赛展示价值：28 枚园中印记、园中回响与多结局收藏从隐蔽功能提升为可在评审试玩与 Demo 视频中直观展示的跨局档案系统。
+
+---
+
+【2026-07-13 Codex 规划/资产审查 #63（三位天使隐藏结局，核心实现待 CodeBuddy）】已完成三位天使隐藏结局的开发前规格与资产交付，但本轮未修改核心玩法代码、未声称功能已接入：
+- 设计规格：`design/chapters/chapter1_three_angel_hidden_endings_design.md`；CodeBuddy 可执行计划：`doc/第一章/plan_docs/21_CODEBUDDY_TASK_CHAPTER1_THREE_ANGEL_HIDDEN_ENDINGS.md`。计划经两轮独立文档复核后通过，覆盖米迦勒好感归零立即失败、路西法夜间四河分流+晨星碎片+划水/边界话题觉醒、既有加百列火焰剑挣脱梦境，以及存档/API/fallback/29 枚印记/图鉴/复盘/e2e 门禁。
+- Codex 资产：新增 `escape_eden_ending.png`、`michael_slay_ending.png`、`lucifer_awaken_ending.png`（均 1920×1080 RGB PNG）和透明 `mark_michael_slay.png`（512×512 RGBA PNG），记录于 `doc/AI_ASSET_RECORD.md` 的 IMG223–IMG226。路西法图采用 EDEN 原创透明种子观测容器与蛇形水光代理，只借用缸中脑概念，不含人体舱、头部插管、绿色代码雨或电影角色/品牌。
+- 新鲜验证：Pillow 解码与尺寸/模式检查 4/4 通过；印记 alpha 为 0–255、四角透明；三张 CG 人工检查无文字、Logo、水印和血腥，底部留有字幕暗区。
+- 当前边界：四个资产状态为 READY_FOR_CODEBUDDY；`CHAPTER1_IMAGES` 注册、隐藏结局规则/API、`HiddenEndingCinematic`、29 枚口径与完整自动化测试仍须由 CodeBuddy 按计划实现并保留对话证据，之后再由 Codex 独立验收。
