@@ -460,5 +460,20 @@ check("globalTracker NORMAL_ENDING_IDS 仅 3 项普通结局", globalTrackerSrc.
 check("globalTracker NORMAL_ENDING_IDS 不含隐藏结局", !/NORMAL_ENDING_IDS[\s\S]*michael_slay/.test(globalTrackerSrc) && !/NORMAL_ENDING_IDS[\s\S]*lucifer_awaken/.test(globalTrackerSrc));
 check("achievementRules mark_hidden_ending 查 endingId", /endingId === "lucifer_awaken"/.test(puzzleRulesSrc) || /endingId === "lucifer_awaken"/.test(read("src/game/world/achievementRules.ts")));
 
+// ---- 隐藏结局过场资产与内容表 ----
+check("escape_eden_ending.png 存在", exists("public/assets/chapter1/images/escape_eden_ending.png"));
+check("michael_slay_ending.png 存在", exists("public/assets/chapter1/images/michael_slay_ending.png"));
+check("lucifer_awaken_ending.png 存在", exists("public/assets/chapter1/images/lucifer_awaken_ending.png"));
+check("lucifer_awaken_reveal_ending.png 存在", exists("public/assets/chapter1/images/lucifer_awaken_reveal_ending.png"));
+check("mark_michael_slay.png 印记存在", exists("public/assets/chapter1/images/achievements/mark_michael_slay.png"));
+check("assets.ts 注册 escapeEdenEnding", assets.includes("escapeEdenEnding"));
+check("assets.ts 注册 michaelSlayEnding", assets.includes("michaelSlayEnding"));
+check("assets.ts 注册 luciferAwakenEnding", assets.includes("luciferAwakenEnding"));
+check("assets.ts 注册 luciferAwakenRevealEnding", assets.includes("luciferAwakenRevealEnding"));
+const hiddenEndingsSrc = read("src/content/world/hiddenEndings.ts");
+check("hiddenEndings.ts 含三套 beats", (hiddenEndingsSrc.match(/beats:\s*\[/g) || []).length >= 3);
+check("hiddenEndings.ts 路西法两帧 startBeat 0 与 3", hiddenEndingsSrc.includes("startBeat: 0") && hiddenEndingsSrc.includes("startBeat: 3"));
+check("hiddenEndings.ts 不复用 Chapter 0 结局图", !hiddenEndingsSrc.includes("endingEveEatsFruit") && !hiddenEndingsSrc.includes("endingGodArrives"));
+
 console.log(`\n结果: ${pass} 通过, ${fail} 失败`);
 process.exit(fail > 0 ? 1 : 0);
