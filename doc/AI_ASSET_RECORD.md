@@ -315,6 +315,8 @@
 | IMG226 | `mark_michael_slay.png` | Achievement icon / 512×512 RGBA PNG | 米迦勒隐藏结局第 29 枚候选印记「守门者之剑」 | `/assets/chapter1/images/achievements/mark_michael_slay.png` | Codex 内置 `image_gen` + 洋红 chroma-key 本地去背 + Pillow Lanczos 定尺寸 | READY_FOR_CODEBUDDY |
 | IMG227 | `lucifer_awaken_reveal_ending.png` | Ending CG / 1920×1080 RGB PNG | 路西法隐藏识破结局连续镜头 2：人类睁眼惊讶观察周围舱群 | `/assets/chapter1/images/lucifer_awaken_reveal_ending.png` | Codex 内置 `image_gen` 定向表情/姿态编辑 + Pillow Lanczos 定尺寸 | READY_FOR_CODEBUDDY |
 
+> **CodeBuddy 接入状态（2026-07-13 验证）**：IMG223–IMG227 五张资产已由 CodeBuddy 注册到 `CHAPTER1_IMAGES`（`escapeEdenEnding` / `michaelSlayEnding` / `luciferAwakenEnding` / `luciferAwakenRevealEnding`），并接入 `HiddenEndingCinematic` 隐藏结局过场与 `EndingReview` 复盘背景；四张过场均为 1920×1080 PNG，米迦勒印记 `mark_michael_slay.png` 为 512×512 PNG，已通过 `scripts/test-world-visual-smoke.mjs` 资产存在性校验。Codex 仅负责资产生成与验证，核心接入与规则判定由 CodeBuddy 完成。
+
 ### Prompt 摘要与视觉边界
 
 - **IMG223 / 加百列**：`16:9 fullscreen EDEN ending cinematic; eastern path has no wall; rotating sacred flaming sword opens an invisible veil; small dark serpent crosses from warm golden-green Eden into cool nameless blue dawn; semi-realistic cinematic storybook painting; dark lower subtitle space; no text/logo/watermark, no gore, no modern or cyberpunk objects.`
