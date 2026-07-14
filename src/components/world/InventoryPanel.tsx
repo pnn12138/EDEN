@@ -50,7 +50,11 @@ const ITEM_USE_FEEDBACK: Record<string, string> = {
   gift_awaken_desire: "渴望苏醒在心里点亮，你想弄清善恶的念头更清晰。",
   passive_light_step: "轻步印记留在足下，这一时段的头一步分外轻盈。",
   passive_soft_whisper: "细语印记贴着喉咙，惊动神的那一句被悄悄压低。",
-  moonlight_path_marker: "月光道标在掌心发亮，下一次远行可走捷径。",
+  moonlight_path_marker: "月光道标在掌心发亮，每时段可借它无视绕行 1~2 次。",
+  resonance_life_fruit_taste: "生命之味在身体里化开，行动点上限永久 +1。",
+  resonance_discernment_fruit: "分辨之果让善恶显形，你能看见每个已见角色的性情。",
+  resonance_angel_feather: "天使残羽透露神与天使都尝过此树，女人与亚当对神的敬仰各 -10。",
+  resonance_bond_insight: "相处之鉴映出每个人愿意被靠近的方式。",
 };
 
 function buildUseFeedback(itemId: string, title: string): string {

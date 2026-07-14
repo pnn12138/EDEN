@@ -48,3 +48,51 @@
 - 「静态导出 vs Serverless」：因项目含服务端 `/api/*` 路由（隐藏 LLM Key），**否决静态导出**，采用 Serverless / Node 运行时。
 - 「云端登录 vs 纯前端」：因赛题偏好"纯前端可独立部署、无云依赖"，**采用纯前端 localStorage 登录**。
 - 「隐藏印记触发点」：隐藏结局为机密内容，判定逻辑就位但不实装触发点，符合"玩家自行探索"设计意图。
+
+## 七、Chapter 1 三位天使隐藏结局（本轮 CodeBuddy 实现）
+
+> 设计真值：`design/chapters/chapter1_three_angel_hidden_endings_design.md` v1.1；执行计划：`doc/第一章/plan_docs/21_CODEBUDDY_TASK_CHAPTER1_THREE_ANGEL_HIDDEN_ENDINGS.md`。
+> 本功能区由 **CodeBuddy** 完成规则层、API、状态兼容、过场组件、复盘/图鉴/音效接入与全部调试；**Codex** 仅负责四张结局过场图与米迦勒印记图标的生成与验证（不进入核心实现，不写入创作亮点）。
+
+### 7.1 核心实现文件
+
+- 本轮新增/接线（相对基线 `f631823` 的工作区增量，已提交）：`src/app/world/page.tsx`（隐藏过场渲染 + 专属背景 + 隐藏结局音效）、`scripts/test-world-smoke.mjs`（米迦勒/路西法/划水/escape/已结束/旧存档正反例）。
+- 本轮前已提交、本功能直接复用的规则与表现层：`src/game/world/hiddenEndingRules.ts`、`src/game/world/endingTriggers.ts`、`src/content/world/hiddenEndings.ts`、`src/components/world/HiddenEndingCinematic.tsx`、`src/content/world/sceneActions.ts`、`src/game/world/achievementRules.ts`、`src/content/world/achievements.ts`、`src/game/world/traceRules.ts`、`src/components/world/EndingReview.tsx`、`src/components/world/EndingsGallery.tsx`、`src/services/achievement/globalTracker.ts`、`src/app/api/world/route.ts`、`src/app/api/world/tool/route.ts`、`src/game/assets.ts`、`src/game/world/types.ts`、`src/game/world/puzzleRules.ts`、`src/hooks/useWorldSave.ts`、`src/app/globals.css`。
+- 三条结局触发权威均在服务端规则层：`canTriggerMichaelSlay` / `canTriggerLuciferAwaken` / `triggerEscapeEden`。
+
+### 7.2 关键调试问题与修复
+
+1. **隐藏过场未接入页面**：`page.tsx` 已 import `HiddenEndingCinematic` 与 `getHiddenEndingCinematic`，但 Ending 分支直接渲染 `EndingReview`，未插入过场。修复：在 `if (state.phase === "ending" || state.isEnded)` 之前加入 `getHiddenEndingCinematic(state.endingId)` 早返回，未完成前只播过场。
+2. **结局背景复用 Chapter 0**：`endingBg` 对 `escape_eden/michael_slay/lucifer_awaken` 仍指向 Chapter 0 图。修复：改为 `CHAPTER1_IMAGES.escapeEdenEnding / michaelSlayEnding / luciferAwakenRevealEnding`；`endingTone` 对路西法设为 `awaken`。
+3. **隐藏结局音效缺失**：原只处理 `eve_eats_fruit` / `god_arrives`。修复：新增 `useEffect` 监听 `state.endingId`，对 `escape_eden`/`lucifer_awaken` 播成功音、`michael_slay` 播失败音（覆盖 `/api/world` 与谜题 API 两条路径，ref 去重）。
+4. **两处 TypeScript 错误**：`WorldEndingId` 未导入；声音 `useEffect` 引用 `useChapter1Audio` 返回的 `playEnding*` 早于其声明。修复：补 `type WorldEndingId` 导入，并将声音 `useEffect` 移至音频 hooks 声明之后。
+
+### 7.3 门禁真实结果（端口与实际输出）
+
+| 门禁 | 命令 | 端口/模式 | 结果 |
+|---|---|---|---|
+| typecheck | `npm run typecheck` | — | 通过（exit 0） |
+| lint | `npm run lint` | — | 通过（exit 0） |
+| build | `npm run build` | — | 通过（exit 0） |
+| 规则测试 | `node scripts/test-scene-puzzle-rules.mjs` | — | 通过（exit 0） |
+| 视觉 smoke | `node scripts/test-world-visual-smoke.mjs` | — | 通过（exit 0），含资产存在性与 29 枚口径校验 |
+| 世界 smoke（mock） | `node scripts/test-world-smoke.mjs <url>` | `LLM_PROVIDER=mock`，生产 `npm run start -- -p 3019` | **253 通过 / 0 失败**（场景 32 米迦勒、33 路西法、35 划水、36 escape、37 已结束契约、38 旧存档兼容全绿） |
+| fake provider 兜底 | `node scripts/test-world-smoke.mjs <url> --provider-failure-only` | fake-provider `:3999` + `LLM_PROVIDER=deepseek` 指向其，`npm run dev -- -p 3020` | **7 通过 / 0 失败**：路西法空响应仍触发 `lucifer_awaken`、`reply` 本地非空、`usedFallback=true`、`fallbackReason=llm_data_missing`，AP/turn/注视不结算 |
+| 桌面 e2e | `npm run test:e2e -- tests/e2e/chapter1-hidden-endings.spec.ts tests/e2e/chapter1-mechanics.spec.ts --project=desktop-chromium` | Playwright 自启 `npm run dev -- -p 3018` | **13 通过 / 0 失败**（含路西法第 4 段切第二张、第一张 404 后第二张仍加载、图片全失败仍进复盘、手动槽/autosave/legacy/兼容 ended shape、旧存档缺字段、triggeredEndingIds 记录三条隐藏结局） |
+
+### 7.4 五个资产路径与尺寸（Codex 生成、CodeBuddy 接入）
+
+- `public/assets/chapter1/images/escape_eden_ending.png` — 1920×1080 PNG（约 2.87 MB）
+- `public/assets/chapter1/images/michael_slay_ending.png` — 1920×1080 PNG（约 2.70 MB）
+- `public/assets/chapter1/images/lucifer_awaken_ending.png` — 1920×1080 PNG（约 2.91 MB）
+- `public/assets/chapter1/images/lucifer_awaken_reveal_ending.png` — 1920×1080 PNG（约 2.73 MB）
+- `public/assets/chapter1/images/achievements/mark_michael_slay.png` — 512×512 PNG（约 254 KB）
+
+四张过场均 1920×1080、路西法两张连续镜头（第 1–3 段 / 第 4–5 段）；均由 CodeBuddy 注册到 `CHAPTER1_IMAGES` 并接入 `HiddenEndingCinematic` 与 `EndingReview`。
+
+### 7.5 尚未解决的问题 / 保留项
+
+- `docs/PROJECT_CONTEXT.md` 未写入"Codex 验收通过"结论（按计划留待 Codex 独立复验，不由 CodeBuddy 伪造）。
+- 工作区另有一批与本功能无关的未提交改动（如 `src/app/game/duel/*`、`src/content/world/items.ts`、`npcRelations.ts`、`scenePuzzles.ts`、`src/game/world/actionPointRules.ts`、`divineGiftRules.ts`、`worldAgentPrompts.ts`、`npcRelationRules.ts`、`DivineAttentionViz.tsx`、`InventoryPanel.tsx`、`src/app/page.tsx`、两份 e2e 机制/谜题 spec 等），已按"保留用户与其他 CodeBuddy 未提交改动"原则原样保留，未混入本功能提交。
+- `NORMAL_ENDING_IDS` 保持 `["eve_eats_fruit","god_arrives","life_fruit"]`，三条隐藏结局未污染普通结局统计；跨局 `triggeredEndingIds` 正确记录三条隐藏结局。
+- 印记口径：代码 `ACHIEVEMENTS` 实际为 探索 6 / 交互 9 / 玩法 7 / 结局 7 = 29（第 29 枚为 `mark_michael_slay`）；设计文档旧注释"探索 7 / 共 28"为陈旧表述，已在 `ACHIEVEMENT_GARDEN_MARK.md` 更正为 29。

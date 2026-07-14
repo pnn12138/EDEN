@@ -32,6 +32,8 @@ async function enterExplore(page: Page): Promise<void> {
   await page.getByTestId("world-intro-modal-close").click().catch(() => {});
   // 关闭进入首个场景时的场景切换弹窗
   await page.getByTestId("world-scene-modal-close").click().catch(() => {});
+  // 选定献礼后会弹出「神明献礼」通知 modal（需手动「收下」），关掉避免遮挡后续点击
+  await page.locator(".eden-notice-modal-close").first().click().catch(() => {});
 
   // 选定献礼后会弹出「神明献礼」提示 toast（约 6s 自动消失），等待其消失避免遮挡
   await page
@@ -49,6 +51,18 @@ async function startFreshChapter(page: Page): Promise<void> {
 }
 
 async function moveTo(page: Page, locationId: string): Promise<void> {
+  const ap = await page.evaluate(() => (
+    (window as unknown as { __EDEN_WORLD_STATE__?: { actionPoints?: number } }).__EDEN_WORLD_STATE__?.actionPoints ?? 0
+  ));
+  if (ap <= 0) {
+    page.once("dialog", (dialog) => dialog.accept());
+    await page.getByRole("button", { name: "进入下一轮" }).click();
+    await expect.poll(async () => (
+      (await page.evaluate(() => (
+        (window as unknown as { __EDEN_WORLD_STATE__?: { actionPoints?: number } }).__EDEN_WORLD_STATE__?.actionPoints ?? 0
+      )))
+    )).toBeGreaterThan(0);
+  }
   await page.getByTestId("world-map-open").click();
   await page.getByTestId(`location-card-${locationId}`).click();
   await page.getByTestId("world-map-enter").click();
@@ -108,8 +122,9 @@ test.describe("第一章机制：伊甸之河 / NPC 重开 / 刻名石自由文�
     await nameInput.fill("低语者");
     await page.getByTestId("scene-puzzle-submit").click();
 
-    // 回响 Toast 仍出现（万物名录照常发放）
-    await expect(page.locator(".eden-resonance-gained-toast")).toBeVisible();
+    // 回响通知仍出现（万物名录照常发放，现为「获得回响」modal）
+    await expect(page.locator('[aria-label="获得回响"]')).toBeVisible();
+    await page.locator('[aria-label="获得回响"] .eden-notice-modal-close').click();
 
     // 第二步：仅是一个念头
     await expect(page.getByTestId("scene-puzzle-title")).toHaveText("仅是一个念头");
@@ -121,13 +136,18 @@ test.describe("第一章机制：伊甸之河 / NPC 重开 / 刻名石自由文�
     await expect(stone).toContainText("已记下");
   });
 
-  test("设置浮窗：可打开，含账号态与存档三按钮", async ({ page }) => {
+  test("设置浮窗：默认打开到存档匣，再可切到账号查看账号态", async ({ page }) => {
     await startFreshChapter(page);
 
     await page.getByTestId("world-settings-open").click();
-    await expect(page.getByTestId("settings-account")).toBeVisible();
+    // 默认页签为「存档匣」：存档三按钮可见，账号内容默认不渲染
     await expect(page.getByTestId("world-save")).toBeVisible();
+    await expect(page.getByTestId("settings-account")).toHaveCount(0);
+    // 需要账号内容时再点击「账号」页签
+    await page.locator(".eden-settings-tab", { hasText: "账号" }).click();
+    await expect(page.getByTestId("settings-account")).toBeVisible();
+    // 切回存档匣仍可操作存档入口
+    await page.locator(".eden-settings-tab", { hasText: "存档匣" }).click();
     await expect(page.getByTestId("world-load")).toBeVisible();
-    await expect(page.getByTestId("world-restart")).toBeVisible();
   });
 });

@@ -2,7 +2,7 @@
 
 > 项目：EDEN
 > 文件路径：`doc/AI_ASSET_RECORD.md`
-> 更新时间：2026-06-19
+> 更新时间：2026-07-13
 
 ---
 
@@ -300,3 +300,57 @@
 - **NPC 对话后工具叙事**：关系赠礼、天使试炼发放、言语分裂惩罚等叙事由规则层结合 Agent 输出生成。
 - **AI 生成边界**：所有玩家可见文案以本地化文本为最终准；LLM 仅产出 NPC 对白草稿与意图，最终对白经 `naturalizeNpcReply` 清洗；结局/提示/复盘文案由代码内叙事池与规则层决定，AI 不直改游戏状态或文案数值。
 - **fallback 文案池**：夏娃/亚当/天使/刺猬/狐狸各有本地文案池，覆盖 LLM 失败、超时、空输出、禁用词等场景，确保无密钥/无网络时游戏仍可完整游玩。
+
+---
+
+## 第一章三位天使隐藏结局视觉资产（2026-07-13）
+
+> 本组由 Codex 按已确认的 `design/chapters/chapter1_three_angel_hidden_endings_design.md` 使用内置图像生成工具制作；核心玩法、运行注册、结局状态机、过场组件与最终接入由 CodeBuddy 完成并保留对话证据。
+
+| ID | 文件名 | 类型 / 规格 | 用途 | 运行路径 | 来源 / 工具 | 状态 |
+| --- | --- | --- | --- | --- | --- | --- |
+| IMG223 | `escape_eden_ending.png` | Ending CG / 1920×1080 RGB PNG | 加百列隐藏结局「园外的清晨」单场景过场与复盘背景 | `/assets/chapter1/images/escape_eden_ending.png` | Codex 内置 `image_gen` + Pillow Lanczos 定尺寸 | USED_IN_DEMO |
+| IMG224 | `michael_slay_ending.png` | Ending CG / 1920×1080 RGB PNG | 米迦勒隐藏失败结局「剑下之责」单场景过场与复盘背景 | `/assets/chapter1/images/michael_slay_ending.png` | Codex 内置 `image_gen` + Pillow Lanczos 定尺寸 | USED_IN_DEMO |
+| IMG225 | `lucifer_awaken_ending.png` | Ending CG / 1920×1080 RGB PNG | 路西法隐藏识破结局连续镜头 1：人类刚恢复知觉，蛇形代理仍清晰 | `/assets/chapter1/images/lucifer_awaken_ending.png` | Codex 内置 `image_gen` 参考图编辑 + Pillow Lanczos 定尺寸 | USED_IN_DEMO |
+| IMG226 | `mark_michael_slay.png` | Achievement icon / 512×512 RGBA PNG | 米迦勒隐藏结局第 29 枚印记「守门者之剑」 | `/assets/chapter1/images/achievements/mark_michael_slay.png` | Codex 内置 `image_gen` + 洋红 chroma-key 本地去背 + Pillow Lanczos 定尺寸 | USED_IN_DEMO |
+| IMG227 | `lucifer_awaken_reveal_ending.png` | Ending CG / 1920×1080 RGB PNG | 路西法隐藏识破结局连续镜头 2：人类睁眼惊讶观察周围舱群 | `/assets/chapter1/images/lucifer_awaken_reveal_ending.png` | Codex 内置 `image_gen` 定向表情/姿态编辑 + Pillow Lanczos 定尺寸 | USED_IN_DEMO |
+
+> **CodeBuddy 接入状态（2026-07-13 验证）**：IMG223–IMG227 五张资产已由 CodeBuddy 注册到 `CHAPTER1_IMAGES`（`escapeEdenEnding` / `michaelSlayEnding` / `luciferAwakenEnding` / `luciferAwakenRevealEnding`），并接入 `HiddenEndingCinematic` 隐藏结局过场与 `EndingReview` 复盘背景；四张过场均为 1920×1080 PNG，米迦勒印记 `mark_michael_slay.png` 为 512×512 PNG，已通过 `scripts/test-world-visual-smoke.mjs` 资产存在性校验。Codex 仅负责资产生成与验证，核心接入与规则判定由 CodeBuddy 完成。
+
+### Prompt 摘要与视觉边界
+
+- **IMG223 / 加百列**：`16:9 fullscreen EDEN ending cinematic; eastern path has no wall; rotating sacred flaming sword opens an invisible veil; small dark serpent crosses from warm golden-green Eden into cool nameless blue dawn; semi-realistic cinematic storybook painting; dark lower subtitle space; no text/logo/watermark, no gore, no modern or cyberpunk objects.`
+- **IMG224 / 米迦勒**：`16:9 hidden-failure cinematic; Michael in deep navy and muted antique-gold armor with white wings draws a guardian sword beside Eden's headwaters; cold white blade light severs the river reflection above a small serpent shadow; solemn consequence, non-graphic; dark lower subtitle space; no text/logo/watermark or combat spectacle.`
+- **IMG225 / 路西法连续镜头 1**：`16:9 EDEN hidden-ending cinematic; the outer-world protagonist has just recovered consciousness inside a transparent organic-biotechnological tank, face in three-quarter side view, one hand touching curved glass; cyan serpent avatar reflection remains clear beside broken Eden and the fifth river; receding original seed/fruit-shaped human support vessels; respectful nonsexual concealment; no text, watermark, gore, recognizable actor, exact Matrix pod or copied film composition.` 使用用户提供的《黑客帝国》截图作为“人类身体在构造世界之外由培养舱承载”的概念参考，同时保留 EDEN 原创种子舱、树根河网与晨星语言。
+- **IMG227 / 路西法连续镜头 2**：`Preserve the consciousness tank and chamber; change the human to both eyes clearly open with restrained surprise and disorientation, head turned to scan the surrounding pod chamber, one hand testing the glass; the viewer must immediately read that a human has awakened and is checking the unfamiliar outer reality; serpent reflection becomes secondary; no screaming, horror, text, watermark, gore or copied film frame.`
+- **IMG226 / 米迦勒印记**：`centered watercolor achievement emblem; cold-white sword beam cutting a blue river-ripple shield, muted antique gold and one tiny dark-crimson accent; flat #ff00ff removable background; no text, character, blood or shadow.` 去背后检查为 RGBA，四角透明，图形在 64px 显示下仍保持剑与水纹盾的可读轮廓。
+
+### 生成与验收记录
+
+- 生成日期：2026-07-13；场景源图由内置工具输出为 1672×941 RGB PNG，再以高质量 Lanczos 轻微裁切/缩放为精确 1920×1080 PNG。
+- 印记源图为 1254×1254 洋红底 PNG；使用安装的 `remove_chroma_key.py` 进行 soft matte、despill 与边缘透明处理，再缩放为 512×512 RGBA PNG。
+- 人工视觉检查：四张 CG 均无文字、Logo、水印和血腥内容；主体避开底部字幕暗区。路西法两镜连续：第一镜为人类刚恢复知觉、蛇影仍清晰，第二镜为人类完全睁眼后惊讶地转头观察周围舱群、一手触碰舱壁，蛇影退为次要残像；女人与路西法不在舱内，无色情裸露、伤口、器官、绿色代码雨、电影品牌或原镜头复制。
+- Demo 接入状态：USED_IN_DEMO。CodeBuddy 已按 `doc/第一章/plan_docs/21_CODEBUDDY_TASK_Chapter1_THREE_ANGEL_HIDDEN_ENDINGS.md` 完成注册与接入；Codex 已独立复验资产存在性、尺寸、过场切换和图片失败降级。
+
+---
+
+## 第一章结局 AI 图片集与文字分镜（Task 7，2026-07-14）
+
+> 本组由 CodeBuddy 按 `doc/第一章/plan_docs/22_CODEBUDDY_TASK_CHAPTER1_ATTENTION_RELATION_ARCHIVE_AND_ENDING_MEDIA.md` 实现；核心规则判定、RunChronicle 取数、分镜合约与图片生成接口均由 CodeBuddy 完成。
+
+### 新增资产/接口
+
+| 标识 | 位置 | 类型 | 用途 | 来源 / 触发条件 | 状态 |
+| --- | --- | --- | --- | --- | --- |
+| `runChronicle` | `src/game/world/runChronicle.ts` | 纯函数（非资产文件） | 从 `EdenWorldState` 抽取本次游玩时间线、关系快照、神赐、已解锁印记、玩家对白素材（标记为素材而非指令），供结局分镜与复盘取数 | CodeBuddy 实现，纯规则层 | IMPLEMENTED（构建/类型检查未运行） |
+| `EndingMediaSettings` | `src/lib/endingMediaSettings.ts` | 配置类型 + 校验 + sessionStorage 存取 | 仅存于 `sessionStorage`，不进 `EdenWorldState`/存档/URL/日志；URL 强制 HTTPS 且仅允许公网地址（拒绝 localhost/loopback/私有网/file/data） | CodeBuddy 实现 | IMPLEMENTED（未运行） |
+| `/api/world/ending-media` | `src/app/api/world/ending-media/route.ts` | API 路由（POST） | 校验状态 → 构建 `runChronicle` → 按用户 N 上限生成严格 JSON 分镜 → 逐帧 best-effort 生成图片；失败明确提示，不伪造本地图片；全程不回显密钥 | CodeBuddy 实现 | IMPLEMENTED |
+| `EndingMemoryPanel` | `src/components/world/EndingMemoryPanel.tsx` | 前端组件 | 结局页图片集生成、文字分镜与逐张下载；图片服务失败时显示错误并保留文字说明 | CodeBuddy 实现，接 `loadEndingMediaSettings` | IMPLEMENTED |
+
+### AI 创作说明与边界
+
+- **生成环节**：结局图片集由 LLM/外部图片模型产出；分镜文本合约与最终展示文案由代码与规则层决定，AI 不直接改游戏状态。
+- **Prompt 摘要**：分镜生成走严格 JSON 合约（1–N 帧，N≤12 且不超过经历时段，每帧含 `imagePrompt` / `caption` / `sceneKey`），AI 可根据素材不足主动少选；失败时回退 `buildTextStoryboard` 文本分镜；提示词围绕玩家本次游玩的「时间线关键事件 + 关系快照 + 神赐 + 已解锁印记」及玩家创作希望组织，不引入数值/标签直出。
+- **失败兜底**：分镜 LLM 失败、超时、空输出、JSON 解析失败时回退为文字分镜；图片生成失败明确提示并保留文字分镜，不使用已有结局素材。
+- **密钥安全**：`EndingMediaSettings` 仅存 `sessionStorage`；图片端点取已配置的运行时 `IMAGE_*` 环境变量并进行 HTTPS/公网地址校验，接口只返回生成失败提示，绝不回显任何密钥或模型凭证。
+- **未验证项**：真实外部图片模型仍需在有额度时单独验证；测试链路不写入或输出密钥。

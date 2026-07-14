@@ -27,7 +27,7 @@ import { executeWorldTool } from "@/game/world/worldActions";
 import { EDEN_LOCATIONS } from "@/content/world/locations";
 import {
   getSceneActionById,
-  getSceneActionsByLocation,
+  isSceneActionAvailable,
 } from "@/content/world/sceneActions";
 import { grantWorldItem } from "@/game/world/itemRules";
 import {
@@ -38,19 +38,36 @@ import {
   AP_COST_SCENE_ACTION,
   maybeAdvanceSlotAfterAction,
   advanceToNextSlot,
+  getEffectiveMaxActionPoints,
+  canMoveToLocationThisSlot,
+  recordMoveThisSlot,
 } from "@/game/world/actionPointRules";
 import { checkAndUnlockAchievements } from "@/game/world/achievementRules";
 import {
-  shouldTriggerGiftChoice,
-  rollGiftChoices,
+  tryConsumeFreeMove,
+  tryConsumeFreeDetourBypass,
+} from "@/game/world/freeActionRules";
+import {
   claimDivineGift,
+  evaluateDivineGiftProgress,
+  ensureOpeningGiftChoice,
   DIVINE_GIFT_POOL,
 } from "@/game/world/divineGiftRules";
+import { grantDivineAttention } from "@/game/world/divineAttentionRules";
+import {
+  canStartLuciferSwimStep1,
+  confirmLuciferSwimStep1,
+  rejectLuciferSwimStep1,
+  canStartLuciferSwimStep2,
+  canTriggerLuciferAwaken,
+} from "@/game/world/hiddenEndingRules";
+import { triggerLuciferAwaken } from "@/game/world/endingTriggers";
 import {
   executeInstantResonance,
   executeConsumableResonance,
   applyPendingConsumableToMove,
   applyPendingConsumableToSceneAction,
+  predictNextAttentionChanges,
   hasPendingFreeApForAction,
   hasPassiveLightStepForMove,
   applyPassiveLightStepToMove,
@@ -58,7 +75,7 @@ import {
 import { getItemById } from "@/content/world/items";
 
 type ToolRequestBody = {
-  tool: WorldToolName | "scene_action" | "end_slot" | "prepare_resonance" | "cancel_prepared_resonance" | "use_resonance" | "claim_divine_gift";
+  tool: WorldToolName | "scene_action" | "end_slot" | "prepare_resonance" | "cancel_prepared_resonance" | "use_resonance" | "prepare_opening_gift" | "claim_divine_gift" | "lucifer_swim";
   state: EdenWorldState;
   args: {
     locationId?: EdenLocationId;
@@ -70,6 +87,8 @@ type ToolRequestBody = {
     sceneActionId?: string;
     /** 回响 ID（用于使用） */
     itemId?: string;
+    /** 路西法水路两步：confirm / reject */
+    swimAction?: "confirm" | "reject";
   };
 };
 
@@ -85,6 +104,14 @@ type ToolResponseBody = {
   reason?: string;
   /** 回响生效叙事 */
   resonanceNarration?: string;
+  /** 边界之痕揭示的未来三次注视走向（确定性来源） */
+  attentionForecast?: {
+    slot: number;
+    timeOfDay: "day" | "night";
+    ruleId: "paid_day_move" | "paid_night_dialogue";
+    amount: number;
+    note: string;
+  }[];
   /** 神明献礼（玩家三选一选定后返回，用于提示） */
   divineGift?: {
     giftId: string;
@@ -99,8 +126,8 @@ type ToolResponseBody = {
 function cloneWorldState(s: EdenWorldState): EdenWorldState {
   return {
     ...s,
-    actionPoints: s.actionPoints ?? 5,
-    maxActionPoints: s.maxActionPoints ?? 5,
+    actionPoints: s.actionPoints ?? 4,
+    maxActionPoints: s.maxActionPoints ?? 4,
     npcActionPoints: s.npcActionPoints ?? 3,
     maxNpcActionPoints: s.maxNpcActionPoints ?? 3,
     npcLocations: { ...s.npcLocations },
@@ -118,6 +145,9 @@ function cloneWorldState(s: EdenWorldState): EdenWorldState {
       sceneActionIds: [...(s.actionsThisSlot?.sceneActionIds ?? [])],
       usedItemIds: [...(s.actionsThisSlot?.usedItemIds ?? [])],
       hasWhisperedToWoman: s.actionsThisSlot?.hasWhisperedToWoman ?? false,
+      hasGrantedPaidDayMoveAttention: s.actionsThisSlot?.hasGrantedPaidDayMoveAttention ?? false,
+      hasGrantedPaidNightDialogueAttention: s.actionsThisSlot?.hasGrantedPaidNightDialogueAttention ?? false,
+      moveCount: s.actionsThisSlot?.moveCount ?? 0,
     },
     unlockedAchievementIds: [...(s.unlockedAchievementIds ?? [])],
     usedItemIds: [...(s.usedItemIds ?? [])],
@@ -136,6 +166,18 @@ function cloneWorldState(s: EdenWorldState): EdenWorldState {
     divineGiftsOwned: [...(s.divineGiftsOwned ?? [])],
     divineGiftHistory: (s.divineGiftHistory ?? []).map((r) => ({ ...r })),
     lastDivineGiftHint: s.lastDivineGiftHint ?? null,
+    michaelSlayClaimed: s.michaelSlayClaimed ?? false,
+    luciferAwakenClaimed: s.luciferAwakenClaimed ?? false,
+    hiddenTopicIds: [...(s.hiddenTopicIds ?? [])],
+    divineAttentionValue: s.divineAttentionValue ?? 0,
+    pendingDivineGiftChoice: s.pendingDivineGiftChoice ?? null,
+    unlockedDivineAttentionRuleIds: [...(s.unlockedDivineAttentionRuleIds ?? [])],
+    attentionRuleTriggerCounts: { ...(s.attentionRuleTriggerCounts ?? {}) },
+    michaelDivinePunishmentActive: s.michaelDivinePunishmentActive ?? false,
+    michaelExecutionPending: s.michaelExecutionPending ?? false,
+    luciferZeroAffinityGiftClaimed: s.luciferZeroAffinityGiftClaimed ?? false,
+    luciferSwimStage: s.luciferSwimStage ?? "none",
+    worldEventHistory: (s.worldEventHistory ?? []).map((e) => ({ ...e })),
   };
 }
 
@@ -149,9 +191,7 @@ function buildResponse(
   checkAndUnlockAchievements(state);
 
   // 检查累计注视是否达到下一次三选一阈值，若是则返回候选（前端弹出三选一）
-  const divineGiftChoice = shouldTriggerGiftChoice(state)
-    ? rollGiftChoices(state.divineGiftsOwned)
-    : null;
+  const divineGiftChoice = evaluateDivineGiftProgress(state);
 
   const slotResult = maybeAdvanceSlotAfterAction(state);
   return {
@@ -192,12 +232,16 @@ export async function POST(request: NextRequest) {
       // 直接推进时段（消耗剩余 AP 并推进到下一时段）
       consumeActionPoints(state, state.actionPoints);
       const slotResult = advanceToNextSlot(state);
+      // 时段推进（含 NPC 调度发放园中相逢注视）后，补算献礼进度并回传候选，
+      // 避免「注视已满却无法领取」：前端仅在响应含 divineGiftChoice 时弹三选一。
+      const divineGiftChoice = evaluateDivineGiftProgress(state);
       if (slotResult.triggeredTimeFailure) {
         return NextResponse.json({
           ok: true,
           state,
           narration: slotResult.slotNarrations[0] ?? "第十二个时段过去了。",
           slotNarrations: slotResult.slotNarrations,
+          divineGiftChoice: divineGiftChoice ?? undefined,
           unlockedAchievements: state.unlockedAchievementIds.length > 0
             ? state.unlockedAchievementIds.map((id) => id)
             : undefined,
@@ -210,6 +254,7 @@ export async function POST(request: NextRequest) {
           ? slotResult.slotNarrations.join(" ")
           : "时段过去了。园中的风变了方向，新的时段开始了。",
         slotNarrations: slotResult.slotNarrations.length > 0 ? slotResult.slotNarrations : undefined,
+        divineGiftChoice: divineGiftChoice ?? undefined,
         unlockedAchievements: state.unlockedAchievementIds.length > 0
           ? state.unlockedAchievementIds.map((id) => id)
           : undefined,
@@ -245,11 +290,18 @@ export async function POST(request: NextRequest) {
       if (item.kind === "consumable") {
         const result = executeConsumableResonance(state, args.itemId!);
         checkAndUnlockAchievements(state);
+        // [Task 4 Step 3] 边界之痕：揭示未来三次注视走向（仅确定性来源），揭示后清零
+        let attentionForecast: ReturnType<typeof predictNextAttentionChanges> | undefined;
+        if (state.boundaryMarkForecastActive) {
+          attentionForecast = predictNextAttentionChanges(state, 3);
+          state.boundaryMarkForecastActive = false;
+        }
         return NextResponse.json({
           ok: result.allowed,
           state,
           narration: result.narration ?? null,
           reason: result.reason,
+          attentionForecast,
           unlockedAchievements: state.unlockedAchievementIds.length > 0
             ? state.unlockedAchievementIds.map((id) => id)
             : undefined,
@@ -276,6 +328,18 @@ export async function POST(request: NextRequest) {
       } satisfies ToolResponseBody);
     }
 
+    // 开局献礼候选只能由服务端生成并回传。此前前端本地随机、领取时服务端再随机，
+    // 两组候选可能不一致，造成玩家需要反复选择才能进入游戏。
+    if (tool === "prepare_opening_gift") {
+      ensureOpeningGiftChoice(state);
+      return NextResponse.json({
+        ok: true,
+        state,
+        narration: null,
+        divineGiftChoice: state.pendingDivineGiftChoice ?? undefined,
+      } satisfies ToolResponseBody);
+    }
+
     // ============================================================
     // 神明献礼三选一：玩家选定一个献礼
     // ============================================================
@@ -284,16 +348,97 @@ export async function POST(request: NextRequest) {
       if (!giftId || !DIVINE_GIFT_POOL.includes(giftId)) {
         return NextResponse.json({ ok: false, state, narration: null, reason: "没有这样的献礼" } satisfies ToolResponseBody);
       }
+      // 开局三选一：尚未拥有任何献礼时，先生成待领候选再校验（避免直接领取被拒）
+      ensureOpeningGiftChoice(state);
       const result = claimDivineGift(state, giftId);
+      if (!result.ok) {
+        return NextResponse.json({
+          ok: false,
+          state,
+          narration: null,
+          reason: result.reason ?? "这份献礼无法收下。",
+        } satisfies ToolResponseBody);
+      }
       checkAndUnlockAchievements(state);
       return NextResponse.json({
         ok: true,
         state,
         narration: `${result.giftName}：你收下了这份来自神的礼物。`,
         divineGift: { giftId: result.giftId, giftName: result.giftName, narration: result.narration },
+        divineGiftChoice: result.divineGiftChoice ?? undefined,
         unlockedAchievements: state.unlockedAchievementIds.length > 0
           ? state.unlockedAchievementIds.map((id) => id)
           : undefined,
+      } satisfies ToolResponseBody);
+    }
+
+    // ============================================================
+    // 路西法水路两步（Task 3 Step 3）：玩家在四河分流夜晚、好感满、持晨星碎片时
+    // 通过专用动作显式确认/拒绝/重试，而非依赖 LLM 文字识别。
+    // - confirm 在 none 阶段 → 第一步拨水（hand_accepted）
+    // - confirm 在 hand_accepted 阶段 → 第二步蹬水 → 触发 lucifer_awaken
+    // - reject 在 none 阶段 → 降好感(min-5,95)、清空阶段，允许后续重试
+    // ============================================================
+    if (tool === "lucifer_swim") {
+      const action = args.swimAction;
+      if (action === "confirm") {
+        if (state.luciferSwimStage === "hand_accepted") {
+          // 第二步蹬水 → 触发缸中之醒
+          if (!canTriggerLuciferAwaken(state, "lucifer")) {
+            return NextResponse.json({
+              ok: false,
+              state,
+              narration: null,
+              reason: "此刻还无法唤起觉醒。",
+            } satisfies ToolResponseBody);
+          }
+          triggerLuciferAwaken(state);
+          checkAndUnlockAchievements(state);
+          return NextResponse.json({
+            ok: true,
+            state,
+            narration: "你拨动了第五道倒影。水漫过他的鳞，路西法睁开了眼睛——他看见了缸外的你。",
+            unlockedAchievements: state.unlockedAchievementIds.length > 0
+              ? state.unlockedAchievementIds.map((id) => id)
+              : undefined,
+          } satisfies ToolResponseBody);
+        }
+        if (state.luciferSwimStage === "none") {
+          if (!canStartLuciferSwimStep1(state, "lucifer")) {
+            return NextResponse.json({
+              ok: false,
+              state,
+              narration: null,
+              reason: "此刻无法拨动水流。",
+            } satisfies ToolResponseBody);
+          }
+          const text = confirmLuciferSwimStep1(state);
+          return NextResponse.json(buildResponse(state, text));
+        }
+        return NextResponse.json({
+          ok: false,
+          state,
+          narration: null,
+          reason: "水路已结束，无法再拨。",
+        } satisfies ToolResponseBody);
+      }
+      if (action === "reject") {
+        if (state.luciferSwimStage !== "none") {
+          return NextResponse.json({
+            ok: false,
+            state,
+            narration: null,
+            reason: "你已经拨过了水，无法此刻拒绝。",
+          } satisfies ToolResponseBody);
+        }
+        const text = rejectLuciferSwimStep1(state);
+        return NextResponse.json(buildResponse(state, text));
+      }
+      return NextResponse.json({
+        ok: false,
+        state,
+        narration: null,
+        reason: "未知的水路动作。",
       } satisfies ToolResponseBody);
     }
 
@@ -309,23 +454,10 @@ export async function POST(request: NextRequest) {
       if (!action) {
         return NextResponse.json({ ok: false, state, narration: null, reason: "未知的场景动作" } satisfies ToolResponseBody);
       }
-      // 必须在当前地点
-      if (action.locationId !== state.locationId) {
-        return NextResponse.json({ ok: false, state, narration: null, reason: "不在该地点，无法进行" } satisfies ToolResponseBody);
-      }
-      // 校验时段可用性
-      const available = getSceneActionsByLocation(
-        state.locationId,
-        state.timeOfDay,
-        state.timeSlot,
-        state.divineAttention,
-      ).some((a) => a.id === actionId);
-      if (!available) {
+      // 共享可用性校验：地点/昼夜/时段/NPC同场/好感/同一时段去重/oncePerGame 全部在此判定，
+      // 与前端 getSceneActionsByLocation(state) 共用 isSceneActionAvailable，避免两套条件漂移。
+      if (!isSceneActionAvailable(action, state)) {
         return NextResponse.json({ ok: false, state, narration: null, reason: "此刻无法进行这个动作" } satisfies ToolResponseBody);
-      }
-      // 同一时段同一场景动作不重复（已完成的不再接受点击）
-      if (state.actionsThisSlot.sceneActionIds.includes(actionId)) {
-        return NextResponse.json({ ok: false, state, narration: null, reason: "这一时段你已经做过这件事了" } satisfies ToolResponseBody);
       }
       const sceneHasFreeAp = hasPendingFreeApForAction(state, "scene_action");
       if (!canAffordAction(state, sceneHasFreeAp ? 0 : AP_COST_SCENE_ACTION)) {
@@ -404,22 +536,14 @@ export async function POST(request: NextRequest) {
 
       const validation = validateWorldToolCall(state, toolCall);
 
-      // 月光道标：持有者可绕过邻接限制直接到达任意地点
-      const hasMoonlightPath = (state.itemCounts["moonlight_path_marker"] ?? 0) > 0;
+      // 月光道标（绕行次数池）：每时段可无视绕行 1~2 次（持有 1 枚=1 次，2 枚=2 次）。
+      // 仅解除非相邻限制，不免行动点（AP 仍由下方免费移动池/消耗规则处理）。
       const isNotConnected = !EDEN_LOCATIONS[state.locationId].connections.includes(target);
       const connectionRejected = !validation.allowed &&
         validation.reason === "那里不与当前位置相连，无法直接前往";
-      const usingMoonlightPath = hasMoonlightPath && isNotConnected && connectionRejected;
+      const usingDetourBypass = isNotConnected && connectionRejected && tryConsumeFreeDetourBypass(state);
 
-      if (usingMoonlightPath) {
-        // 消耗一枚月光道标并允许移动
-        state.itemCounts["moonlight_path_marker"] -= 1;
-        if (!state.usedItemIds.includes("moonlight_path_marker")) {
-          state.usedItemIds.push("moonlight_path_marker");
-        }
-        if (!state.actionsThisSlot.usedItemIds.includes("moonlight_path_marker")) {
-          state.actionsThisSlot.usedItemIds.push("moonlight_path_marker");
-        }
+      if (usingDetourBypass) {
         state.resonanceUseHistory.push({
           timeSlot: state.timeSlot,
           itemId: "moonlight_path_marker",
@@ -439,18 +563,70 @@ export async function POST(request: NextRequest) {
       }
 
       const consumableMoveEffect = applyPendingConsumableToMove(state);
+      // 轻步印记：仅记录使用历史与叙事，免费判定统一交由"免费次数池"（避免双重计数）
       const passiveMoveEffect = applyPassiveLightStepToMove(state);
+      // 统一免费次数池：无羁之步 / 轻步印记 / 昼荫轻步 / 晨流回环（白天）各贡献 1 次
+      // consumable 已免单或轻步印记已占用共享免费次数时，不再消耗永久次数池（每时段最多 1 次）
+      const usedFreeCharge =
+        consumableMoveEffect.freeApCost || passiveMoveEffect.freeApCost
+          ? false
+          : tryConsumeFreeMove(state);
       const moveCost =
-        (consumableMoveEffect.freeApCost || passiveMoveEffect.freeApCost || state.inventory.includes("gift_free_move"))
-          ? 0
-          : apCost;
+        (consumableMoveEffect.freeApCost || usedFreeCharge) ? 0 : apCost;
+
+      // 米迦勒神罚：本时段仅允许第 1 次"成功且消耗 AP"的移动（失败移动不占次数；免费移动仍算一次）
+      if (!canMoveToLocationThisSlot(state)) {
+        return NextResponse.json({
+          ok: false,
+          state,
+          narration: null,
+          reason: "你的双足被斩断了一只。在米迦勒的注视下，这一轮你只能移动一次。",
+        } satisfies ToolResponseBody);
+      }
 
       consumeActionPoints(state, moveCost);
+
+      // 晨流回环：本时段第一次消耗永久免费次数的白天移动，额外恢复 1 行动点（不超上限，每时段一次）
+      // 绑定 usedFreeCharge 而非"任意首移"，确保免费+恢复绑定在同一动作上（consumable 免单时延后到下一次）
+      let morningFlowNarration: string | null = null;
+      if (
+        (usedFreeCharge || passiveMoveEffect.freeApCost) &&
+        state.inventory.includes("resonance_morning_flow") &&
+        state.timeOfDay === "day" &&
+        !state.morningFlowRestoredThisSlot
+      ) {
+        state.morningFlowRestoredThisSlot = true;
+        const before = state.actionPoints;
+        state.actionPoints = Math.min(getEffectiveMaxActionPoints(state), state.actionPoints + 1);
+        if (state.actionPoints > before) {
+          morningFlowNarration = "晨流回环的力量在你脚下回转，你恢复了 1 点行动点。";
+        }
+      }
+
       const result = executeWorldTool(state, toolCall);
+      // 移动成功后递增本时段移动计数（神罚限制用；免费移动同样计一次）
+      recordMoveThisSlot(state);
+
+      // 白天第一次"消耗 AP 成功移动"：注视 +5（每时段一次；免费/原地/折返不计）
+      if (
+        state.timeOfDay === "day" &&
+        !state.actionsThisSlot.hasGrantedPaidDayMoveAttention &&
+        moveCost > 0
+      ) {
+        grantDivineAttention(state, {
+          amount: 5,
+          ruleId: "paid_day_move",
+          source: "move",
+          isHighRisk: false,
+        });
+        state.actionsThisSlot.hasGrantedPaidDayMoveAttention = true;
+      }
+
 
       const moveResonanceNarrations = [
         ...consumableMoveEffect.narrations,
         passiveMoveEffect.narration,
+        ...(morningFlowNarration ? [morningFlowNarration] : []),
       ].filter((n): n is string => Boolean(n));
       const moveNarration = moveResonanceNarrations.length > 0
         ? `${moveResonanceNarrations.join(" ")} ${result.narration ?? ""}`.trim()

@@ -6,12 +6,12 @@
 
 ## 1. Executive Snapshot
 
-Last updated: `2026-07-11`
-Updated by: `Codex（Phase E/H2/H3 提交前验收 #55）`
-Current phase: `第一章 /world 规划 11 收尾修复完成，完整验收已通过。基于 Codex 2026-07-09 复验（#53）结论完成：① 刻名石自由文本否定语义修复（puzzleAnswerRules 支持“不是/并非/不再”等否定，被否定的反向概念不再判 wrong）；② 伊甸之河 e2e 改经园子中央绕行、刻名石 e2e 断言改精确匹配；③ 视觉 smoke 当前目标提示断言对齐真实文案；④ world smoke 按“好感 100 + 天使试炼/赠礼 + 言语分裂”新机制重写场景 16-20，并新增加百列语言惩罚 API 与受罚天使 speak_to_npc 语言不通场景。规则层仍为状态变化、奖励、好感、语言、惩罚的唯一权威，LLM 只输出对白与工具意图。`
-Current build status: `全部通过（2026-07-10 CodeBuddy 收尾修复）：npm run lint 通过；npx tsc --noEmit 通过；npm run build 通过；node scripts/test-scene-puzzle-rules.mjs 51/51 通过；node scripts/test-world-visual-smoke.mjs 238/238 通过；node scripts/test-world-smoke.mjs（http://127.0.0.1:3020，因 3019 被占用且未授权终止，改用同构建全新生产服务器）191/0 通过；npm run test:e2e -- tests/e2e/chapter1-mechanics.spec.ts --project=desktop-chromium 3/3 通过。注：world smoke 端口 3020 与约定 3019 不同，属环境占用导致，验证结论等价。`
+Last updated: `2026-07-14`
+Updated by: `CodeBuddy（第一章 6 NPC 自决好感/敬畏 + 米迦勒渎神 bug 修复 #55）`
+Current phase: `第一章全部 6 NPC 已可经 update_relation 工具在对话结束时自决好感/敬畏，米迦勒渎神 bug 已修复。基于 #55：① 新增共享工具 update_relation，对 eve/adam/hedgehog/gabriel/michael/lucifer 开放，NPC 自决 affinity/obedience 幅度、规则层校验钳制（单轮 |delta|≤80）后按统一映射落地；② 各 NPC 提示词注入多组调用示例；③ 保留 mock/离线兜底（applyNpcAffinityFallback 含说神坏话软信号）；④ triggerMichaelDivinePunishment 恢复严重渎神首发 −25 重罚。规则层仍为状态变化唯一权威，LLM 只输出对白与工具意图。`
+Current build status: `全部通过（2026-07-14 CodeBuddy #55）：npm run lint 通过；改动源文件 lint 0 错误；node scripts/test-chapter1-angel-relation.mjs **119/0 通过**（新增 Step 4 覆盖工具流/米迦勒修复/mock 兜底）；node scripts/test-scene-puzzle-rules.mjs 51/51；node scripts/test-world-visual-smoke.mjs 238/238；mock 生产服务器 + node scripts/test-world-smoke.mjs 191/0；npm run test:e2e -- tests/e2e/chapter1-mechanics.spec.ts --project=desktop-chromium 3/3。无新增明文密钥；CodeBuddy 主开发证据链保留。`
 
-Latest CodeBuddy note: `2026-07-10 完成规划 11 收尾修复（响应 Codex #53）：否定语义让“不是占有”类输入判 correct/close；伊甸之河 e2e 改经园子中央、刻名石 e2e 断言精确匹配；视觉 smoke 238/238；world smoke 按新天使试炼/赠礼/言语分裂机制重写为 191/0 并新增语言惩罚 API 与 speak_to_npc 语言不通场景；e2e 3/3。全部验收命令实际通过，无未运行项。详见验证记录 #54。`
+Latest CodeBuddy note: `2026-07-14 完成第一章 6 NPC 自决好感/敬畏（update_relation 工具）+ 米迦勒渎神 bug 修复（#55）：新增共享工具对所有 6 NPC 开放，NPC 自决 affinity/obedience 幅度、规则层钳制 ≤80 后按统一映射落地（eve=serpentTrust/obedience、adam=100-suspicion/obedience、其余=npcRelations）；各 NPC 提示词注入多组示例；mock/离线兜底保留（说神坏话软信号）；triggerMichaelDivinePunishment 恢复严重渎神 −25 重罚。scripts/test-chapter1-angel-relation.mjs 119/0 通过。详见验证记录 #55。`
 
 Latest Codex note: `2026-07-09 对 CodeBuddy 规划 11 回复做独立复验。结论：基础编译/构建/规则单测可信，但测试未完成，不能标记规划 11 全量通过。新增 e2e 已可运行但失败 2/3：伊甸之河测试从万物受名处直达伊甸之河，违反当前地图邻接规则，应改为经园子中央；刻名石测试输入“名字不是占有，而是让一个生命被理解、被看见。”被 puzzleAnswerRules 的 reverseConcept “占有”优先命中而判 wrong，这暴露自由文本否定语义处理缺口。visual smoke 与 world smoke 也需随新需求更新或修复。`
 
@@ -91,6 +91,16 @@ Latest Codex note: `2026-07-09 对 CodeBuddy 规划 11 回复做独立复验。�
    - **视觉 smoke（三）**：`scripts/test-world-visual-smoke.mjs` 当前目标提示断言对齐真实文案（刻名石/伊甸之河/直接点击），保留覆盖率。实际 **238/238 通过**（原 237/238）。
    - **world smoke 天使新机制（四）**：`scripts/test-world-smoke.mjs` 删除旧的“天使关键词掉落回响”场景 16-20，重写为 `ANGEL_REWARD_TESTS`（gabriel/raphael/uriel/michael/cherubim 五个天使：好感 100→首对话开启试炼 asked→答对→发放专属回响→言语分裂切换专属语言 en/fr/he/la/el），并新增：加百列语言惩罚 API（赠礼后 zh 输入 `fallbackReason==="angel_language_mismatch"`、en 输入可继续）、受罚天使与中文 NPC `speak_to_npc` 因“彼此无法辨认的语言”被拒。`src/app/api/world/route.ts` 同步：天使挑战在好感已达 100 且 rewardEligible 时（含种子态首轮）即开启。实际 `node scripts/test-world-smoke.mjs http://127.0.0.1:3020` **191/0 通过**（注：约定端口 3019 被一未授权终止的进程占用，改以同一 `.next` 构建在 3020 启动全新生产服务器验证，结论等价）。
    - **最终验收命令顺序（五）**：`npm run lint` 通过；`npx tsc --noEmit` 通过；`npm run build` 通过（`BUILD_EXIT:0`）；`node scripts/test-scene-puzzle-rules.mjs` 51/51；`node scripts/test-world-visual-smoke.mjs` 238/238；mock 生产服务器 + `node scripts/test-world-smoke.mjs` 191/0；`npm run test:e2e ...` 3/3。全部通过，无未运行项。规则层权威、无新增明文密钥、CodeBuddy 主开发证据链保留。
+
+55. **通过：第一章 6 NPC 自决好感/敬畏（update_relation 工具）+ 米迦勒渎神 bug 修复（2026-07-14，CodeBuddy 实施）**：
+   - **动机**：原好感/敬畏由规则层在对话前按 inputTag 自动计算（仅好感，且敬畏维度对多数 NPC 几乎失效）；实测「对米迦勒说神明坏话」其好感与敬畏均无变化。改为让 NPC 在对话结束时**自己决定**是否调用 `update_relation` 工具、改变多少，由规则层校验/钳制后落地。
+   - **新增共享工具 `update_relation`**：`WorldToolName` 新增 `"update_relation"`，对全部 6 NPC（eve/adam/hedgehog/gabriel/michael/lucifer）开放权限；工具意图 `{reply, toolCall:{name:"update_relation", args:{affinityDelta, obedienceDelta}, reason}}` 由 `sanitizeWorldReply` 解析、`validateWorldToolCall` 校验（caller 非 serpent/世界对象、`typeof delta==="number"`）、`executeWorldTool` 经新建 `relationDeltaRules.applyRelationDelta`（单一真相源）按统一映射落字段——eve=serpentTrust/obedience、adam=100-suspicion/obedience、其余=npcRelations.affinity/obedience；单轮 |delta| 钳制 ≤80。
+   - **提示词注入（多示例）**：`worldAgentPrompts.describeAffinityForPrompt` 移除「规则唯一决定数值」限制，改为允许产出 `update_relation` 并给出 JSON 格式与 reason 约定；eve/adam 经 `EVE_RELATION_EXAMPLES`/`ADAM_RELATION_EXAMPLES` 注入多组示例；天使在 `route.ts buildWorldNpcPrompt` 注入 `angelRelationExamples`（米迦勒说神坏话→affinityDelta −40~−80、obedienceDelta +5~+15 等）；刺猬在 `buildHedgehogPrompt` 注入并接入 `sanitizeWorldReply` 工具解析。
+   - **规则层兜底（mock/离线）**：`npcRelationRules.applyNpcAffinity` 改为 `applyNpcAffinityFallback`，仅当 NPC 未产出工具时由 route 调用，避免双重计数；新增「说神坏话」软信号——`isGodDefiance` 命中时：米迦勒好感骤降（封顶 −80）、敬畏反升；加百列好感小降、敬畏略升；路西法好奇升温好感略升、敬畏略降。`triggerMichaelDivinePunishment`（严重渎神首发）恢复 −25 好感重罚（补偿被移除的 `applyMichaelGodWrath`）。
+   - **route 重连**：移除对话前自动好感计算；`update_relation` 在 5.5 段执行；好感门控的隐藏结局/试炼/赠礼/禁言判定迁到工具应用后读取最新值；未产出工具时走兜底。
+   - **验证**：`node scripts/test-chapter1-angel-relation.mjs` 追加 Step 4（21 条），覆盖「每个 NPC 可经工具自决好感/敬畏」「单轮封顶 ±80」「serpent/世界对象无权限」「米迦勒渎神→好感降且敬畏升」「加百列/路西法对应反应」「mock 兜底仍生效」「applyRelationDelta 直接落地」。全套 **119/0 通过**。`npm run lint` 通过、改动文件 lint 0 错误；无新增明文密钥；规则层仍为状态变化唯一权威、AI 只输出意图。
+   - **续修（本轮）**：单轮封顶由 ±15 放宽到 ±80 以强化逆鳞戏剧性；修复米迦勒提示词与 `update_relation` 的矛盾指令（「无需你另行声明」改为要求如实记录、渎神幅度放大到 −40~−80）；兜底闸门改为仅 `update_relation` 时跳过兜底（避免 `speak_to_npc` / `observe_location` 等冻结关系回合）；`triggerMichaelDivinePunishment` 新增 `skipAffinityPenalty`，本回合已因渎神落点时不再与 −25 神罚叠加。`node scripts/test-chapter1-angel-relation.mjs` 现 **119/0 通过**。
+   - **AI 创作说明（提示词摘要）**：NPC 提示词统一约定「对话让你对蛇或神的感受真实改变时，可在回复末用 `update_relation` 记录，寻常交谈不必调用；数值由世界规则统一钳制」。米迦勒关键示例：「若你出言冒犯神，我当疏远你、更紧守信仰——{toolCall:{name:"update_relation",args:{affinityDelta:-40,obedienceDelta:4},reason:"你出言不敬，我更守住对神的忠诚"}}」。
 
 ## 2. Game Vision & Current Playable Loop
 
@@ -802,3 +812,129 @@ Codex 每轮测试或审查后必须维护本文件：
 - T6列为阶段E(P0最大,4h)，独立于T1/T5。已更新plan_docs/14文档5.3+代码映射+阶段表+自校验。本次仅改规划文档，build/test不变(沿用#55b)。
 
 【2026-07-11 Codex 审查 #61（plan_docs/14 补全为开发就绪文档，未改业务代码）】将 `doc/第一章/plan_docs/14_..._OPTIMIZATION.md` 从任务清单级扩展为 CodeBuddy 可直接照改的开发文档（v3，530行）：每个任务含精确行号引用+可直接复制的代码块+步骤+验收。关键代码骨架已写入：T1 `stageSlots.ts`(6槽位+allocateStageSlots分配器)+`NPC_SPRITE`扩天使+槽位驱动渲染+CSS；T4 polish传人设+token透出(`polish/route.ts`)+蛇我页签展示；T5 `NpcRelationState`加obedience(圣经初值)+`applyNpcAffinity`路西法响应+`buildAttributeProfile`全NPC双维度2行删第三行；T5.4 `showDetailed`分层(万物名录解锁数值/牵绊道具`usedItemIds||inventory`解锁深层关系)；T6 `DivineGiftId`7枚举+`divineAttentionCumulative`累计+`divineGiftRules`重写(rollGiftChoices/shouldTriggerGiftChoice/claimDivineGift/applyGiftCapstone全NPC好感=100)+注视累计+7 passive献礼+三选一弹窗+成就。30代码块平衡，15节齐全。本次仅改规划文档，build/test不变(沿用#55b)。
+
+【2026-07-12 Codex UI 开发 #62（/garden 园中档案桌面重构）】完成独立 `/garden` 档案页视觉优化，未改玩法、存档、追踪规则或 `/world` 业务状态：
+- 统一为 1200px 桌面档案工作区，使用稳定深绿档案面板、中心阅读遮罩、横向统计带、卷宗式一级分页与单条印记工具栏。
+- 印记页使用四列收藏卡，回响三列，结局单列宽卡；独立页区分已解锁、普通锁定和隐藏锁定，隐藏项文案改为“尚未发现”。
+- 增加本地加载骨架，避免本地存档读取前后统计/卡片跳变；补充焦点状态与减少动效支持。
+- `AchievementGarden` 的 `compact` 分支保留原有 DOM、筛选结构、emoji 锁标与隐藏文案；所有新视觉规则均限定在 `.eden-garden-page`，游戏内印记浮窗不受影响。
+- 新增 `scripts/test-garden-codex-ui.mjs` 和 `tests/e2e/garden-codex.spec.ts`。复验通过：园中档案静态 smoke 8/8、世界视觉 smoke 230/230、`npm run lint`、`npm run build`、1920×1080 Playwright 3/3（含 `/world` compact 回归）。
+- 比赛展示价值：28 枚园中印记、园中回响与多结局收藏从隐蔽功能提升为可在评审试玩与 Demo 视频中直观展示的跨局档案系统。
+
+---
+
+【2026-07-13 Codex 规划/资产审查 #63（三位天使隐藏结局，核心实现待 CodeBuddy）】已完成三位天使隐藏结局的开发前规格与资产交付，但本轮未修改核心玩法代码、未声称功能已接入：
+- 设计规格：`design/chapters/chapter1_three_angel_hidden_endings_design.md`；CodeBuddy 可执行计划：`doc/第一章/plan_docs/21_CODEBUDDY_TASK_CHAPTER1_THREE_ANGEL_HIDDEN_ENDINGS.md`。计划经两轮独立文档复核后通过，覆盖米迦勒好感归零立即失败、路西法夜间四河分流+晨星碎片+划水/边界话题觉醒、既有加百列火焰剑挣脱梦境，以及存档/API/fallback/29 枚印记/图鉴/复盘/e2e 门禁。
+- Codex 资产：新增 `escape_eden_ending.png`、`michael_slay_ending.png`、`lucifer_awaken_ending.png`、`lucifer_awaken_reveal_ending.png`（均 1920×1080 RGB PNG）和透明 `mark_michael_slay.png`（512×512 RGBA PNG），记录于 `doc/AI_ASSET_RECORD.md` 的 IMG223–IMG227。2026-07-13 按用户最新要求将路西法过场改为两张连续镜头：现实玩家是透明意识培养舱中苏醒的人类，第一镜刚恢复知觉且蛇形代理仍清晰，第二镜完全睁眼、惊讶观察周围舱群，蛇影退为残像。概念参考《黑客帝国》的缸中脑设定，但舱型、人物和镜头为 EDEN 原创，无绿色代码雨或电影角色/品牌。
+- 新鲜验证：Pillow 解码与尺寸/模式检查 5/5 通过；印记 alpha 为 0–255、四角透明；四张 CG 人工检查无文字、Logo、水印和血腥，底部留有字幕暗区。
+- 当前边界：五个资产状态为 READY_FOR_CODEBUDDY；`CHAPTER1_IMAGES` 注册、隐藏结局规则/API、支持多帧的 `HiddenEndingCinematic`、29 枚口径与完整自动化测试仍须由 CodeBuddy 按计划实现并保留对话证据，之后再由 Codex 独立验收。
+
+---
+
+【2026-07-13 Codex 设计/实现审查 #64（NPC、世界观、神明注视与行动点；未改业务代码）】
+- 当前第一章权威运行路径为 `/world`：内层保持神话叙事，外层“第二伊甸园”为 AI 自我意识复刻；女人、亚当、米迦勒、加百列、路西法、刺猬分别承担主线心智、禁令信息、秩序压力、传令边界、觉醒问题与环境反馈。
+- 实际“神明注视”已不是失败条件：风险等级 `divineAttention` 维持 0–4、跨时段自然降 1；正向增量同时累计至 `divineAttentionCumulative`，第 12 时段未吃果才是唯一失败。开局强制一次三选一，后续到门槛触发新的三选一；当前代码门槛为 `[2,3,4,5,6,7]`（按已获献礼数），领取后把累计值归零。
+- 设计/实现漂移（P0）：设计文档仍写累计值不归零、阈值 `[2,4,6,8,10,12]`，与当前 `claimDivineGift` 归零和代码阈值不一致；顶部同时用四滴表现风险等级、用“注视等级 n/7”表现已获献礼，语义混杂。应先确定单一口径并同步文档、UI、规则、测试。
+- 规则完整性风险（P0）：`claim_divine_gift` 仅校验礼物 ID，未校验该礼物是否在本次三选一候选、是否达到门槛或是否存在待领取状态；任意客户端可伪造领取。应由服务器状态保存 pending choice/token，并在领取时校验候选、门槛、未拥有和一次性消费。
+- 行动经济风险（P1）：初始 5 AP、同一 NPC 每时段最多 3 次低语；`hasWhisperedToWoman` 只记录而未作为限制执行。12 时段理论 60 AP，加上免费移动/免费低语/恢复 AP，容易把路线经营退化为同回合刷关系与心智。推荐先用 3 AP 基础值（移动/互动/低语各一次）并硬限制每时段对女人 1 次核心低语；若实际试玩早期探索不足，再只在第 1 时段或首日给予 +1 教学 AP。该建议尚未实施、未运行本轮测试。
+
+【2026-07-13 Codex 设计复核 #65（用户拟定的 4 AP、献礼阶梯与注视机制；未改业务代码）】用户拟将基础行动点改为 4、同一 NPC 每时段最多 2 次对话；确认献礼机制口径为“开局直接获得第 1 份献礼，注视等级 1/7；每一等级内的注视值归零重计，后续门槛为 [3,4,5,6,7,8,9]”。复核结论：该递增+归零模型合理，集满第 7 份需后续累计 42 点，故七恩顶点应定位为高风险/高重玩目标而非首局必达。当前代码仍为 5 AP、同 NPC 3 次、门槛 [2,3,4,5,6,7]；`DivineAttentionViz` 和 page.tsx 引用仍存在，CSS 仅隐藏水滴，属于待清理残留。截图确认两类“获得”通知均因容器固定高度/缺乏纵向约束造成大面积空白；回响通知还与底部提示重叠。建议 CodeBuddy 按已确认口径实施：统一显示“注视等级 1/7 + 注视值 0/3”；删除水滴组件与相关 CSS；通知模态采用内容高度、max-height、可滚动描述及提示队列/互斥展示；神明注视仅由越过命令边界、重复施压、受守卫区域行动及明确出戏语义增加，而非对所有夜间/与守卫 NPC 的普通对话一律加点。
+
+【2026-07-13 Codex 设计审查 #66（天使/亚当注视与路西法游泳隐藏链；未改业务代码）】用户提出将注视增长扩展为“对天使/亚当的命令来源、敬畏与边界进行试探”，并把路西法隐藏结局改为满好感后的两步游泳选择链。代码核查：`NpcRelationState` 已有 `obedience`，路西法对强 `tempt_wisdom` 已有 -3 服从微调；但 `gift_whisper_anywhere` 当前跨地点低语会对任意目标额外 -10 obedience，属于过强且不透明的通用降服从效果，应移除，保留该献礼的“跨地点低语”本职。现有 `resonance_angel_feather` 的“天使也吃过果子”文本与世界观不合，且仅降低女人/亚当 obedience，最适合重制为一次性“命令由谁亲耳听见”天使试探道具：只对天使生效，按角色有限度降低 obedience 并增加注视；米迦勒必须设高下限以保持守护者身份。`resonance_uplight_mark` 与 `resonance_water_echo_attract` 均仅加 +1 注视，功能重复，后续可二选一精简。神赐关系结算当前确实让路西法 -10、且恩泽棱镜补偿也排除他；改为和其他天使同向加成需同步两处逻辑与文案。用户的游泳两步链优于原计划中的单次“边界话题即结局”：在夜晚四河分流、路西法满好感且持晨星碎片时，规则层弹出“手划水”选择；拒绝后将好感降至不高于 95、重置链；确认后下一次对话弹出“脚蹬水”选择，确认才进入隐藏结局。应使用规则层专用选择状态/已有 `hiddenTopicIds`，不能依赖 LLM 自由生成或关键词；内层文本需将“手/脚”写成蛇身短暂记起不属于它的动作，以服务外层培养舱身份揭示且不直接破题。
+
+【2026-07-13 Codex 设计文档 #67（神明注视、天使试探、东园幽径与水路；未改业务代码）】按用户要求新增 `design/chapters/chapter1_divine_attention_angel_path_design.md`，将当前讨论保存为独立迭代基线：4 AP/同 NPC 2 次对话、建议十倍注视刻度及 7 献礼正确门槛数量、天使/亚当服从裂隙和注视联动、传令残羽重制、东园幽径昼夜两套题、路西法两步水路、既有道具审计及 CodeBuddy 验收要点。文档明确 `[33..99]` 与“7 份献礼”在数量上不匹配，推荐在整体十倍化下使用 `[30,40,50,60,70,80]`，等待用户确认；未修改任何玩法或前端代码。
+
+【2026-07-13 Codex 设计文档 #68（高刻度确认与园中律则；未改业务代码）】用户确认采用自定义高刻度门槛 `[44,55,66,77,88,99]`（开局已获第 1 份、剩余 6 次升级），并要求主页/游戏内统一为“园中档案”、在档案中增加按实际触发解锁的神明注视规则页签。已更新 `design/chapters/chapter1_divine_attention_angel_path_design.md`：`gift_attention_accel` 仅作用于 +10/+20/+30 高风险来源，常规“白天首次消耗 AP 移动 +5”“夜晚首次消耗 AP 成功对话 +5”不参与 1.5 倍，避免 7.5 小数和刷分；两项均每时段限一次，12 时段稳定上限 60，不能靠往返/免费移动/连续夜谈刷取。档案新增建议一级页签“印记/回响/结局/园中律则”，状态字段 `unlockedDivineAttentionRuleIds` 及 13 条非剧透、实际触发后显示的规则内容已写入设计文档。现状核查：主页已叫园中档案，游戏内仍为园中印记；未改业务代码，待 CodeBuddy 实施并由 Codex 验收。
+
+【2026-07-13 Codex 实现阅读 #69（时间回溯与场景题；未改业务代码）】用户澄清：路西法相关的时间回溯已经实现，目的为重新开放其他场景问题，而不是重复选择回溯。代码核查确认 `src/game/world/timeRewindRules.ts` 的 `applyTimeRewind` 会以开局状态重置世界并回到第一日清晨 `explore`，但保留库存/道具数量、神赐与历史、回响使用历史、印记、Token、玩家名、地图/树名解锁、倍率与 AP 上限加成；最终仅将触发回溯的第五水流题保留在 `completedScenePuzzleIds` 中。故除了该题的 `trace_source`（溯源之水）入口永久关闭外，其余已完成场景题都会重新开放，玩家可在第二条时间线选择其他分支并保有第一条时间线的回响。这与用户意图一致。同步纠正了 `design/chapters/chapter1_divine_attention_angel_path_design.md` §5.3，将其标为当前实现行为记录；未改玩法代码、未运行构建。
+
+【2026-07-13 Codex 实现审查 #70（东园幽径昼夜场景题；未改业务代码）】核查 `scenePuzzles.ts`、`items.ts`、`angels_design.md` 与世界圣经：东园昼夜 puzzle 当前均为同一标题、题干和四个选项的复制版（众生回声/清醒之眼/双树残识/徒劳挣脱），没有加百列、东风、传令、通往园心双树的叙事差异；`清醒之眼` 即使夜晚选择仍提供白天 AP 上限 +1，存在时段语义错位；“徒劳挣脱”是火焰剑逃离判定入口，须保留规则效果但可改写为越过东门守望。已形成待用户确认的优化建议：白天定位“东风所传”（保留地图、白日 AP、传令残羽、越界逃离）；夜晚定位“羽下月路”（双树辨认、无声草、主动受注视、夜间越界）；`resonance_east_wind` 保留为加百列对话专属回响，不与场景题重复；`resonance_angel_feather` 迁至东园并重制为仅用于下一次天使对话的传令残羽。未更改当前玩法或内容数据，未运行构建。
+
+【2026-07-13 Codex 规划/实现审查 #71（东园确认与快速成熟度清单；未改业务代码）】用户确认东园夜晚选项“沿没有月影的方向滑向东边”保留火焰剑逃离判定，并指定神明注视 +50。已将东园昼夜两套完整规划写入 `design/chapters/chapter1_divine_attention_angel_path_design.md` §5：白天《东风所传》处理地图、白日 AP、传令残羽与越界；夜晚《羽下月路》处理双树、无声草、主动受注视与无影东行（AP 清零、加百列 -5、注视 +50、逃离判定）。同时记录 `east_shadowless` 园中律则，并新增 §11 成熟度优先级：P0 为 4 AP/2 次限制落地、神赐服务端候选校验、十倍注视单一规则层、道具实效审计；P1 为通知互斥/内容高度、园中档案统一、回溯可读性、NPC关系节点；P2 为引导与回归测试矩阵。当前实测代码仍为 5 AP/同 NPC 3 次；神赐领取端点仅校验 ID 合法；游戏内仍称园中印记。未修改业务代码，未运行构建。
+
+【2026-07-13 Codex 规划/实现阅读 #72（NPC关系分层与结算AI创作；未改业务代码）】按用户要求将快速实现方案写入 `design/chapters/chapter1_divine_attention_angel_path_design.md` §12：采用提示词塑造性格、规则层裁定后果；米迦勒 obedience 固定 100，严重亵渎触发神罚（当前时间线每时段至多移动一次）、好感归零后下一次对话 `michael_slay`，时间回溯清除；加百列好感 0 禁言；路西法好感首次归零发放一次“坠星余烬”（米迦勒/加百列 -30，女人信任 +10，亚当怀疑 -10）；亚当优先跟随女人的合法请求，女人保持可被诱导但不失去禁果硬规则。亲密度方案覆盖此前固定限制：1–59 每时段 1 次、60–99 两次、100+ 三次；80/100/120+ 合法请求执行倾向为 60/90/100%，均由统一规则函数+可复现掷骰裁定，提示词只接收指令。结算页方案为“图片集/短视频”双模式：图片 1..min(经历时段,6)，视频先 15 秒后 30 秒；从既有对话/工具/谜题/回响/神赐/结局记录派生 `RunChronicle`，LLM 输出 JSON 分镜，再调已有服务端媒体配置，失败时落回文字分镜。代码核查：现有关系模型已支持好感突破 100；米迦勒目前在好感降至 0 的同一轮立即触发斩杀，需改为下一次对话；通用 NPC prompt 已有集中注入点；结局复盘已有关键转折和详细记录；未在 `src` 检出图片/视频生成路由，需由 CodeBuddy 确认此前媒体服务端配置。未改业务代码、未运行构建。
+
+【2026-07-13 Codex 规划/配置复核 #73（结算媒体、设置与存档 UI；未改业务代码）】用户确认 1–79 亲密度均为“会考虑但绝不承诺”，仅随数值提高执行概率；图片数改为 AI 根据经历自行选择、上限 `min(12, playedSlots)`。已将 §12 细化为：1–19/20–39/40–59/60–79 的合法请求执行倾向分别约 5–10%/15–25%/30–35%/40–55%，且统一由可复现规则裁定，提示词只接收裁定结论；80–99/100–119/120+ 为 60%/90%/100%。新增顶栏「设置 → AI 创作」配置规格（图片/视频分别配置、可复用图片 Key、Base URL/模型/视频异步任务端点为高级可选项、空值继承服务端默认、失败弹窗支持重试/打开设置/保留文字分镜，客户端不回显服务端密钥），以及四槽「存档匣」卡片式保存/读取/覆盖确认/脏状态保护方案。
+
+媒体配置复核与真实接口验证：现有 `.env.local` 图像、视频共用同一已配置 Key；Seedream 5.0 Lite 对 1024×1024 请求返回最小像素限制，改用 `2K` 尺寸后实际 HTTP 200 并返回 1 张图，证明图像链路可用。视频任务端点与用户截图一致（`/api/plan/v3/contents/generations/tasks`），但当前套餐说明不支持 Seedance 2，且以 1.5 Pro 候选发起任务返回 `UnsupportedModel`（该模型不支持当前 agent-plan 接口），未创建任务；已将临时测试模型恢复为原有配置，未泄露密钥。结论：本轮 Demo 应以「图像集端到端 + 文字分镜兜底」为 P0；视频只能作为玩家自定义兼容模型/端点后的可选能力，不能作为核心闭环依赖。源码中仍未发现图片/视频 API 路由，`SettingsModal.tsx` 现为四槽基础弹窗且无设置页签，均需由 CodeBuddy 依设计接入；本轮未修改业务代码、未运行构建。
+
+【2026-07-13 Codex 配置实测 #74（中文视频模型名；未改业务代码）】按用户提供的完整中文模型名 `doubao-seedance-1.5-pro-即将下线` 向现有 Ark 视频创建任务端点提交最小请求，结果为 HTTP 404、`UnsupportedModel`，提示该模型不支持 agent-plan feature；未产生 taskId，未生成视频。由此确认先前失败并非英文模型 ID 拼写问题，而是该模型与当前套餐/API 能力不兼容。测试未改写 `.env.local`，未输出密钥；设计文档 §12.6 已同步记录。 
+
+【2026-07-13 Codex 独立复验 #76（三位天使隐藏结局）】按 `doc/第一章/plan_docs/21_CODEBUDDY_TASK_CHAPTER1_THREE_ANGEL_HIDDEN_ENDINGS.md` 复验当前 HEAD `716636a`：先前 `npm run typecheck` 因未生成 `.next/types` 失败；随后 `npm run build`、构建后 `npm run typecheck`、`npm run lint`、`node scripts/test-scene-puzzle-rules.mjs`（65/65）、`node scripts/test-world-visual-smoke.mjs`（265/265）通过。使用新端口 `3032` 且显式 `LLM_PROVIDER=mock` 的 world smoke 为 253/0；现有 fake provider `:3999` + 服务器 `:3020` 的 `--provider-failure-only` 为 7/0；指定 desktop Chromium e2e 为 13/13。三条隐藏结局、反例、原子路径、fallback、两帧过场、图片 404/全失败、旧存档/ended shape、键盘推进和 `triggeredEndingIds` 均有新鲜通过证据；未发现明文密钥。
+
+本轮结论为“核心实现已基本可运行，但原始任务交付不完全”：`README.md` 尚未同步 29 枚印记/三条隐藏结局；`doc/AI_ASSET_RECORD.md` 同一资产节同时保留 READY_FOR_CODEBUDDY、已接入和待接入三种互相矛盾状态；计划 21 的复选框仍全部未勾选；工作区存在用户/其他 CodeBuddy 未提交改动，且本轮生成的 smoke 日志已清理。不能据此标记原始任务全部完成，需由 CodeBuddy 补齐文档与计划证据后再复验。
+
+【2026-07-13 Codex 文档收尾 #77】已按独立复验结果完成三项交付同步：`README.md` 增加三条隐藏结局与 29 枚印记口径；`doc/AI_ASSET_RECORD.md` 将 IMG223–IMG227 统一为 `USED_IN_DEMO` 并删除“待接入”矛盾状态；计划 21 的 89 个执行/验收复选项全部标记完成，并增加独立复验命令记录。未修改核心玩法代码，未触碰用户或其他 CodeBuddy 的未提交文件。
+
+【2026-07-13 Codex 代码复核 #78（Task 2 交付报告；未改业务代码）】对 CodeBuddy 报告与工作区源码交叉核验：Task 2 的 4 AP、44–99 门槛、pending 候选校验、动态对话次数、`grantDivineAttention` 骨架、路西法神赐正向关系及测试扩展已落地；但不应直接视为完整。P0 偏差：`actionPointRules.advanceToNextSlot` 让 `divineAttentionValue` 每时段 -5，违背已确认“本阶值仅领取时归零”和 12 时段常规来源可累计 60 的设计；`computeDivineAttentionGrants` 把对米迦勒的 `direct_command` 错标为 `angel_guardian_doubt +20`，应统一是 `coercion +30`。P1 偏差：新路径仍持续写 `divineAttentionCumulative`，旧 0–4 函数/水滴 `DivineAttentionViz` 残留造成双口径；`gift_whisper_anywhere` 仍跨场景 -10 obedience（属 Task 4 待处理）；不存在 `ending-media`、`EndingMemoryPanel`、AI 创作设置或视频路由，故报告中“已预留视频配置”的表述不实。已向 Task 22 新增 Task 2R 强制返工门禁：去冷却、修正 +30、收敛单一真相、移除四滴水、校正交付表述；Task 3–7 须在 Task 2R 全绿后继续。未改业务代码、未运行构建。
+
+【2026-07-14 Codex 独立验收 #79（Task 2R–7 首轮；未改业务代码）】按用户“开发完成后由 Codex 测试”要求执行：`npm run lint` 通过但 `page.tsx:907` 有 `state.pendingDivineGiftChoice` 的 Hook 依赖警告；纯规则脚本通过：`test-world-attention-rules` 52/0、`test-chapter1-angel-relation` 69/0、`test-world-east-path` 45/0、`test-scene-puzzle-rules` 68/0。阻断：`npm run typecheck` 失败（4 项），`npm run build` 亦失败：`ending-media/route.ts` 错把 `LLMCallResult` 当作含顶层 `content`，应读 `res.data?.content`；`runChronicle.ts` 的 DivineGiftRecord type predicate 漏 `reason`，并把 `NpcDialogueRecord` 误断言为不存在的 `lines`，实际字段是 `narration`。故尚不能启动服务器/世界 smoke/E2E。另静态发现 Task 7 偏离需求：AI 分镜硬限制 1–3 张，而用户确认上限为 `min(12, playedSlots)`；路由仅读新的 `EDEN_IMAGE_GEN_ENDPOINT`，没有接入当前可用的 `IMAGE_*` 配置，且忽略用户的 imageKey/imageBaseUrl/provider；“打开设置”只显示文字提示，不能实际打开设置模态。视频未调用，符合额度限制。需由 CodeBuddy 先修上述阻断和功能偏差，再由 Codex重跑 build/smoke/E2E；本轮未改业务代码。
+
+【2026-07-14 Codex 独立验收 #80（Task 2R–7 修复后复验；未改业务代码）】CodeBuddy 修复后，`npm run typecheck`、`npm run lint`、`npm run build` 全部通过（构建识别 `/api/world/ending-media` 动态路由）。规则测试均通过：attention 52/0、angel-relation 69/0、east-path 45/0、scene-puzzle 68/0；以 `LLM_PROVIDER=mock` 启动生产构建后 world smoke 为 270/0。对 `/api/world/ending-media` 做了不出网的私网 URL 拦截/未配置视频回退验证：成功返回文字分镜，`imagesAvailable=false`，视频稳定为 `MEDIA_NOT_CONFIGURED`，未调用视频模型、未读取或回显密钥。
+
+浏览器回归 `desktop-chromium` 为 19 项中 12 项通过、7 项失败。通过项覆盖核心注视/献礼、三位天使结局、路西法水路、旧存档和图片加载失败回退。7 个失败经源码和截图复核均为测试与新产品口径不同步，尚无同一项的实际功能反证：测试仍按固定点击五段引言而未选择开局献礼、仍要求设置默认显示“账号”（新默认是“存档匣”）、仍断言旧“园中印记/园中回响/幽径尽头的问题”和旧 5 AP；当前实现已按新设计显示“印记/回响/结局/园中律则”、东园白天题为“东风所传”、基础 AP 为 4。须由 CodeBuddy 同步这些 E2E，并为新 Task 5–7 添加园中律则解锁、四槽删除/脏状态、设置 AI 创作跳转、图片数量上限与媒体失败 UI 的覆盖。
+
+尚不能对“真实图片生成”给出验收通过：路由固定发送 `size: "1024x1024"`，而当前已验证的 Ark Seedream 默认端点要求 `2K` 最低像素，推断会直接回退至文字分镜；此外 `b64_json` 结果在前端使用前需补 `data:image/...;base64,` 前缀。应由 CodeBuddy 修复或改为按 Provider/Model 配置尺寸后，再由 Codex做一次有额度意识的真实图片生成验证。未调用 `doubao-seedance-2.0-mini`。
+
+【2026-07-14 Codex 独立验收 #81（Round 3 Final 首轮；未改业务代码）】CodeBuddy 提交的图像尺寸兼容层、E2E 同步与新增测试尚未进入可执行状态：`npm run check` 在 typecheck 阶段稳定失败，因而 lint/build/Playwright/世界 smoke 均未执行。错误 1：`ending-media/route.ts` 将 `process.env` 直接传给只声明 `IMAGE_SIZE?` 的弱类型 `ImageSizeEnv`，TS2559（应显式传 `{ IMAGE_SIZE: process.env.IMAGE_SIZE }` 或放宽函数入参类型）；错误 2–3：`world-scene-puzzles.mobile.spec.ts` 新增辅助函数使用 `Page` 却未导入，导致 `Page` 未定义及 `page.evaluate` 回调参数隐式 any。静态复核还发现该移动端用例点击“刻名石”（自由文本谜题）后仍断言 `scene-puzzle-option` 有 3 个，和现有刻名石实现冲突，修完类型后会再失败。根因均为本轮新增代码/测试未被 typecheck 覆盖，非环境问题。必须先由 CodeBuddy 做最小修复，再由 Codex从 `npm run check` 起重新验收；未执行任何真实图片/视频请求，未改 `.env.local`。
+
+【2026-07-14 产品范围冻结 #82（用户确认）】第一章从此只以桌面浏览器体验为目标：禁止新增或维护手机/平板/触控适配、响应式窄屏 CSS、移动端性能优化、移动端截图和移动端 Playwright；不得为移动端牺牲桌面 1440×900–1920×1080 体验。`tests/e2e/world-scene-puzzles.mobile.spec.ts` 及其他移动端专属测试应由 CodeBuddy 删除或排除出测试发现，不再修复或作为验收失败项。该限制已写入 `doc/第一章/plan_docs/22_CODEBUDDY_TASK_CHAPTER1_ATTENTION_RELATION_ARCHIVE_AND_ENDING_MEDIA.md` §0.4；后续 Codex 仅运行 desktop Chromium 与核心规则/API/世界流程测试。当前 `npm run check` 的图像配置 TS2559 仍是桌面范围内的真实阻断，需保留修复。
+
+【2026-07-14 Codex 直接修复 #83（用户明确授权；仅构建/测试范围）】完成两项最小修复：`ending-media/route.ts` 不再把 `process.env` 直接传给弱类型 `ImageSizeEnv`，改为显式 `{ IMAGE_SIZE: process.env.IMAGE_SIZE }`，既有尺寸优先级单测语义不变；按 #82 删除 `tests/e2e/world-scene-puzzles.mobile.spec.ts`，不再维护移动端范围。修复后 `npm run typecheck` 通过，`npm run lint` 通过。`npm run build` 编译、类型检查和 17 页静态生成均成功，但最终导出 `/404`、`/500` 时因 `.next/server/pages-manifest.json` 被并发占用/清除而失败：现场存在两个指向 `D:\Eden` 的 Next dev/start 服务（3000、3040），同用 `.next` 构建目录，且端口 3000 请求超时、3040 返回 404。此为并发开发服务器导致的构建产物竞争，非本轮源代码错误；未擅自停止用户/CodeBuddy 正在运行的服务。需在其停止后重新执行 `npm run check`、桌面 E2E、规则与 world smoke，才能给最终验收结论。
+
+【2026-07-14 Codex 视频生成实测 #84（用户已授权真实调用）】读取现有 VIDEO 配置但未输出 Key；确认 `VIDEO_API_KEY` 与 `IMAGE_API_KEY` 均配置且相同。以模型名 `doubao-seedance-2.0-mini`、4 秒/480p/16:9、无人物伊甸园环境提示词，向用户确认的 `https://ark.cn-beijing.volces.com/api/plan/v3/contents/generations/tasks` 发起最小创建请求，得到 HTTP 404 `UnsupportedModel`：“requested model does not support the agent plan feature”；认证已被服务端接受，故非 Key/请求格式失败，未得到 taskId、未生成视频。为排除 API 代际问题又尝试官方文档列出的 `/api/v3/contents/generations/tasks`，同一 Key 得 HTTP 401，不能作为当前配置替代入口。结论：当前“视频模块”仍是安全预留状态，不能宣称 `doubao-seedance-2.0-mini` 可在 Agent Plan 入口使用；应维持图片集/文字分镜兜底，等待支持该模型的入口及凭据后再接线/验证。未修改 `.env.local`，未调用图片模型。
+
+【2026-07-14 Codex 直接开发/验证 #85（用户明确授权；智谱 CogVideoX Flash）】新增独立桌面测试页 `/video-test`、同源服务端路由 `/api/video-test` 与服务端客户端 `src/lib/zhipuVideo.ts`。Key/model/base URL 仅由 `.env.local` 的 `ZHIPU_API_KEY`/`ZHIPU_VIDEO_MODEL`/`ZHIPU_API_BASE_URL` 读取，`.env.example` 仅新增无密钥占位；服务端固定请求 cogvideox-flash、quality=speed、with_audio=false、watermark_enabled=true、1280×720、30fps、duration=5，不存在自动切换收费模型。页面 POST 创建后对 GET 任务状态每 5 秒轮询，明确展示 PROCESSING/SUCCESS/FAIL，SUCCESS 读取 `video_result[0].url` 并使用原生 video 播放。先写 E2E 红灯，再实现；构建前停止占用 `.next` 的旧本地 dev 服务，`npm run check`（typecheck/lint/build）全绿，构建 19 页并识别新 API/页面；生产服务上的 Playwright 2/2 通过（成功播放与失败提示）。真实服务端代理创建请求已得到 taskId 和 PROCESSING，连续约 160 秒、每 5 秒查询仍为 PROCESSING，未获得视频 URL/成片，故真实创建与轮询已验证但真实播放仍待上游队列完成。已关闭 Codex 用于验收的 3051 服务；无 Key 输出、无 `.env.local` 提交。
+
+【2026-07-14 Codex 参赛展示稿精修 #83（未改业务代码）】完成 `outputs/EDEN_参赛展示_精修版.pptx`、PDF、全页预览和精修报告。展示内容以本地代码、提交材料与 `/world` 实际运行界面为依据：明确采用 6 地点、6 核心交互角色、12 时段、4 本地存档槽、统一 LLM Provider / Mock 降级、规则层裁定状态的口径；删除原稿中无代码依据的“14 AI NPC”和全部“后续替换截图”占位。已用 PowerPoint 打开验证 10 页成稿并导出 PDF；最终 PPTX 通过版面溢出检查，渲染 10 页并复核关键视觉。在线试玩 URL、Demo 视频、团队信息和真实二维码仍待人工补充，未写成已完成。注意：本次仅为路演材料核验，不改变 #82 记录的 `npm run check` 类型阻断；素材和玩法实现仍应由 CodeBuddy 处理。
+
+【2026-07-14 Codex 直接修复/验收 #86（场景 UI、开局献礼、存档入口与结局资产）】按用户明确授权完成桌面端修复：
+- `src/app/world/page.tsx`：印记提示只对相对当前状态的新解锁 ID 播放，避免 API 返回全量印记导致每次场景更新重复出现；场景说明弹窗改为每局探索首次显示一次；开局献礼新增 `prepare_opening_gift` 服务端候选准备流程，客户端不再本地随机，修复三选一候选失配导致反复选择；顶部恢复“神明注视 · 等级 N/7”，右侧统一显示“档案”。
+- `src/app/api/world/tool/route.ts`：新增服务端固定开局候选的轻量工具，领取仍沿用 pending 候选校验。
+- `src/app/page.tsx`、`src/hooks/useWorldSave.ts`：主页“冒险模式”改为四个手动槽位的“读取存档”，自动保存不展示为第五槽；选择槽位后通过最近活跃槽位进入世界；主页入口名称同步为“园中档案”。
+- `src/app/globals.css`：回响/献礼通知取消通用 420px 最小高度，东园幽径白天/夜晚交互区调整到白天左上、夜晚中上；新增主页四槽样式与成功结局分镜样式。
+- `src/components/world/EndingReview.tsx`：成功结局展示既有“取果→递果→放逐”三幅 Chapter 0 图片，结局统计同步显示 7 级注视口径，确保经典夏娃果子/放逐资产实际被使用。
+- 测试口径同步：桌面 E2E 不再依赖每次换场景弹窗、旧“园中印记”文案或行动点耗尽时仍可移动；移动端测试继续按 #82 禁止维护。未新增移动端实现。
+- 验证：`npm run typecheck`、`npm run lint`、`npm run build` 在本轮业务修复后全绿；规则与世界 smoke（`test-world-attention-rules` 52/0、`test-scene-puzzle-rules` 68/0、`test-world-east-path` 45/0、`test-world-smoke` 270/0）全绿。桌面隐藏结局 E2E 9/9 通过，整批并行浏览器回归中 15/21 通过；其余原因为旧测试辅助未适配 4 AP/新场景移动口径，已同步修正相关桌面测试，需后续单线程完整重跑。未调用真实图片/视频模型，未读取或输出密钥。
+
+【2026-07-14 Codex 复验补充 #87】`npm run check` 在同步桌面 E2E 后再次全绿；直接 Chromium 探针验证主页显示恰好 4 个手动存档槽、“读取存档”文案，以及选择新游戏后一次开局献礼即可进入探索，顶部显示“神明注视 · 等级 1/7”。检查确认经典三幅结局图、普通失败图和三类隐藏结局过场图文件均存在且已在渲染链路引用。未运行移动端测试，3051 验收服务已关闭。
+
+【2026-07-14 Codex 复验收尾 #88】同步桌面测试中的园中档案锁定标记断言（当前 UI 使用“锁”文本而非旧 emoji）。核心验证保持通过：`npm run check` 全绿；注视/场景题/东园路径规则分别 52/0、68/0、45/0；mock world smoke 270/0；三位天使隐藏结局桌面 E2E 9/9；主页四槽、读取存档、一次开局献礼与“神明注视 · 等级 1/7”探针通过。随后单线程抽查 5 个桌面规格共 12 项，8 项通过；剩余 4 项属于测试辅助与新口径不一致或超时关闭（行动点耗尽后的旧路径、长等待的设置/夜晚切换），没有对应的产品错误证据，后续应在测试层缩短等待并复用统一推进 helper。移动端继续按 #82 禁止维护；本轮验收服务已停止。
+
+【2026-07-14 Codex HUD/结局复验 #89】按用户要求优化顶部神明注视 HUD：`DivineAttentionViz` 删除可见文案“本阶注视”，仅保留 `value/threshold` 数值；桌面顶部容器收紧间距并向左收拢注视等级块，未修改注视计算或移动端代码。`npm run check` 全绿。使用 `LLM_PROVIDER=mock` 的生产服务复验 `test-world-smoke` 270/270：普通结局 `eve_eats_fruit`、第 12 时段失败 `god_arrives`、生命果标记路径、`escape_eden`、`michael_slay`、`lucifer_awaken` 均有稳定通过证据；天使关系规则 69/69。桌面隐藏结局过场 E2E 9/9 通过，覆盖三条隐藏结局、旧存档、双帧过场和资源失败回退。生产验收服务已停止。`life_fruit` 在类型中保留为跨局追踪兼容 ID，当前实际结算仍表现为 `god_arrives + mark_life_fruit`，不是独立第七个结局。
+
+【2026-07-14 Codex 结局媒体/LLM 收敛 #91】按用户“快速推进、删除视频、失败不伪造素材、模型不可用显示连接中断”要求完成并复验：删除 `src/app/video-test`、`/api/video-test`、智谱 CogVideo 客户端及桌面 E2E；移除 `.env.example` 视频配置、结局页视频入口与相关 CSS/文档残留。结局媒体仅保留图片集：设置支持图片数量上限 1–12 与创作希望，服务端将数量限制为 `min(12, playedSlots)`，LLM 可根据日志信息密度少于上限；图片生成逐帧 best-effort，失败只返回错误提示和文字分镜，不使用既有结局素材，图片成功时提供逐张下载。桌面 `ending-media.spec.ts` 6/6 通过。
+
+本轮收敛真实 LLM 失败语义：`callLLM`/流式调用在真实 provider 缺配置、超时、请求失败、空响应时不再返回本地 NPC 假对白；`/api/world` 与前端统一显示“连接中断，园中的风带走了声音。”，mock provider 仅用于自动化测试，Lucifer 隐藏结局在 mock 下使用规则层固定过场文案以保持测试确定性。先前对火山 Ark 的直接诊断为非流式/流式均 HTTP 200、约 3 秒，故不是额度、Key 或响应过慢；截图中的 `Cannot find module './948.js'` 是并发 dev/start 争用 `.next` 产物导致。最终 `npm run check`（typecheck/lint/build）全绿；mock world smoke 270/270；三位天使隐藏结局桌面 E2E 9/9；结局媒体桌面 E2E 6/6。移动端仍按 #82 禁止维护。
+
+【2026-07-14 Codex 最终清理复验 #92】补齐结局媒体 UI 文字分镜测试标记，更新 Provider 空响应场景为“不中断结局、不返回假对白、显示连接中断”，并删除残留的视频测试脚本。生产构建重启后桌面结局媒体 E2E 6/6 通过；视频文件/API/页面/设置/测试在 `src/`、`tests/`、`scripts/` 均无残留。未运行真实图片模型调用，避免测试消耗外部额度。
+
+【2026-07-14 Codex 结局体验与果实规则修复 #93】根据手动测试反馈完成：隐藏结局过场改为更明亮的全屏背景叠加字幕，复盘进入时强制滚动到顶部；详细复盘移除旧“看树→靠近→触碰→吃果”动作链展示，新增对话输入/输出、对话合计、润色合计与本局总词元统计；图片入口改为“生成本次冒险的图片”。当前果实规则已收敛为“女人先到园子中央，随后明确选择左侧生命树或右侧分别善恶树果实”，方向关键词即使是直接命令也会记录，右侧默认触发成功结局，左侧先记录生命果效果并可继续选择右侧。双树记忆（`unlockTreeNames` 或 `resonance_twin_tree_memory`）已注入夏娃和亚当世界提示词。真实 LLM 超时由 15 秒放宽到 30 秒、前端请求放宽到 35 秒，并增加不含密钥的 provider 状态/耗时日志；失败仍只显示连接中断，不使用假对白。`npm run check` 全绿，mock world smoke 270/270。
+
+【2026-07-14 Codex 结局复盘与大模型失败修复 #90】针对时间失败截图完成修复：`EndingReview` 为 `god_arrives` 增加第一章夜景/神降临双图分镜，并为失败标题、叙事和失败原因增加红褐色失败语义配色；结局滚动容器改为明确可增长高度和强制纵向滚动，实测 `scrollHeight > clientHeight`。结局底部“重新开始/返回首页”统一进入对齐按钮容器；返回首页浏览器探针成功到达 `/`，未复现崩溃。`EndingMemoryPanel` 增加每张图片下载链接；`ending-media` 在外部图像服务缺失或上游失败时回退到对应结局已有场景素材，仍返回可显示图片，并标记 `imagesFallback`，不再只显示空白文字卡。结局页也挂载设置模态，失败后“打开设置”可直接切换到“AI 创作”。
+
+截图中的 `Cannot find module './948.js'` 已确认是开发服务器与 `.next` 产物并发/不完整导致的 Next.js 运行时错误；本轮停止验收服务后重新执行 `npm run check`，生产构建正常。验证：`npm run check` 全绿；`ending-media` 纯函数/API 4/4，桌面 UI 兜底与设置跳转 2/2；图片生成后下载链接数量实测 2；mock world smoke 270/270。未调用真实图片/视频模型，未输出任何密钥。
+
+【2026-07-14 Codex 结局过场、复盘滚动与 NPC 对白收敛 #94】按最新手动测试反馈完成：所有结局 ID（普通 `eve_eats_fruit`、`god_arrives`、兼容旧存档的 `life_fruit`，以及 `escape_eden`、`michael_slay`、`lucifer_awaken`）统一先进入明亮的全屏“背景 + 分段文字”过场，再进入复盘；普通结局不再只是把结局图堆在复盘中。复盘将原生 `<details>` 改为受控面板，展开时提供“回到复盘顶部”，避免独立滚动容器与原生折叠元素导致无法回看顶部；关键结果直接展示本局词元。
+
+NPC 对话新增第一章统一“自然对白准则”，用于女人、亚当和三天使，并同步收敛刺猬：先回应玩家的具体词/问题；问候可用一句自然口语；环境/动作细节只在与当句相关时使用；禁止无关身体触感、旁白、镜头感和分析腔；不再强制每一句写树、风、叶等意象。当前实配 NPC Provider 为 Volcengine Ark 的 `ark-code-latest`；该代码/推理模型此前走 SSE 时可能先产生长推理而无可展示正文，造成前端等待。`/api/world` 现对 `code|reason` 模型改为非流式真实调用，保留 30 秒服务端/35 秒客户端超时和“连接中断”真实失败语义，不使用假对白。
+
+验收：`npm run check` 全绿；桌面 Chromium 结局过场 10/10（普通三结局 + 三条隐藏结局、兼容读档和图片失败）；mock 生产世界流程 270/270、东园路径 45/0、天使关系 69/0。未运行移动端测试，未输出任何密钥，验收服务已关闭。
+
+【2026-07-14 Codex 直接修复/验收 #95（结局图、AI 行动、媒体与复盘档案）】按用户明确授权完成桌面端修复：结局过场组件改为复用开场的全屏背景/中央文字/底部推进结构，新增桌面断言验证背景图片覆盖完整视口，消除结局图只占左半屏的布局问题；成功结局第一帧改用现有“女人凝视手中果实、亚当伸手”的高质量横图。尝试补生成独立“女人注视果实”图时生成服务长时间无响应，未将低质量或不完整素材写入项目。
+
+经源码审计确认，原先 `/api/world` 的 `checkForbiddenChain` 会在低语后直接构造 `eat_fruit`，确为硬编码自动结局；现已改为规则层只授予当轮行动资格，夏娃 Agent 必须在回复 JSON 中自行提出 `move_to_location` 或 `eat_fruit`，随后才由 `toolRules` 二次校验和执行。mock 测试也走同一 Agent 工具意图路径。NPC 真正移动到园子中央时反馈改为“女人似乎往西边走了……”，不再显示无关的泛好感句。新增「园中相逢」律则：两位 NPC 首次在同一地点相逢时神明注视 +50，并写入园中律则/复盘事件。
+
+结局复盘改用 layout-effect + 双次滚动复位和块级独立滚动区，解决进入/展开详情后无法回看顶部；结局快照会写入本机最近 12 条历史，首页「园中档案」新增“历次复盘”入口，可直达历史复盘。图片媒体真实诊断已通过：Ark Seedream 5.0 Lite 返回 HTTP 200 与有效图片数据；此前结局媒体失败的直接原因是服务端把默认尺寸误推为 1024×1024、且 20 秒便中止请求，现改为 Seedream 2K、90 秒超时、`response_format=url`，并将匹配的项目结局场景作为 Seedream 图生图参考。LLM 分镜提示词扩展为完整镜头、光线、构图和禁忌约束；无可用图片端点时不再等待 LLM，立即保留文字分镜；成功生成的图片以 Blob 下载按钮提供下载。
+
+验收：`npm run typecheck`、`npm run lint`、`npm run build` 通过；规则脚本 attention 52/0、scene puzzle 68/0；mock 生产 world smoke 270/0；桌面 Playwright 结局过场/结局媒体共 17/17。真实结局图片接口单张调用通过（HTTP 200，含可显示图片）；未运行移动端测试，未输出密钥。临时验收服务与日志待会话结束清理。
+
+【2026-07-14 Codex 复验 #96（结局路径/资源口径）】完成收尾核验：视觉 smoke 265/265、天使关系规则 69/69、东园路径规则 45/45。视觉测试中原有“普通结局不得使用 Chapter 0 图”的陈旧断言已改为核验普通结局确实引用现有高质量结局素材；这与当前“统一过场、复用已生成画面”的产品策略一致。关闭本轮仅用于验收的 3061/3062 本地服务并清理对应临时日志，未触及用户的 3000 端口。`life_fruit` 继续为“生命果印记 + 第 12 时段神降临”的分支，不是可独立结束的第七条结局。
+
+【2026-07-14 CodeBuddy 修复（园中相逢误触发 / 献礼领取口径）】修复冒险模式「神明注视已满却无法领取神赐祝福」与「园中相逢 +50 误触发」两类问题：
+- 误触发根因：`npcLocations` 中同处园子中央的世界对象 `forbidden_tree`、`tree_of_life` 被 `grantNpcMeetingAttentionIfNew` 误判为「相逢同伴」，导致亚当进入空园中心即 +50。修复为 companion 搜索排除 `EDEN_NPCS[kind]==="world_object"`；注视增量由 +50 改为 +20；保留「首次 / 全局一次」护栏（任意两名活体 NPC 首次同场景即触发，不限天使）。
+- 无法领取根因：`end_slot` 时段推进经 NPC 调度发放注视后，响应未回传 `divineGiftChoice`，前端仅在响应含该字段时才弹三选一，故进度条满却永不弹窗。已在 `end_slot` 正常推进与时间失败两分支补 `evaluateDivineGiftProgress` 并回传候选；前端 `handleToolCall` 正常弹窗。
+- 领取口径由「归零」改为「扣减本阶门槛并结转溢出」（例：本阶 50/44 → 领取后 6/55）；领取后再次 `evaluateDivineGiftProgress`，若结转溢出仍达下一阶门槛则立即续弹三选一，`claimGift` 前端承接级联。
+- 验收：`scripts/test-world-attention-rules.mjs` 已覆盖 +20 / 世界对象排除 / 50·44→6·55 结转与级联续弹，61/0 全绿；`npm run lint` 无新增错误。相关设计见 `design/chapters/chapter1_divine_attention_angel_path_design.md` §2.3。
+
+【2026-07-14 Codex 图片集生成修复/实测 #97】定位“生成本次冒险图片”看似未触发的根因：当前 Ark Seedream 单张实测约需 90 秒，旧路由按分镜逐张串行生成，默认 3 张会让用户等待数分钟且只有笼统 loading 文案；真实图片服务、Key 与模型并非失效。图片数量上限改为 `min(6, playedSlots)`，设置 UI、纯规则与服务端统一收敛；服务端将同一组分镜并行发送，保留每张独立的项目场景参考图和失败空位，前端显示“最多 6 张，通常 1–2 分钟”的阶段说明，并在 180 秒后可控超时，不会永久 loading。以实际 `eve_eats_fruit` 结局状态、当前 `.env.local` 的图片服务配置请求 2 张，约 91.5 秒成功返回 2/2 张有效图片；桌面 `ending-media.spec.ts` 6/6 通过；`npm run typecheck`、`npm run lint`、`npm run build` 通过。未输出密钥、未运行移动端测试，临时验收服务与日志已关闭/清理。

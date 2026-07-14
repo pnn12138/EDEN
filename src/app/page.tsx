@@ -7,9 +7,24 @@ import { useRouter } from "next/navigation";
 import { CHAPTER0_IMAGES } from "@/game/assets";
 import LoginModal from "@/components/world/LoginModal";
 import { getAuth, logout, type AuthState } from "@/lib/auth";
+import {
+  SAVE_SLOTS,
+  slotKey,
+  clearAllWorldSaves,
+  getWorldSaveSlotMetas,
+  selectWorldSaveSlot,
+  type SaveSlotIndex,
+  type SaveSlotMeta,
+} from "@/hooks/useWorldSave";
 
-// 与 useWorldSave 完全一致的 localStorage 键名（仅用于首页判断是否存在存档）
-const WORLD_SAVE_KEY = "eden:chapter1:world-state:v2";
+// 首页只展示并读取四个手动槽位；后台自动保存不伪装成第五个存档。
+function hasAnyWorldSave(): boolean {
+  try {
+    return SAVE_SLOTS.some((i) => !!window.localStorage.getItem(slotKey(i)));
+  } catch {
+    return false;
+  }
+}
 
 export default function HomePage() {
   const router = useRouter();
@@ -18,15 +33,13 @@ export default function HomePage() {
   const [saveOpen, setSaveOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [hasSave, setHasSave] = useState(false);
+  const [saveSlots, setSaveSlots] = useState<SaveSlotMeta[]>([]);
 
   // 挂载后读取登录态与存档标记（localStorage 仅在客户端访问）
   useEffect(() => {
     setAuth(getAuth());
-    try {
-      setHasSave(!!window.localStorage.getItem(WORLD_SAVE_KEY));
-    } catch {
-      setHasSave(false);
-    }
+    setHasSave(hasAnyWorldSave());
+    setSaveSlots(getWorldSaveSlotMetas());
   }, []);
 
   // 点击外部关闭用户下拉菜单
@@ -38,11 +51,8 @@ export default function HomePage() {
   }, [menuOpen]);
 
   const refreshHasSave = () => {
-    try {
-      setHasSave(!!window.localStorage.getItem(WORLD_SAVE_KEY));
-    } catch {
-      setHasSave(false);
-    }
+    setHasSave(hasAnyWorldSave());
+    setSaveSlots(getWorldSaveSlotMetas());
   };
 
   const handleAdventure = () => {
@@ -50,17 +60,16 @@ export default function HomePage() {
     setSaveOpen(true);
   };
 
-  const handleReadSave = () => {
+  const handleReadSave = (slotIndex: SaveSlotIndex) => {
+    selectWorldSaveSlot(slotIndex);
     setSaveOpen(false);
     router.push("/world");
   };
 
   const handleNewGame = () => {
-    try {
-      window.localStorage.removeItem(WORLD_SAVE_KEY);
-    } catch {
-      /* noop */
-    }
+    // 新游戏：清空全部本地存档（四槽位 + 旧单存档 + 辅助 key + 自动保存 + 最近活跃槽），
+    // 复用 useWorldSave 的共享清档函数，避免漏清 autosave 导致加载旧进度、跳过开场白
+    clearAllWorldSaves();
     setSaveOpen(false);
     router.push("/world");
   };
@@ -121,9 +130,18 @@ export default function HomePage() {
               </div>
             </div>
           ) : (
-            <span className="eden-auth-guest" data-testid="home-guest-tag">
+            <button
+              className="eden-auth-guest"
+              data-testid="home-guest-tag"
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setLoginOpen(true);
+              }}
+              aria-label="点击切换登录"
+            >
               游客模式
-            </span>
+            </button>
           )
         ) : (
           <button
@@ -161,7 +179,7 @@ export default function HomePage() {
               className="eden-btn eden-btn--primary eden-home-entry-btn"
               data-testid="home-garden-entry"
             >
-              园中印记
+              园中档案
             </Link>
           </div>
         </section>
@@ -198,16 +216,29 @@ export default function HomePage() {
               </button>
             </div>
             <div className="eden-modal-body">
-              <button
-                className="eden-modal-choice-btn"
-                type="button"
-                disabled={!hasSave}
-                onClick={handleReadSave}
-                data-testid="save-select-read"
-              >
-                读取最近存档
-              </button>
-              {!hasSave && <p className="eden-modal-choice-hint">本地暂无存档</p>}
+              <p className="eden-modal-choice-hint">读取存档</p>
+              <div className="eden-home-save-slots" aria-label="存档槽位">
+                {saveSlots.map((slot) => (
+                  <button
+                    key={slot.index}
+                    className="eden-home-save-slot"
+                    type="button"
+                    disabled={slot.empty || slot.corrupted}
+                    onClick={() => handleReadSave(slot.index)}
+                    data-testid={`home-slot-load-${slot.index}`}
+                  >
+                    <strong>存档 {slot.index}</strong>
+                    {slot.empty ? (
+                      <span>暂无存档</span>
+                    ) : slot.corrupted ? (
+                      <span>存档损坏</span>
+                    ) : (
+                      <span>{slot.chapterSceneLabel} · {slot.timeSlotLabel}<small>保存于 {slot.savedAtLabel}</small></span>
+                    )}
+                  </button>
+                ))}
+              </div>
+              {!hasSave && <p className="eden-modal-choice-hint">本地暂无可读取的手动存档</p>}
               <button
                 className="eden-modal-choice-btn"
                 type="button"
@@ -217,7 +248,7 @@ export default function HomePage() {
                 开始新游戏
               </button>
               <p className="eden-modal-choice-hint">
-                读取将沿用本地最近进度；新游戏会清空当前存档
+                选择一个槽位继续；新游戏会清空当前存档
               </p>
             </div>
           </div>

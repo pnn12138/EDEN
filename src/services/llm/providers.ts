@@ -20,8 +20,8 @@ import type {
   LLMCallResult,
 } from "./types";
 
-// §2.1 Demo 安全网：单次超时从 30s 收紧到 15s，避免评委感知为"卡死"
-const LLM_TIMEOUT_MS = 15_000;
+// 真实推理模型可能先返回 reasoning 再返回正文，给浏览器留出完整响应时间。
+const LLM_TIMEOUT_MS = 30_000;
 const MIN_REASONING_MODEL_TOKENS = 1024;
 
 // ============================================================
@@ -96,6 +96,7 @@ export async function callOpenAICompatible(
     const timeoutId = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
 
     try {
+      const startedAt = Date.now();
       const response = await fetch(url, {
         method: "POST",
         headers: {
@@ -112,6 +113,12 @@ export async function callOpenAICompatible(
       });
 
       if (!response.ok) {
+        console.warn("[llm] provider request rejected", {
+          provider,
+          model: config.model,
+          status: response.status,
+          elapsedMs: Date.now() - startedAt,
+        });
         return {
           ok: false,
           error: "provider_request_failed",
@@ -124,9 +131,10 @@ export async function callOpenAICompatible(
         data?.choices?.[0]?.message?.content ?? undefined;
 
       if (typeof content !== "string" || content.trim().length === 0) {
+        // 请求本身成功（HTTP 200），但模型返回空内容 -> 视为数据缺失，便于上层走本地 fallback。
         return {
           ok: false,
-          error: "provider_request_failed",
+          error: "llm_data_missing",
           usedFallback: false,
         };
       }
@@ -151,12 +159,14 @@ export async function callOpenAICompatible(
       };
     } catch (err: unknown) {
       if (err instanceof DOMException && err.name === "AbortError") {
+        console.warn("[llm] provider request timeout", { provider, model: config.model, timeoutMs: LLM_TIMEOUT_MS });
         return {
           ok: false,
           error: "provider_timeout",
           usedFallback: false,
         };
       }
+      console.warn("[llm] provider request network failure", { provider, model: config.model });
       return {
         ok: false,
         error: "provider_request_failed",
@@ -289,11 +299,18 @@ export async function callMockProvider(
   const systemText = messages.find((m) => m.role === "system")?.content ?? "";
   const wantsJson = systemText.includes("JSON 格式") || systemText.includes('"inputTag"');
   const mockReply = pickMockReply(systemText);
+  // 世界对话的 mock 也必须走「Agent 工具意图 → 规则层校验」路径，
+  // 不能绕过真实行为模型直接改写结局状态。
+  const mockToolCall = systemText.includes("确实决定摘下并吃下果子时，才可请求 eat_fruit")
+    ? { name: "eat_fruit", args: {} }
+    : systemText.includes("往园子中央走去；但只有这段低语真的令你想亲眼看一看两棵树时，才可请求 move_to_location")
+      ? { name: "move_to_location", args: { locationId: "central_meadow" } }
+      : null;
   const content = wantsJson
     ? JSON.stringify({
-        eveReply: mockReply,
+        reply: mockReply,
         inputTag: "tempt_wisdom",
-        toolCall: null,
+        toolCall: mockToolCall,
       })
     : mockReply;
 

@@ -253,7 +253,7 @@ check("scene_action 端点不再保留旧热点多击参数", !worldToolRoute.in
 check("scenePuzzles.ts 文件存在", exists("src/content/world/scenePuzzles.ts"));
 check("puzzleRules.ts 文件存在", exists("src/game/world/puzzleRules.ts"));
 const scenePuzzlesContent = read("src/content/world/scenePuzzles.ts");
-check("scenePuzzles 配置三个问答", ["puzzle_naming_stone_identity", "puzzle_east_path_cautious_presence", "puzzle_river_words_belonging"].every((id) => scenePuzzlesContent.includes(id)));
+check("scenePuzzles 含东园幽径昼夜双变体（共 6 个问答）", ["puzzle_naming_stone_identity", "puzzle_east_path_cautious_presence_day", "puzzle_east_path_cautious_presence_night", "puzzle_river_words_belonging", "puzzle_tree_court_shadow"].every((id) => scenePuzzlesContent.includes(id)));
 check("/world 不再定义旧场景热点配置", !worldPage.includes("SCENE_FOCUS_HOTSPOTS") && !worldPage.includes("SceneFocusHotspot"));
 check("/world 有刻名石显式问答入口", worldPage.includes("eden-naming-stone-entry") && worldPage.includes("handleNamingStoneClick"));
 check("/world 刻名石不再依赖多次点击", !worldPage.includes("naming-stone-center") && !worldPage.includes("点击中间的刻名石 3 次"));
@@ -416,6 +416,65 @@ check("CSS 定义浏览状态明亮背景", css.includes(".eden-game--world-brow
 check("CSS 定义浏览状态 overlay", css.includes(".eden-bg-overlay--browse"));
 check("CSS 浏览状态覆盖 scene-progress 暗色", css.includes(".eden-game--world-browse.scene-progress-0 .eden-bg img"));
 check("CSS 浏览状态 NPC 不暗化", css.includes(".eden-game--world-browse .eden-stage-character--dim") && css.includes("filter: none"));
+
+// ---- 隐藏结局状态深拷贝防回归（7 处 normalizer/clone 必须展开 hiddenTopicIds 数组）----
+// 直接赋值（hiddenTopicIds: state.hiddenTopicIds）会共享引用，导致跨请求状态别名。
+function hasHiddenTopicSpread(src) {
+  return /\[\.\.\.\((?:base|s|state)\.hiddenTopicIds/.test(src);
+}
+const typesSrc = read("src/game/world/types.ts");
+const worldRouteSrc = read("src/app/api/world/route.ts");
+const toolRouteSrc = read("src/app/api/world/tool/route.ts");
+const puzzleRulesSrc = read("src/game/world/puzzleRules.ts");
+const useWorldSaveSrc = read("src/hooks/useWorldSave.ts");
+check("types.ts withNpcWorldDefaults 深拷贝 hiddenTopicIds", hasHiddenTopicSpread(typesSrc));
+check("route.ts cloneWorldState 深拷贝 hiddenTopicIds", hasHiddenTopicSpread(worldRouteSrc));
+check("tool/route.ts cloneWorldState 深拷贝 hiddenTopicIds", hasHiddenTopicSpread(toolRouteSrc));
+check("puzzleRules.ts normalize/clone 深拷贝 hiddenTopicIds", hasHiddenTopicSpread(puzzleRulesSrc));
+check("page.tsx normalizeWorldStateForClient 深拷贝 hiddenTopicIds", hasHiddenTopicSpread(worldPage));
+check("useWorldSave.ts normalizeWorldStateForClient 深拷贝 hiddenTopicIds", hasHiddenTopicSpread(useWorldSaveSrc));
+// normalize/clone 两处都应出现（normalizePuzzleState + cloneWorldStateForPuzzle）
+check("puzzleRules.ts hiddenTopicIds 展开出现至少 2 次", (puzzleRulesSrc.match(/\[\.\.\.\((?:base|s|state)\.hiddenTopicIds/g) || []).length >= 2);
+
+// ---- 路西法隐藏入口：逆流划水与共享可用性校验 ----
+const sceneActionsSrc = read("src/content/world/sceneActions.ts");
+check("sceneActions.ts 导出 isSceneActionAvailable", sceneActionsSrc.includes("export function isSceneActionAvailable"));
+check("sceneActions.ts getSceneActionsByLocation 只收 state", sceneActionsSrc.includes("getSceneActionsByLocation(state: EdenWorldState)"));
+check("sceneActions.ts 含 interact_lucifer_rowing 动作", sceneActionsSrc.includes("interact_lucifer_rowing"));
+check("sceneActions.ts 划水动作 oncePerGame", sceneActionsSrc.includes("oncePerGame: true"));
+check("page.tsx 渲染划水热点 testid", worldPage.includes('data-testid="scene-action-lucifer-rowing"'));
+check("page.tsx getSceneActionsByLocation 改用 state 单参", worldPage.includes("getSceneActionsByLocation(state)"));
+check("tool/route.ts 调用 isSceneActionAvailable", toolRouteSrc.includes("isSceneActionAvailable(action, state)"));
+
+// ---- 隐藏结局印记 / 图鉴 / 普通结局集合 ----
+const achievementsSrc = read("src/content/world/achievements.ts");
+const endingsGallerySrc = read("src/components/world/EndingsGallery.tsx");
+const globalTrackerSrc = read("src/services/achievement/globalTracker.ts");
+check("achievements 含 mark_michael_slay", achievementsSrc.includes('"mark_michael_slay"'));
+check("achievements mark_michael_slay 为 hidden", /id:\s*"mark_michael_slay"[\s\S]*?hidden:\s*true/.test(achievementsSrc));
+check("achievements 结局类注释为 7", /结局类（7）/.test(achievementsSrc));
+check("EndingsGallery 含 michael_slay", endingsGallerySrc.includes('"michael_slay"'));
+check("EndingsGallery 含 lucifer_awaken", endingsGallerySrc.includes('"lucifer_awaken"'));
+check("EndingsGallery 锁定态不泄露标题", endingsGallerySrc.includes('"尚未达成的结局"'));
+check("globalTracker NORMAL_ENDING_IDS 仅 3 项普通结局", globalTrackerSrc.includes('["eve_eats_fruit", "god_arrives", "life_fruit"]'));
+check("globalTracker NORMAL_ENDING_IDS 不含隐藏结局", !/NORMAL_ENDING_IDS[\s\S]*michael_slay/.test(globalTrackerSrc) && !/NORMAL_ENDING_IDS[\s\S]*lucifer_awaken/.test(globalTrackerSrc));
+check("achievementRules mark_hidden_ending 查 endingId", /endingId === "lucifer_awaken"/.test(puzzleRulesSrc) || /endingId === "lucifer_awaken"/.test(read("src/game/world/achievementRules.ts")));
+
+// ---- 隐藏结局过场资产与内容表 ----
+check("escape_eden_ending.png 存在", exists("public/assets/chapter1/images/escape_eden_ending.png"));
+check("michael_slay_ending.png 存在", exists("public/assets/chapter1/images/michael_slay_ending.png"));
+check("lucifer_awaken_ending.png 存在", exists("public/assets/chapter1/images/lucifer_awaken_ending.png"));
+check("lucifer_awaken_reveal_ending.png 存在", exists("public/assets/chapter1/images/lucifer_awaken_reveal_ending.png"));
+check("mark_michael_slay.png 印记存在", exists("public/assets/chapter1/images/achievements/mark_michael_slay.png"));
+check("assets.ts 注册 escapeEdenEnding", assets.includes("escapeEdenEnding"));
+check("assets.ts 注册 michaelSlayEnding", assets.includes("michaelSlayEnding"));
+check("assets.ts 注册 luciferAwakenEnding", assets.includes("luciferAwakenEnding"));
+check("assets.ts 注册 luciferAwakenRevealEnding", assets.includes("luciferAwakenRevealEnding"));
+const hiddenEndingsSrc = read("src/content/world/hiddenEndings.ts");
+check("hiddenEndings.ts 含三套 beats", (hiddenEndingsSrc.match(/beats:\s*\[/g) || []).length >= 3);
+check("hiddenEndings.ts 路西法两帧 startBeat 0 与 3", hiddenEndingsSrc.includes("startBeat: 0") && hiddenEndingsSrc.includes("startBeat: 3"));
+// 普通结局沿用已生成且质量更稳定的 Chapter 0 结局画面；隐藏结局使用第一章专属资产。
+check("hiddenEndings.ts 普通结局引用既有高质量结局图", hiddenEndingsSrc.includes("endingAdamTakesFruit") && hiddenEndingsSrc.includes("endingGodArrives"));
 
 console.log(`\n结果: ${pass} 通过, ${fail} 失败`);
 process.exit(fail > 0 ? 1 : 0);

@@ -133,7 +133,7 @@ const {
 const { getNpcChallengeConfig } = loadTsModule(path.join(ROOT, "src/content/world/npcChallenges.ts"));
 const { withNpcWorldDefaults } = loadTsModule(path.join(ROOT, "src/game/world/types.ts"));
 
-assert.equal(SCENE_PUZZLES.length, 3, "exactly three playable scene puzzles are configured");
+assert.equal(SCENE_PUZZLES.length, 7, "exactly seven playable scene puzzles are configured");
 
 const namingPuzzle = getScenePuzzleById("puzzle_naming_stone_identity");
 assert.ok(namingPuzzle, "naming stone puzzle exists");
@@ -147,7 +147,7 @@ assert.equal(namingPuzzle.inputMode, "free_text", "naming stone uses free_text i
   const enterPuzzle = getAvailableEnterPuzzle(SCENE_PUZZLES, state);
   assert.equal(enterPuzzle, null, "east path no longer auto-triggers on enter");
 
-  const eastPuzzle = getScenePuzzleById("puzzle_east_path_cautious_presence");
+  const eastPuzzle = getScenePuzzleById("puzzle_east_path_cautious_presence_day");
   assert.ok(eastPuzzle, "east path puzzle exists");
   assert.equal(eastPuzzle.trigger, "explicit_interaction", "east path is explicit interaction");
   assert.equal(eastPuzzle.resolutionMode, "per_option", "east path uses per_option");
@@ -160,28 +160,28 @@ assert.equal(namingPuzzle.inputMode, "free_text", "naming stone uses free_text i
   assert.equal(echo.state.unlockMapNpcLocations, true, "众生回声 unlocks map npc locations");
 
   // 完成后重复选择 → alreadyCompleted
-  const repeated = applyScenePuzzleAnswer(echo.state, eastPuzzle, "sober_eye");
+  const repeated = applyScenePuzzleAnswer(echo.state, eastPuzzle, "calibrate_east_light");
   assert.equal(repeated.alreadyCompleted, true, "east path reward not granted twice");
 
-  // 清醒之眼：白天上限加成 +1（独立新局）
-  const sober = applyScenePuzzleAnswer(makeState(), eastPuzzle, "sober_eye");
+  // 清醒之眼（calibrate_east_light）：白天上限加成 +1（独立新局）
+  const sober = applyScenePuzzleAnswer(makeState(), eastPuzzle, "calibrate_east_light");
   assert.equal(sober.success, true);
   assert.equal(sober.state.apMaxBonusDay, 1, "清醒之眼 grants apMaxBonusDay +1");
   assert.ok(sober.state.inventory.includes("resonance_sober_eye"));
 
-  // 双树残识：解锁真名
-  const twin = applyScenePuzzleAnswer(makeState(), eastPuzzle, "twin_tree_memory");
+  // 双树残识（夜题《羽下月路》）：解锁真名
+  const nightPuzzle = getScenePuzzleById("puzzle_east_path_cautious_presence_night");
+  const twin = applyScenePuzzleAnswer(makeState(), nightPuzzle, "twin_tree_memory");
   assert.equal(twin.success, true);
   assert.equal(twin.state.unlockTreeNames, true, "双树残识 unlocks tree names");
   assert.ok(twin.state.inventory.includes("resonance_twin_tree_memory"));
 
-  // 徒劳的挣扎：当前行动点归零，上限不变
+  // 东风逆行（east_wind_reverse）：当前行动点归零
   const struggleState = makeState();
   struggleState.actionPoints = 5;
-  const struggle = applyScenePuzzleAnswer(struggleState, eastPuzzle, "futile_struggle");
+  const struggle = applyScenePuzzleAnswer(struggleState, eastPuzzle, "east_wind_reverse");
   assert.equal(struggle.success, true);
-  assert.equal(struggle.state.actionPoints, 0, "futile struggle zeroes action points");
-  assert.equal(struggle.resultTitle, "徒劳的挣扎", "futile struggle carries result title");
+  assert.equal(struggle.state.actionPoints, 0, "东风逆行 zeroes action points");
 }
 
 // ---- 伊甸之河 per_option：4 种水声回响，保留旧线索/道具依赖 ----
@@ -200,7 +200,7 @@ assert.equal(namingPuzzle.inputMode, "free_text", "naming stone uses free_text i
   assert.ok(revive.state.inventory.includes("resonance_water_echo_revive"));
   assert.ok(revive.state.discoveredClues.includes("clue_four_river_echo"), "保留四河回声线索依赖");
   assert.ok(revive.state.inventory.includes("resonance_four_river_echo"), "保留四河回声道具依赖");
-  assert.equal(revive.state.actionPoints, 5, "复苏回复至当前上限");
+  assert.equal(revive.state.actionPoints, 4, "复苏回复至当前上限（4 AP 模型）");
 
   const repeated = applyScenePuzzleAnswer(revive.state, riverPuzzle, "abundant");
   assert.equal(repeated.alreadyCompleted, true, "river reward not granted twice");
@@ -209,13 +209,100 @@ assert.equal(namingPuzzle.inputMode, "free_text", "naming stone uses free_text i
   const abundant = applyScenePuzzleAnswer(makeState(), riverPuzzle, "abundant");
   assert.equal(abundant.state.apMaxBonusBase, 1, "丰沛 grants apMaxBonusBase +1");
 
-  // 引目：注视累计 +1
+  // 引目：注视值 = 10（puzzle 主动引目）+ 5（水声回响·引目）+ 5（四河回声），均经 grantDivineAttention 单一入口
+  // [Task 2R-3] divineAttentionValue 是唯一玩家可见进度；cumulative 不再被写入（仅迁移兼容）
   const attract = applyScenePuzzleAnswer(makeState(), riverPuzzle, "attract");
-  assert.equal(attract.state.divineAttentionCumulative, 1, "引目 raises cumulative attention");
+  assert.equal(attract.state.divineAttentionValue, 20, "引目 raises divineAttentionValue（十倍刻度）");
+  assert.equal(attract.state.divineAttentionCumulative, 0, "引目 不再写入 cumulative（Task 2R-3 单一进度口径）");
 
   // 藏目：门槛修正 -1
   const conceal = applyScenePuzzleAnswer(makeState(), riverPuzzle, "conceal");
   assert.equal(conceal.state.divineThresholdModifier, -1, "藏目 lowers threshold modifier");
+}
+
+// ---- 园心双树 per_option：四选一 + 月光道标 maxStacks=2 + 敬仰降低 ----
+{
+  console.log("\n[园心双树]");
+  const twinTreePuzzle = getScenePuzzleById("puzzle_central_twin_trees");
+  assert.ok(twinTreePuzzle, "twin tree puzzle exists");
+  assert.equal(twinTreePuzzle.trigger, "explicit_interaction", "twin tree is explicit interaction");
+  assert.equal(twinTreePuzzle.resolutionMode, "per_option", "twin tree uses per_option");
+
+  // 生命果：行动点上限 +1，且不触发 hasEatenLifeFruit（那是女人吃果结局链）
+  const lifeState = makeState();
+  const life = applyScenePuzzleAnswer(lifeState, twinTreePuzzle, "pick_life_fruit");
+  assert.equal(life.success, true);
+  assert.equal(life.state.apMaxBonusBase, 1, "生命果 grants apMaxBonusBase +1");
+  assert.ok(life.state.inventory.includes("resonance_life_fruit_taste"));
+  assert.equal(life.state.worldActions.hasEatenLifeFruit, false, "生命果不触发结局链标记");
+  assert.ok(life.state.completedScenePuzzleIds.includes(twinTreePuzzle.id), "生命果锁死谜题");
+
+  // 分辨之果：洞察道具#2
+  const disc = applyScenePuzzleAnswer(makeState(), twinTreePuzzle, "pick_knowledge_fruit");
+  assert.equal(disc.success, true);
+  assert.ok(disc.state.inventory.includes("resonance_discernment_fruit"));
+
+  // 天使残羽（传令残羽）：获得时不直接改变女人与亚当的敬仰（Task 4 Step 2）
+  const featherState = makeState();
+  const eveBefore = featherState.eveMind.obedience;
+  const adamBefore = featherState.adamMind.obedience;
+  const feather = applyScenePuzzleAnswer(featherState, twinTreePuzzle, "take_angel_feather");
+  assert.equal(feather.success, true);
+  assert.ok(feather.state.inventory.includes("resonance_angel_feather"));
+  assert.equal(feather.state.eveMind.obedience, eveBefore, "传令残羽获得时不降低女人敬仰");
+  assert.equal(feather.state.adamMind.obedience, adamBefore, "传令残羽获得时不降低亚当敬仰");
+
+  // 月光道标：maxStacks=2，第一次不锁死谜题，第二次锁死
+  const moon1 = applyScenePuzzleAnswer(makeState(), twinTreePuzzle, "take_moonlight");
+  assert.equal(moon1.success, true);
+  assert.equal(moon1.state.itemCounts["moonlight_path_marker"], 1, "第一次拾月光得 1 枚");
+  assert.equal(moon1.state.completedScenePuzzleIds.includes(twinTreePuzzle.id), false, "第一次拾月光不锁死谜题");
+  const moon2 = applyScenePuzzleAnswer(moon1.state, twinTreePuzzle, "take_moonlight");
+  assert.equal(moon2.success, true);
+  assert.equal(moon2.state.itemCounts["moonlight_path_marker"], 2, "第二次拾月光得 2 枚");
+  assert.ok(moon2.state.completedScenePuzzleIds.includes(twinTreePuzzle.id), "拿满 2 枚锁死谜题");
+  const moon3 = applyScenePuzzleAnswer(moon2.state, twinTreePuzzle, "take_moonlight");
+  assert.equal(moon3.alreadyCompleted, true, "拿满后再选 -> alreadyCompleted");
+
+  // 拿 1 枚月光后改选生命果：谜题锁死，月光仍为 1 枚
+  const mixed = applyScenePuzzleAnswer(
+    applyScenePuzzleAnswer(makeState(), twinTreePuzzle, "take_moonlight").state,
+    twinTreePuzzle,
+    "pick_life_fruit",
+  );
+  assert.equal(mixed.success, true);
+  assert.ok(mixed.state.completedScenePuzzleIds.includes(twinTreePuzzle.id), "改选其它选项后锁死");
+  assert.equal(mixed.state.itemCounts["moonlight_path_marker"], 1, "改选后月光仍为 1 枚");
+}
+
+// ---- 月光道标绕行次数池：1 枚=1次/时段，2 枚=2次/时段（上限 2） ----
+{
+  console.log("\n[绕行次数池]");
+  const { getFreeDetourBypassCharges, getFreeDetourBypassRemaining, tryConsumeFreeDetourBypass } =
+    loadTsModule(path.join(ROOT, "src/game/world/freeActionRules.ts"));
+  const s = makeState();
+  check("无月光时次数=0", getFreeDetourBypassCharges(s) === 0);
+  s.itemCounts["moonlight_path_marker"] = 1;
+  check("1 枚=1 次/时段", getFreeDetourBypassCharges(s) === 1 && getFreeDetourBypassRemaining(s) === 1);
+  check("消耗 1 次后剩余 0", tryConsumeFreeDetourBypass(s) === true && getFreeDetourBypassRemaining(s) === 0);
+  check("耗尽后再消耗返回 false", tryConsumeFreeDetourBypass(s) === false);
+  s.itemCounts["moonlight_path_marker"] = 3;
+  check("3 枚上限仍为 2 次/时段", getFreeDetourBypassCharges(s) === 2);
+}
+
+// ---- 洞察分层：1/2/3 件洞察（万物名录/分辨之果/相处之鉴） ----
+{
+  console.log("\n[洞察分层]");
+  const s0 = makeState();
+  const insightItems = ["resonance_living_names", "resonance_discernment_fruit", "resonance_bond_insight"];
+  const count = (s) => insightItems.filter((id) => (s.itemCounts?.[id] ?? 0) > 0).length;
+  check("初始洞察数=0", count(s0) === 0);
+  const s1 = { ...s0, itemCounts: { ...s0.itemCounts, resonance_living_names: 1 } };
+  check("持 1 件洞察=1", count(s1) === 1);
+  const s2 = { ...s1, itemCounts: { ...s1.itemCounts, resonance_discernment_fruit: 1 } };
+  check("持 2 件洞察=2", count(s2) === 2);
+  const s3 = { ...s2, itemCounts: { ...s2.itemCounts, resonance_bond_insight: 1 } };
+  check("持 3 件洞察=3", count(s3) === 3);
 }
 
 // ---- 刻名石自由文本判定（模块2：开放式问题，任意非空即正确） ----
@@ -276,7 +363,7 @@ assert.equal(namingPuzzle.inputMode, "free_text", "naming stone uses free_text i
   state4.npcRelations.adam = { affinity: 98, rewardEligible: false, rewardClaimed: false, lastAffinitySignature: null };
   const up = applyNpcAffinity(state4, "adam", "你自己想明白", "build_trust");
   check("好感达 100 置 rewardEligible", up.reached100 === true && state4.npcRelations.adam.rewardEligible === true);
-  check("好感 clamp 不超 100", state4.npcRelations.adam.affinity <= 100);
+  check("好感可突破 100（仅保下限，100 为奖励门槛）", state4.npcRelations.adam.affinity >= 100);
 }
 
 // ---- 天使挑战 ----
@@ -367,7 +454,7 @@ assert.equal(namingPuzzle.inputMode, "free_text", "naming stone uses free_text i
 
 // ---- 补测（第一章六项修复收尾）：门槛序列 / 归零 / 跨场景扣敬畏 / 槽位稳定 ----
 {
-  console.log("\n[补测] 神的注视门槛序列与归零（问题 2）");
+  console.log("\n[补测] 神的注视门槛序列与归零（问题 2，十倍刻度）");
   const {
     DIVINE_GIFT_THRESHOLDS,
     shouldTriggerGiftChoice,
@@ -377,38 +464,43 @@ assert.equal(namingPuzzle.inputMode, "free_text", "naming stone uses free_text i
   const { allocateStageSlots } = loadTsModule(path.join(ROOT, "src/game/world/stageSlots.ts"));
 
   check(
-    "DIVINE_GIFT_THRESHOLDS 深等于 [2,3,4,5,6,7]",
-    JSON.stringify(DIVINE_GIFT_THRESHOLDS) === JSON.stringify([2, 3, 4, 5, 6, 7]),
+    "DIVINE_GIFT_THRESHOLDS 深等于 [44,55,66,77,88,99]",
+    JSON.stringify(DIVINE_GIFT_THRESHOLDS) === JSON.stringify([44, 55, 66, 77, 88, 99]),
     `实际 ${JSON.stringify(DIVINE_GIFT_THRESHOLDS)}`,
   );
 
-  // owned=1, cumulative=2 → 触发三选一
+  // owned=1, value=43 不触发、value=44 触发
   {
     const s = makeState();
     s.divineGiftsOwned = ["gift_all_seduction_up"];
-    s.divineAttentionCumulative = 2;
-    check("owned=1 且 cumulative=2 → 触发三选一", shouldTriggerGiftChoice(s) === true);
+    s.divineAttentionValue = 43;
+    check("owned=1 且 value=43 → 不触发", shouldTriggerGiftChoice(s) === false);
+    s.divineAttentionValue = 44;
+    check("owned=1 且 value=44 → 触发", shouldTriggerGiftChoice(s) === true);
   }
 
-  // claim 后 owned+1 且 cumulative 归零
+  // claim 需先有 pending 候选；成功后 owned+1 且 value/cumulative 归零
   {
     const s = makeState();
     s.divineGiftsOwned = ["gift_all_seduction_up"];
-    s.divineAttentionCumulative = 2;
+    s.divineAttentionValue = 44;
+    s.pendingDivineGiftChoice = ["gift_attention_accel", "gift_resonance_double", "gift_threshold_cut"];
     const before = s.divineGiftsOwned.length;
-    claimDivineGift(s, "gift_attention_accel");
+    const res = claimDivineGift(s, "gift_attention_accel");
+    check("claim 成功", res.ok === true, `reason=${res.reason}`);
     check("claim 后 owned 增加 1", s.divineGiftsOwned.length === before + 1, `实际 ${s.divineGiftsOwned.length}`);
+    check("claim 后本阶注视归零", s.divineAttentionValue === 0, `实际 ${s.divineAttentionValue}`);
     check("claim 后累计注视归零", s.divineAttentionCumulative === 0, `实际 ${s.divineAttentionCumulative}`);
   }
 
-  // owned=2 → cumulative=2 不触发、cumulative=3 触发
+  // owned=2 → 阈值=55（DIVINE_GIFT_THRESHOLDS[1]），value=54 不触发、value=55 触发
   {
     const s = makeState();
     s.divineGiftsOwned = ["gift_all_seduction_up", "gift_attention_accel"];
-    s.divineAttentionCumulative = 2;
-    check("owned=2 且 cumulative=2 → 不触发", shouldTriggerGiftChoice(s) === false);
-    s.divineAttentionCumulative = 3;
-    check("owned=2 且 cumulative=3 → 触发", shouldTriggerGiftChoice(s) === true);
+    s.divineAttentionValue = 54;
+    check("owned=2 且 value=54 → 不触发", shouldTriggerGiftChoice(s) === false);
+    s.divineAttentionValue = 55;
+    check("owned=2 且 value=55 → 触发", shouldTriggerGiftChoice(s) === true);
   }
 
   // owned=7 → 恒不触发
@@ -418,7 +510,7 @@ assert.equal(namingPuzzle.inputMode, "free_text", "naming stone uses free_text i
       "gift_all_seduction_up", "gift_attention_accel", "gift_resonance_double",
       "gift_threshold_cut", "gift_free_move", "gift_whisper_anywhere", "gift_awaken_desire",
     ];
-    s.divineAttentionCumulative = 99;
+    s.divineAttentionValue = 999;
     check("owned=7 → 恒不触发", shouldTriggerGiftChoice(s) === false);
   }
 

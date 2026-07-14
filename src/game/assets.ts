@@ -73,6 +73,11 @@ export const CHAPTER1_IMAGES = {
   namingStoneBankNight: "/assets/chapter1/images/location_four_rivers_night_1920.webp",
   // 园子中央终局夜景
   centralMeadowFinalNight: "/assets/chapter1/images/location_central_meadow_final_night_1920.webp",
+  // 三位天使隐藏结局专属过场图（1920x1080 PNG，由 Codex 生成，2026-07-13）
+  escapeEdenEnding: "/assets/chapter1/images/escape_eden_ending.png",
+  michaelSlayEnding: "/assets/chapter1/images/michael_slay_ending.png",
+  luciferAwakenEnding: "/assets/chapter1/images/lucifer_awaken_ending.png",
+  luciferAwakenRevealEnding: "/assets/chapter1/images/lucifer_awaken_reveal_ending.png",
 } as const;
 
 export const CHAPTER1_AUDIO = {

@@ -5,9 +5,9 @@
 // 玩家可见名称为"园中印记"。
 //
 // Phase 2 说明：
-// - `ACHIEVEMENTS` 为设计文档《ACHIEVEMENT_GARDEN_MARK》定义的 28 个印记全量集
-//   （4 分类：explore 7 / interaction 9 / gameplay 7 / ending 5，含 4 个隐藏印记），
-//   与 public/assets/chapter1/images/achievements/ 下的 28 个图标一一对应，图鉴以此为准。
+// - `ACHIEVEMENTS` 为设计文档《ACHIEVEMENT_GARDEN_MARK》定义的 29 个印记全量集
+//   （4 分类：explore 7 / interaction 9 / gameplay 7 / ending 6，含 4 个隐藏印记），
+//   与 public/assets/chapter1/images/achievements/ 下的 29 个图标一一对应，图鉴以此为准。
 // - `LEGACY_ACHIEVEMENTS` 保留第一章早期 15 个印记（ID / name / desc 完全不变），
 //   用于旧存档兼容：旧存档 unlockedAchievementIds 中的历史 ID 仍可被 getAchievementById 解析。
 // - getAchievementById 同时检索两个集合。
@@ -73,13 +73,6 @@ export const ACHIEVEMENTS: Achievement[] = [
     desc: "你听过园子里所有的风声、水声、说话声，它们都变成了你的印记",
     category: "explore",
     hidden: false,
-  },
-  {
-    id: "mark_hidden_scene",
-    name: "幽径密影",
-    desc: "你发现了东园石头上没人见过的纹路，藏着很久之前的秘密",
-    category: "explore",
-    hidden: true,
   },
 
   // （二）交互类（9）
@@ -198,7 +191,7 @@ export const ACHIEVEMENTS: Achievement[] = [
     hidden: true,
   },
 
-  // （四）结局类（5）
+  // （四）结局类（7）
   {
     id: "mark_success_ending",
     name: "逐入尘世",
@@ -231,6 +224,20 @@ export const ACHIEVEMENTS: Achievement[] = [
     id: "mark_hidden_ending",
     name: "缸中之醒",
     desc: "你打破了看不见的边界，从漫长的梦里醒了过来",
+    category: "ending",
+    hidden: true,
+  },
+  {
+    id: "mark_escape_eden",
+    name: "园外清晨",
+    desc: "你持旋转的火焰剑从幽径尽头挣脱，幻境在裂缝后退向同一个清晨，你第一次站上一片尚未被命名的土地",
+    category: "ending",
+    hidden: true,
+  },
+  {
+    id: "mark_michael_slay",
+    name: "守门者之剑",
+    desc: "你让米迦勒最后一点容忍归于零，守门者使每一次威胁承担了后果",
     category: "ending",
     hidden: true,
   },

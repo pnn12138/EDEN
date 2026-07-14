@@ -2,16 +2,34 @@ import { expect, test, type Page } from "@playwright/test";
 
 const WORLD_STATE_STORAGE_KEY = "eden:chapter1:world-state:v2";
 
+// 推进引言直到进入 explore：末拍弹出「神明献礼三选一」，选定一份才进入 explore。
+// 不允许再用「固定点击五次引言」的旧写法。
 async function startFreshChapter(page: Page): Promise<void> {
   await page.goto("/world");
   await page.evaluate((storageKey) => {
     window.localStorage.removeItem(storageKey);
   }, WORLD_STATE_STORAGE_KEY);
   await page.reload();
+
   const advance = page.locator(".eden-btn--beat-advance");
-  for (let index = 0; index < 5; index += 1) {
-    await advance.click();
+  const giftCard = page.getByTestId("gift-choice-card").first();
+  for (let index = 0; index < 12; index += 1) {
+    if (await giftCard.isVisible().catch(() => false)) {
+      await giftCard.click();
+      await page.getByTestId("world-intro-modal").waitFor({ state: "visible", timeout: 5000 }).catch(() => {});
+      break;
+    }
+    if (await advance.isVisible().catch(() => false)) {
+      await advance.click();
+      await page.waitForTimeout(150);
+    } else {
+      break;
+    }
   }
+  await page.getByTestId("world-intro-modal-close").click().catch(() => {});
+  await page.getByTestId("world-scene-modal-close").click().catch(() => {});
+  await page.locator(".eden-notice-modal-close").first().click().catch(() => {});
+  await page.waitForSelector(".eden-divine-gift-toast", { state: "detached", timeout: 10000 }).catch(() => {});
   await expect(page.getByTestId("world-objective-hint")).toBeVisible();
   await page.getByTestId("world-objective-hint-close").click();
 }

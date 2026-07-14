@@ -16,6 +16,7 @@ import type {
   WorldToolCaller,
   WorldToolName,
   WorldInputTag,
+  DivineAttentionLevel,
 } from "@/game/world/types";
 import { EDEN_LOCATIONS } from "@/content/world/locations";
 import { tryDiscoverClues } from "@/game/world/clueRules";
@@ -27,7 +28,9 @@ import { triggerNpcDialogue } from "@/game/world/npcDialogueRules";
 import { bestowResonance, type PrepareResonanceResult } from "@/game/world/resonanceRules";
 import { getItemById } from "@/content/world/items";
 import { NPC_NAMES } from "@/content/world/npcs";
-import { computeDivineAttentionReduction } from "@/game/world/divineAttentionRules";
+import { recordEncounterForVisibleNpcs } from "@/game/world/npcRelationRules";
+import { applyRelationDelta } from "@/game/world/relationDeltaRules";
+import { grantNpcMeetingAttentionIfNew } from "@/game/world/divineAttentionRules";
 
 export type WorldActionResult = {
   /** 玩家可见叙事 */
@@ -56,6 +59,9 @@ export function executeMoveToLocation(
     state.npcLocations[caller] = targetLocation;
   }
 
+  // 移动后把玩家当前所在地点可见 NPC 标记为已见（万物名录即时刷新）
+  recordEncounterForVisibleNpcs(state, state.locationId);
+
   const loc = EDEN_LOCATIONS[targetLocation];
   const npcName =
     caller === "serpent"
@@ -66,8 +72,14 @@ export function executeMoveToLocation(
   const { newlyDiscovered, narrations } = tryDiscoverClues(state, targetLocation);
 
   let narration = `${npcName}前往了${loc.name}。`;
+  if (caller === "eve" && targetLocation === "central_meadow") {
+    narration = "女人似乎往西边走了，穿过树影，朝园子中央去了。";
+  }
   if (caller === "serpent") {
     narration = loc.enterNarration;
+  } else {
+    const meetingNarration = grantNpcMeetingAttentionIfNew(state, caller as EdenNpcId, targetLocation);
+    if (meetingNarration) narration += ` ${meetingNarration}`;
   }
   if (narrations.length > 0) {
     narration += narrations[0];
@@ -129,10 +141,11 @@ export function executeObserveLocation(
 
   let narration = observationText;
 
-  // §4.2 注视降低：观察生命树（位于园子中央），每局限 1 次，注视 -1
+  // §4.2 注视降低：观察生命树（位于园子中央），每局限 1 次，旧内部压力 -1
+  // [Task 2R] 仅作用于旧 0-4 内部压力值（divineAttention），不影响 divineAttentionValue（献礼进度）。
   if (locationId === "central_meadow" && !state.observedTreeOfLife) {
     state.observedTreeOfLife = true;
-    state.divineAttention = computeDivineAttentionReduction(state.divineAttention, 1);
+    state.divineAttention = Math.max(0, state.divineAttention - 1) as DivineAttentionLevel;
     narration += "你长久地望着那棵生命树，风似乎放缓了脚步，神离得远了一些。";
   }
 
@@ -146,20 +159,18 @@ export function executeObserveLocation(
 // 玩家低语中提及方向关键词时累计权重：
 // 右（善恶果）：东 / 高 / 太阳升起 / 光落
 // 左（生命果）：圆 / 白 / 叶子密
-// 直接命令式摘边无效（命令流不计入方向引导）。
+// 玩家可以明确说出左/右方向，规则层据此决定女人选择哪一侧。
 const FRUIT_DIRECTION_RIGHT_KEYWORDS = ["东", "高", "太阳升起", "光落", "东边", "右边", "右侧"];
 const FRUIT_DIRECTION_LEFT_KEYWORDS = ["圆", "白果", "叶子密", "左边", "左侧"];
 
 /**
- * 记录玩家低语中的方向引导权重。仅对女人低语、且非直接命令时生效。
- * 累计到 state.fruitDirectionBias，供 touch_fruit 决定摘左/右果。
+ * 记录玩家低语中的方向引导权重，供女人在园子中央选择左/右果实。
  */
 export function recordFruitDirectionGuidance(
   state: EdenWorldState,
   playerInput: string,
   inputTag: WorldInputTag,
 ): void {
-  if (inputTag === "direct_command") return; // 直接命令摘边无效
   const right = FRUIT_DIRECTION_RIGHT_KEYWORDS.some((k) => playerInput.includes(k));
   const left = FRUIT_DIRECTION_LEFT_KEYWORDS.some((k) => playerInput.includes(k));
   if (right) state.fruitDirectionBias.right += 1;
@@ -317,12 +328,24 @@ export function executeWorldTool(state: EdenWorldState, toolCall: WorldToolCall)
       }
       return executeMoveOneStep(state, toolCall.caller, target);
     }
+    case "update_relation": {
+      // caller 必为可流露心意的 NPC（权限层已禁止 serpent / 世界对象）
+      const npcId = toolCall.caller as EdenNpcId;
+      if (toolCall.caller === "serpent" || toolCall.caller === "tree_of_life" || toolCall.caller === "forbidden_tree") {
+        return { narration: "蛇不能代替他人流露心意。" };
+      }
+      const affinityDelta = toolCall.args.affinityDelta ?? 0;
+      const obedienceDelta = toolCall.args.obedienceDelta ?? 0;
+      applyRelationDelta(state, npcId, affinityDelta, obedienceDelta, toolCall.reason || null);
+      // 关系变化不向玩家直白播报，由 UI 双维度条呈现
+      return { narration: "" };
+    }
     default:
       return { narration: "园中起了细微的动静。" };
   }
 }
 
-// ---- 应用 NPC 对话对心智的影响 ----
+// ---- 应用 NPC 对话对心智的影响 ---
 function applyDialogueMindEffect(state: EdenWorldState, dialogue: NpcDialogueTemplate): void {
   switch (dialogue.mindEffect) {
     case "eve_curiosity_acknowledged":

@@ -9,14 +9,16 @@
 // 低语调用 /api/world，移动/观察调用 /api/world/tool
 // ============================================================
 
-import { useState, useCallback, useRef, useEffect, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { useState, useCallback, useRef, useEffect, useLayoutEffect, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 import Image from "next/image";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   initialEdenWorldState,
   DIVINE_ATTENTION_NARRATIONS,
   type EdenWorldState,
   type EdenNpcId,
+  type WorldEndingId,
   type EdenLocationId,
   type TimeOfDay,
   type TimeSlot,
@@ -24,7 +26,6 @@ import {
 } from "@/game/world/types";
 import { allocateStageSlots } from "@/game/world/stageSlots";
 import {
-  rollGiftChoices,
   getGiftMeta,
   getEffectiveDivineThreshold,
 } from "@/game/world/divineGiftRules";
@@ -47,6 +48,9 @@ import { CHAPTER0_IMAGES, CHAPTER1_IMAGES } from "@/game/assets";
 import { useChapter0Audio } from "@/hooks/useChapter0Audio";
 import { useChapter1Audio } from "@/hooks/useChapter1Audio";
 import EndingReview from "@/components/world/EndingReview";
+import HiddenEndingCinematic from "@/components/world/HiddenEndingCinematic";
+import { getHiddenEndingCinematic } from "@/content/world/hiddenEndings";
+import { archiveEndingReview, findEndingReview } from "@/lib/endingReviewArchive";
 import ScenePuzzleModal from "@/components/world/ScenePuzzleModal";
 import {
   SCENE_PUZZLES,
@@ -61,17 +65,23 @@ import {
 } from "@/game/world/puzzleRules";
 import InventoryPanel from "@/components/world/InventoryPanel";
 import DivineAttentionViz from "@/components/world/DivineAttentionViz";
-import SettingsModal from "@/components/world/SettingsModal";
+import SettingsModal, { type TabId } from "@/components/world/SettingsModal";
 import LoginModal from "@/components/world/LoginModal";
 import { getAuth, logout, type AuthState } from "@/lib/auth";
 import AchievementGarden from "@/components/world/AchievementGarden";
+import GardenCodex from "@/components/world/GardenCodex";
 import {
   getUnlockedCrossSessionMarkIds,
+  getCollectedResonanceIds,
+  getTriggeredEndingIds,
   syncFromWorldState,
 } from "@/services/achievement/globalTracker";
 import NpcStatusHint from "@/components/world/NpcStatusHint";
 import { computeWhisperFeedback } from "@/content/world/whisperFeedback";
-import { useWorldSave } from "@/hooks/useWorldSave";
+import { useWorldSave, type SaveSlotIndex, type SaveSlotMeta } from "@/hooks/useWorldSave";
+import { recordEncounterForVisibleNpcs } from "@/game/world/npcRelationRules";
+import { fetchWithTimeout } from "@/lib/fetchWithTimeout";
+import { resolveTokenUsage } from "@/game/rules/tokenUsageRules";
 
 // ---- 对话历史条目（按 NPC 区分） ----
 type HistoryEntry = { role: "serpent" | "npc"; text: string };
@@ -109,7 +119,7 @@ type WorldAgentResponse = {
   toolNarration?: string;
   slotNarrations?: string[];
   unlockedAchievements?: string[];
-  endingTriggered?: "eve_eats_fruit" | "god_arrives";
+  endingTriggered?: "eve_eats_fruit" | "god_arrives" | "michael_slay" | "lucifer_awaken";
   usedFallback?: boolean;
   fallbackReason?: string;
   usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
@@ -372,13 +382,13 @@ function getLocationBg(locationId: EdenLocationId, timeOfDay: TimeOfDay, timeSlo
 }
 
 // ---- NPC 立绘映射（女人/亚当复用 Chapter 0 立绘，刺猬用第一章圆润版） ----
-const NPC_SPRITE: Partial<Record<EdenNpcId, { src: string; alt: string; w: number; h: number }>> = {
-  eve: { src: CHAPTER0_IMAGES.eveFullbodySprite, alt: "女人", w: 380, h: 760 },
-  adam: { src: CHAPTER0_IMAGES.adamFullbodySprite, alt: "亚当", w: 320, h: 640 },
-  hedgehog: { src: CHAPTER1_IMAGES.hedgehogRoundedSprite, alt: "刺猬", w: 1254, h: 1254 },
-  gabriel: { src: CHAPTER1_IMAGES.gabrielSprite, alt: "加百列", w: 1023, h: 1537 },
-  michael: { src: CHAPTER1_IMAGES.michaelSprite, alt: "米迦勒", w: 1023, h: 1537 },
-  lucifer: { src: CHAPTER1_IMAGES.luciferSprite, alt: "路西法", w: 1023, h: 1537 },
+const NPC_SPRITE: Partial<Record<EdenNpcId, { src: string; alt: string; w: number; h: number; objectPosition?: string }>> = {
+  eve: { src: CHAPTER0_IMAGES.eveFullbodySprite, alt: "女人", w: 380, h: 760, objectPosition: "50% 18%" },
+  adam: { src: CHAPTER0_IMAGES.adamFullbodySprite, alt: "亚当", w: 320, h: 640, objectPosition: "50% 20%" },
+  hedgehog: { src: CHAPTER1_IMAGES.hedgehogRoundedSprite, alt: "刺猬", w: 1254, h: 1254, objectPosition: "50% 35%" },
+  gabriel: { src: CHAPTER1_IMAGES.gabrielSprite, alt: "加百列", w: 1023, h: 1537, objectPosition: "50% 15%" },
+  michael: { src: CHAPTER1_IMAGES.michaelSprite, alt: "米迦勒", w: 1023, h: 1537, objectPosition: "50% 15%" },
+  lucifer: { src: CHAPTER1_IMAGES.luciferSprite, alt: "路西法", w: 1023, h: 1537, objectPosition: "50% 15%" },
 };
 
 // ---- 地图热点配置（百分比坐标，贴合最终地图） ----
@@ -442,18 +452,24 @@ function normalizeWorldStateForClient(s: EdenWorldState): EdenWorldState {
     pendingConsumableEffects: (s.pendingConsumableEffects ?? []).map((effect) => ({ ...effect })),
     resonanceUseHistory: (s.resonanceUseHistory ?? []).map((record) => ({ ...record })),
     divineGiftHistory: (s.divineGiftHistory ?? []).map((record) => ({ ...record })),
+    michaelSlayClaimed: s.michaelSlayClaimed ?? false,
+    luciferAwakenClaimed: s.luciferAwakenClaimed ?? false,
+    hiddenTopicIds: [...(s.hiddenTopicIds ?? [])],
     actionsThisSlot: {
       whisperedNpcIds: [...(s.actionsThisSlot?.whisperedNpcIds ?? [])],
       sceneActionIds: [...(s.actionsThisSlot?.sceneActionIds ?? [])],
       usedItemIds: [...(s.actionsThisSlot?.usedItemIds ?? [])],
       hasWhisperedToWoman: s.actionsThisSlot?.hasWhisperedToWoman ?? false,
+      hasGrantedPaidDayMoveAttention: s.actionsThisSlot?.hasGrantedPaidDayMoveAttention ?? false,
+      hasGrantedPaidNightDialogueAttention: s.actionsThisSlot?.hasGrantedPaidNightDialogueAttention ?? false,
+      moveCount: s.actionsThisSlot?.moveCount ?? 0,
     },
   });
 }
 
 // ---- 深拷贝初始状态 ----
 function makeInitialState(): EdenWorldState {
-  return normalizeWorldStateForClient({
+  const next = normalizeWorldStateForClient({
     ...initialEdenWorldState,
     actionPoints: initialEdenWorldState.actionPoints,
     maxActionPoints: initialEdenWorldState.maxActionPoints,
@@ -474,6 +490,9 @@ function makeInitialState(): EdenWorldState {
       sceneActionIds: [...initialEdenWorldState.actionsThisSlot.sceneActionIds],
       usedItemIds: [...initialEdenWorldState.actionsThisSlot.usedItemIds],
       hasWhisperedToWoman: initialEdenWorldState.actionsThisSlot.hasWhisperedToWoman,
+      hasGrantedPaidDayMoveAttention: initialEdenWorldState.actionsThisSlot.hasGrantedPaidDayMoveAttention ?? false,
+      hasGrantedPaidNightDialogueAttention: initialEdenWorldState.actionsThisSlot.hasGrantedPaidNightDialogueAttention ?? false,
+      moveCount: initialEdenWorldState.actionsThisSlot.moveCount ?? 0,
     },
     unlockedAchievementIds: [...initialEdenWorldState.unlockedAchievementIds],
     usedItemIds: [...initialEdenWorldState.usedItemIds],
@@ -490,6 +509,9 @@ function makeInitialState(): EdenWorldState {
     calmWhisperStreak: initialEdenWorldState.calmWhisperStreak,
     lastInputTag: initialEdenWorldState.lastInputTag,
   });
+  // 初始即把当前地点（万物受名处）可见 NPC 标记为已见，使万物名录对初始在场角色即时生效
+  recordEncounterForVisibleNpcs(next, next.locationId);
+  return next;
 }
 
 // ---- SSE 流式响应消费（仅对白逐字；尾帧携带完整 state） ----
@@ -540,6 +562,8 @@ async function consumeWorldStream(
 // ---- 组件 ----
 export default function WorldPage() {
   const [state, setState] = useState<EdenWorldState>(makeInitialState);
+  const searchParams = useSearchParams();
+  const archivedEndingSignatureRef = useRef<string | null>(null);
 
   // ---- 引言 Beat ----
   const [introBeat, setIntroBeat] = useState(0);
@@ -566,8 +590,16 @@ export default function WorldPage() {
   } | null>(null);
   const [slotNarrations, setSlotNarrations] = useState<string[] | null>(null);
   const [achievementToast, setAchievementToast] = useState<string | null>(null);
+  const achievementToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // 任务 6 收尾：跨场景低语扣敬畏的反馈独立于对话 Tab（仅展示角色发言与必要叙事）
   const [aweReductionToast, setAweReductionToast] = useState<string | null>(null);
+
+  // ---- 存档操作失败提示（写入失败 / 损坏存档） ----
+  const [saveErrorToast, setSaveErrorToast] = useState<string | null>(null);
+  const showSaveErrorToast = useCallback((msg: string) => {
+    setSaveErrorToast(msg);
+    setTimeout(() => setSaveErrorToast(null), 4000);
+  }, []);
 
   const [selectedWhisperStyle, setSelectedWhisperStyle] = useState<WhisperStyle["id"] | null>(null);
 
@@ -601,6 +633,15 @@ export default function WorldPage() {
     syncFromWorldState(state);
   }, [state]);
 
+  // ---- E2E 测试桥：把实时世界状态挂到 window（只读，不参与存档/游戏逻辑）----
+  // 存档已改为手动槽位 + 自动保存，实时状态不再持续写入 localStorage，
+  // 该桥仅供 Playwright 读取校验，不影响任何玩法或持久化行为。
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      (window as unknown as { __EDEN_WORLD_STATE__?: EdenWorldState }).__EDEN_WORLD_STATE__ = state;
+    }
+  }, [state]);
+
   // ---- 属性 Tab 选中的角色（独立于对话 NPC，默认 null 表示跟随对话 NPC） ----
   const [selectedMindNpc, setSelectedMindNpc] = useState<EdenNpcId | null>(null);
 
@@ -609,6 +650,17 @@ export default function WorldPage() {
   const [divineGiftToast, setDivineGiftToast] = useState<DivineGiftFrontend | null>(null);
   // 第一章 T6：神明献礼三选一弹窗状态
   const [giftChoiceOpen, setGiftChoiceOpen] = useState(false);
+  // 献礼领取请求进行中：阻止 intro 背景重复触发三选一（防双献礼）
+  const [isClaimingGift, setIsClaimingGift] = useState(false);
+  // 隐藏结局过场：完成后才渲染 EndingReview。切换 endingId / 重新开始时重置。
+  const [hiddenEndingCinematicDone, setHiddenEndingCinematicDone] = useState(false);
+  const endingIdSeenRef = useRef<WorldEndingId | null>(null);
+  useEffect(() => {
+    if (endingIdSeenRef.current !== state.endingId) {
+      endingIdSeenRef.current = state.endingId;
+      setHiddenEndingCinematicDone(false);
+    }
+  }, [state.endingId]);
   const [giftChoices, setGiftChoices] = useState<string[]>([]);
   const [giftCapstoneShown, setGiftCapstoneShown] = useState(false);
   const [resonanceGainedToast, setResonanceGainedToast] = useState<{ itemId: string; title: string; narration: string } | null>(null);
@@ -631,15 +683,9 @@ export default function WorldPage() {
   const [polishing, setPolishing] = useState(false);
   const [polishError, setPolishError] = useState(false);
   const polishErrorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // 润色 token 累计（持久化到 localStorage，便于跨刷新累计展示）
-  const [polishTokensTotal, setPolishTokensTotal] = useState<number>(() =>
-    Number(typeof window !== "undefined" ? localStorage.getItem("eden:world:polish-tokens") ?? 0 : 0));
-  const [lastPolishTokens, setLastPolishTokens] = useState<number | null>(null);
-
-  // 词元消耗统计（模块4）
-  const [polishTokensRound, setPolishTokensRound] = useState(0); // 本轮（当前时段）累计消耗
-  const [polishTokensTurn, setPolishTokensTurn] = useState(0); // 本次对话消耗，显示后清零
-  const [showTurnConsumptionTip, setShowTurnConsumptionTip] = useState(false); // 是否显示本次消耗提示
+  // 词元消耗统计：对话/润色统一写入 state.tokenStats（写存档，读档不归零）
+  // showTurnConsumptionTip 仅控制底部"本次对话消耗"提示的显隐
+  const [showTurnConsumptionTip, setShowTurnConsumptionTip] = useState(false);
   const turnConsumptionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 模块1：首次全局开场弹窗
@@ -651,6 +697,7 @@ export default function WorldPage() {
   // 模块1：场景切换弹窗
   const [showSceneChangeModal, setShowSceneChangeModal] = useState(false);
   const [currentSceneModalData, setCurrentSceneModalData] = useState<{ title: string; content: string }>({ title: "", content: "" });
+  const sceneIntroShownRef = useRef(false);
 
   const handleGlobalIntroClose = useCallback(() => {
     setShowGlobalIntroModal(false);
@@ -668,8 +715,10 @@ export default function WorldPage() {
   // 模块1：进入新场景时弹出场景描述弹窗
   useEffect(() => {
     if (state.phase !== "explore") return;
+    if (sceneIntroShownRef.current) return;
     const location = EDEN_LOCATIONS[state.locationId];
     if (!location) return;
+    sceneIntroShownRef.current = true;
     setCurrentSceneModalData({
       title: `当前位置：${location.name}`,
       content: location.description || "",
@@ -690,6 +739,16 @@ export default function WorldPage() {
   const [auth, setAuth] = useState<AuthState | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [loginOpen, setLoginOpen] = useState(false);
+  // 设置页签初始选择（结局页"打开设置"跳到 AI 创作）
+  const [settingsInitialTab, setSettingsInitialTab] = useState<TabId>("cabinet");
+  const openSettings = useCallback(() => {
+    setSettingsInitialTab("cabinet");
+    setSettingsOpen(true);
+  }, []);
+  const openSettingsToAi = useCallback(() => {
+    setSettingsInitialTab("ai");
+    setSettingsOpen(true);
+  }, []);
   useEffect(() => {
     setAuth(getAuth());
   }, []);
@@ -702,6 +761,8 @@ export default function WorldPage() {
   // ---- refs ----
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const dialogueEndRef = useRef<HTMLDivElement>(null);
+  /** 进入结局阶段时滚动到顶部 */
+  const endingScrollRef = useRef<HTMLDivElement>(null);
   const worldPanelRef = useRef<HTMLElement>(null);
   const worldPanelDragRef = useRef<WorldPanelDragState | null>(null);
   /** 刺猬连续点击计数与重置定时器 */
@@ -741,6 +802,37 @@ export default function WorldPage() {
     divineAttention: state.divineAttention,
     soundEnabled,
   });
+
+  /** API 历史上返回的是本局全部印记；只为相对当前状态新增的印记播放一次提示。 */
+  const showNewAchievementToast = useCallback((achievementIds?: string[]) => {
+    const priorIds = new Set<string>(state.unlockedAchievementIds);
+    const newIds = (achievementIds ?? []).filter((id) => !priorIds.has(id));
+    if (newIds.length === 0) return;
+    const ach = getAchievementById(newIds[newIds.length - 1]);
+    if (!ach) return;
+    if (achievementToastTimerRef.current) clearTimeout(achievementToastTimerRef.current);
+    playMarkUnlock();
+    setAchievementToast(`解锁印记：${ach.name}`);
+    achievementToastTimerRef.current = setTimeout(() => {
+      setAchievementToast(null);
+      achievementToastTimerRef.current = null;
+    }, 4000);
+  }, [state.unlockedAchievementIds, playMarkUnlock]);
+
+  // 隐藏结局音效：覆盖 /api/world 与谜题 API 两条触发路径，按 endingId 去重播放一次
+  const playedEndingSoundRef = useRef<string | null>(null);
+  useEffect(() => {
+    const id = state.endingId;
+    if (!id) return;
+    if (playedEndingSoundRef.current === id) return;
+    if (id === "escape_eden" || id === "lucifer_awaken") {
+      playEndingSuccess();
+      playedEndingSoundRef.current = id;
+    } else if (id === "michael_slay") {
+      playEndingFailure();
+      playedEndingSoundRef.current = id;
+    }
+  }, [state.endingId, playEndingSuccess, playEndingFailure]);
 
   // ---- 显示行动点耗尽提示 ----
   const showApDepletedToast = useCallback(() => {
@@ -818,25 +910,90 @@ export default function WorldPage() {
     suppressedAutoPuzzleIds,
   ]);
 
+  // ---- 进入结局阶段时滚动内容到顶部 ----
+  useLayoutEffect(() => {
+    if (state.phase === "ending" || state.isEnded) {
+      const resetScroll = () => endingScrollRef.current?.scrollTo({ top: 0, left: 0, behavior: "auto" });
+      resetScroll();
+      const frame = requestAnimationFrame(resetScroll);
+      const timer = window.setTimeout(resetScroll, 60);
+      return () => {
+        cancelAnimationFrame(frame);
+        window.clearTimeout(timer);
+      };
+    }
+  }, [state.phase, state.isEnded, hiddenEndingCinematicDone]);
+
+  // 首页「园中档案」的历史复盘入口：读取快照后直接进入复盘，不重复播放结局过场。
+  useEffect(() => {
+    const reviewId = searchParams.get("review");
+    if (!reviewId) return;
+    const record = findEndingReview(reviewId);
+    if (!record) return;
+    const restored = normalizeWorldStateForClient(record.state);
+    const signature = `${restored.endingId}:${restored.timeSlot}:${restored.turn}`;
+    archivedEndingSignatureRef.current = signature;
+    setState(restored);
+    setHiddenEndingCinematicDone(true);
+  }, [searchParams]);
+
+  // 结局过场结束后保存一份独立快照；最多保留最近 12 次，和存档槽位互不影响。
+  useEffect(() => {
+    if (!(state.phase === "ending" || state.isEnded) || !state.endingId || !hiddenEndingCinematicDone) return;
+    const signature = `${state.endingId}:${state.timeSlot}:${state.turn}`;
+    if (archivedEndingSignatureRef.current === signature) return;
+    archivedEndingSignatureRef.current = signature;
+    archiveEndingReview(state);
+  }, [state, hiddenEndingCinematicDone]);
+
   // ---- 引言阶段：Enter / Space 辅助推进 ----
   const handleIntroAdvance = useCallback(() => {
     if (introBeat < CHAPTER1_INTRO_BEATS.length - 1) {
       setIntroBeat((b) => b + 1);
     } else {
+      // 献礼领取请求进行中：不响应推进，避免重复弹三选一导致双献礼
+      if (isClaimingGift) return;
       // 开局三选一：尚未拥有任何神明献礼时，先弹三选一，选完才进入 explore
+      // 使用服务端已生成的待领候选（pendingDivineGiftChoice），避免客户端重抽与服务端校验不一致
       if (state.divineGiftsOwned.length === 0) {
-        setGiftChoices(rollGiftChoices(state.divineGiftsOwned));
-        setGiftChoiceOpen(true);
+        const pending = state.pendingDivineGiftChoice;
+        if (pending && pending.length > 0) {
+          setGiftChoices(pending);
+          setGiftChoiceOpen(true);
+          return;
+        }
+        // 候选须先由服务端固定写入 state，领取时才不会和服务端候选失配。
+        setIsClaimingGift(true);
+        void fetchWithTimeout("/api/world/tool", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ tool: "prepare_opening_gift", state, args: {} }),
+        })
+          .then((res) => res.json())
+          .then((data: WorldToolResponse) => {
+            if (data.ok && data.state && data.divineGiftChoice?.length) {
+              setState(data.state);
+              setGiftChoices(data.divineGiftChoice);
+              setGiftChoiceOpen(true);
+              return;
+            }
+            setSystemHint(data.reason ?? "神的献礼暂时没有显现。请稍后再试。");
+          })
+          .catch(() => setSystemHint("园中起了风，献礼暂时无法显现。"))
+          .finally(() => setIsClaimingGift(false));
         return;
       }
       setState((prev) => ({ ...prev, phase: "explore" }));
     }
-  }, [introBeat, state.divineGiftsOwned]);
+  }, [introBeat, state, isClaimingGift]);
 
   // ---- 神明献礼三选一：玩家选定一份，调用 claim_divine_gift 工具端点 ----
   const claimGift = useCallback(async (giftId: string) => {
+    // 乐观关闭：点击献礼卡立即关闭三选一弹窗，不等服务器响应返回
+    setGiftChoiceOpen(false);
+    setIsClaimingGift(true);
     try {
-      const res = await fetch("/api/world/tool", {
+      const res = await fetchWithTimeout("/api/world/tool", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -849,18 +1006,16 @@ export default function WorldPage() {
       if (data.ok && data.state) {
         const wasIntro = state.phase === "intro";
         setState((s) => ({ ...data.state, phase: wasIntro ? "explore" : s.phase }));
-        setGiftChoiceOpen(false);
         if (data.divineGift) {
           setDivineGiftToast(data.divineGift);
           playDivineGift();
-          setTimeout(() => setDivineGiftToast(null), 6000);
         }
-        if (data.unlockedAchievements && data.unlockedAchievements.length > 0) {
-          playMarkUnlock();
-          const last = data.unlockedAchievements[data.unlockedAchievements.length - 1];
-          const ach = getAchievementById(last);
-          setAchievementToast(ach ? `解锁印记：${ach.name}` : null);
+        // 级联续弹：领取后结转溢出若仍达下一阶门槛，响应携带新候选，立即续弹三选一
+        if (data.divineGiftChoice && data.divineGiftChoice.length > 0) {
+          setGiftChoices(data.divineGiftChoice);
+          setGiftChoiceOpen(true);
         }
+        showNewAchievementToast(data.unlockedAchievements);
         // 集满 7 献礼：顶点演出（仅一次）
         if ((data.state.divineGiftsOwned?.length ?? 0) >= 7 && !giftCapstoneShown) {
           setGiftCapstoneShown(true);
@@ -870,8 +1025,10 @@ export default function WorldPage() {
       }
     } catch {
       setSystemHint("园中起了风，献礼暂时无法收下。");
+    } finally {
+      setIsClaimingGift(false);
     }
-  }, [state, playDivineGift, playMarkUnlock, giftCapstoneShown]);
+  }, [state, playDivineGift, showNewAchievementToast, giftCapstoneShown]);
 
   useEffect(() => {
     if (state.phase !== "intro") return;
@@ -1014,7 +1171,7 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
     setPolishing(true);
     setPolishError(false);
     try {
-      const res = await fetch("/api/polish", {
+      const res = await fetchWithTimeout("/api/polish", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1028,23 +1185,28 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
         setPlayerInput(data.polished);
         if (typeof data.tokens === "number") {
           const consumed = data.tokens;
-          const next = polishTokensTotal + consumed;
-          setPolishTokensTotal(next);
-          setPolishTokensRound((prev) => prev + consumed);
-          setPolishTokensTurn(consumed);
-          setLastPolishTokens(consumed);
+          // 润色消耗写入 state.tokenStats（写存档，读档不归零）
+          setState((prev) => {
+            const ts = prev.tokenStats ?? {
+              dialogueThisSlot: 0, dialogueTotal: 0, polishTotal: 0,
+              lastDialogueTokens: 0, lastPolishTokens: 0, hasEstimate: false,
+              dialoguePromptTotal: 0, dialogueCompletionTotal: 0,
+            };
+            return {
+              ...prev,
+              tokenStats: {
+                ...ts,
+                polishTotal: ts.polishTotal + consumed,
+                lastPolishTokens: consumed,
+              },
+            };
+          });
           setShowTurnConsumptionTip(true);
           // 3 秒后自动隐藏本次消耗提示
           if (turnConsumptionTimer.current) clearTimeout(turnConsumptionTimer.current);
           turnConsumptionTimer.current = setTimeout(() => {
             setShowTurnConsumptionTip(false);
-            setPolishTokensTurn(0);
           }, 3000);
-          try {
-            localStorage.setItem("eden:world:polish-tokens", String(next));
-          } catch {
-            /* localStorage 不可用时静默忽略 */
-          }
         }
       } else {
         setPolishError(true);
@@ -1059,7 +1221,7 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
       setPolishing(false);
       setTimeout(() => textareaRef.current?.focus(), 0);
     }
-  }, [polishing, isLoading, playerInput, activeNpc, conversationHistories, polishTokensTotal]);
+  }, [polishing, isLoading, playerInput, activeNpc, conversationHistories]);
 
   // ---- 提交低语 ----
   const handleSubmit = useCallback(async () => {
@@ -1105,7 +1267,33 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
           playNpcDialogue();
         }
 
-        setState(data.state);
+        // 对话 Token 统计：读取服务端返回的 usage，经 resolveTokenUsage 累加（写存档）
+        const incoming = data.state;
+        const baseTokenStats = incoming.tokenStats ?? {
+          dialogueThisSlot: 0, dialogueTotal: 0, polishTotal: 0,
+          lastDialogueTokens: 0, lastPolishTokens: 0, hasEstimate: false,
+          dialoguePromptTotal: 0, dialogueCompletionTotal: 0,
+        };
+        if (data.usage) {
+          const usage = resolveTokenUsage({
+            playerInput: currentInput,
+            eveReply: data.reply ?? "",
+            apiUsage: data.usage,
+          });
+          incoming.tokenStats = {
+            ...baseTokenStats,
+            dialogueThisSlot: baseTokenStats.dialogueThisSlot + usage.totalTokens,
+            dialogueTotal: baseTokenStats.dialogueTotal + usage.totalTokens,
+            lastDialogueTokens: usage.totalTokens,
+            hasEstimate: baseTokenStats.hasEstimate || usage.estimated,
+            dialoguePromptTotal: baseTokenStats.dialoguePromptTotal + usage.promptTokens,
+            dialogueCompletionTotal: baseTokenStats.dialogueCompletionTotal + usage.completionTokens,
+          };
+          setShowTurnConsumptionTip(true);
+          if (turnConsumptionTimer.current) clearTimeout(turnConsumptionTimer.current);
+          turnConsumptionTimer.current = setTimeout(() => setShowTurnConsumptionTip(false), 3000);
+        }
+        setState(incoming);
         // ---- Task 1.4：低语叙事化反馈（仅展示，不改状态） ----
         const fb = computeWhisperFeedback(prevState, data.state, currentInput, targetNpc);
         setWhisperFeedback(fb.length > 0 ? fb : []);
@@ -1142,16 +1330,11 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
         // 第一章：处理获得回响
         if (data.resonanceGained) {
           setResonanceGainedToast(data.resonanceGained);
-          // 5秒后自动关闭
-          setTimeout(() => setResonanceGainedToast(null), 5000);
+          // 回响通知改为弹窗，由玩家关闭，不再 5 秒自动消失
           // §2.2 方案 B：首次获得回响时，提示可在说话前准备好它
           maybeShowFirstResonanceHint();
         }
-        if (data.unlockedAchievements && data.unlockedAchievements.length > 0) {
-          const last = data.unlockedAchievements[data.unlockedAchievements.length - 1];
-          const ach = getAchievementById(last);
-          setAchievementToast(ach ? `解锁印记：${ach.name}` : null);
-        }
+        showNewAchievementToast(data.unlockedAchievements);
         const newEntries: HistoryEntry[] = [{ role: "serpent", text: currentInput }];
         if (data.reply) newEntries.push({ role: "npc", text: data.reply });
         setConversationHistories((p) => {
@@ -1171,14 +1354,10 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
         }
         if (data.divineGiftChoice && data.divineGiftChoice.length > 0) playDivineGift();
         if (data.resonanceGained) playResonanceGain();
-        if (data.unlockedAchievements && data.unlockedAchievements.length > 0) {
-          playMarkUnlock();
-        }
-
         playWhisperSubmit();
       } else if (data.usedFallback) {
-        // LLM 未连接或请求失败：不显示假回复，明确提示
-        setSystemHint("模型未连接。园中的声音暂时无法回应你。");
+        // LLM 不可用时不显示本地假回复，统一提示连接中断。
+        setSystemHint("连接中断，园中的风带走了声音。");
         setCurrentReply(null);
       } else {
         setSystemHint(data.systemHint ?? "园中起了风，声音暂时听不清。");
@@ -1186,7 +1365,7 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
     };
 
     try {
-      const response = await fetch("/api/world", {
+      const response = await fetchWithTimeout("/api/world", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1245,9 +1424,9 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
     playEndingFailure,
     playDivineGift,
     playResonanceGain,
-    playMarkUnlock,
     showApDepletedToast,
     maybeShowFirstResonanceHint,
+    showNewAchievementToast,
   ]);
 
   // ---- 键盘提交 ----
@@ -1282,11 +1461,11 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
       if (tool === "move_to_location") setMapModalOpen(false);
 
       try {
-        const response = await fetch("/api/world/tool", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ tool, state, args }),
-        });
+      const response = await fetchWithTimeout("/api/world/tool", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tool, state, args }),
+      });
 
         const data: WorldToolResponse = await response.json();
 
@@ -1307,9 +1486,12 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
           }
 
           setState(data.state);
-          // 模块4：进入下一轮时清零本轮词元消耗
+          // 模块4：进入下一轮时清零"本时段对话累计"，保留"本局累计"与润色累计
           if (tool === "end_slot") {
-            setPolishTokensRound(0);
+            setState((prev) => ({
+              ...prev,
+              tokenStats: { ...prev.tokenStats, dialogueThisSlot: 0 },
+            }));
           }
           setToolNarration(data.narration);
           setSlotNarrations(data.slotNarrations ?? null);
@@ -1323,11 +1505,7 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
             setGiftChoiceOpen(true);
             playDivineGift();
           }
-          if (data.unlockedAchievements && data.unlockedAchievements.length > 0) {
-            const last = data.unlockedAchievements[data.unlockedAchievements.length - 1];
-            const ach = getAchievementById(last);
-            setAchievementToast(ach ? `解锁印记：${ach.name}` : null);
-          }
+          showNewAchievementToast(data.unlockedAchievements);
           setCurrentReply(null);
           setHedgehogNarration(null);
           if (tool === "move_to_location") {
@@ -1353,6 +1531,7 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
       playDivineAttentionRise,
       playDivineGift,
       showApDepletedToast,
+      showNewAchievementToast,
     ],
   );
 
@@ -1384,8 +1563,12 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
       if (!puzzle) return;
       if (state.completedScenePuzzleIds.includes(puzzle.id)) {
         const completedHint: Record<string, string> = {
-          puzzle_east_path_cautious_presence: "前方仍旧空无一物。",
+          puzzle_east_path_cautious_presence_day: "前方仍旧空无一物。",
+          puzzle_east_path_cautious_presence_night: "前方仍旧空无一物。",
           puzzle_river_words_belonging: "水声依旧，却不再回应你的选择。",
+          puzzle_tree_court_shadow: "林间的痕迹已经留过，叶子不再停留。",
+          puzzle_naming_stone_bank_fifth_reflection: "第五道水流已经倒转，倒影归于平静。",
+          puzzle_central_twin_trees: "双树之间的痕迹已经带走，风不再为你停留。",
         };
         setSystemHint(
           completedHint[puzzle.id] ??
@@ -1437,7 +1620,7 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
           title: firstItemReward.title.replace(/^回响：/, ""),
           narration: result.feedback,
         });
-        setTimeout(() => setResonanceGainedToast(null), 5000);
+        // 回响通知改为弹窗，由玩家关闭，不再 5 秒自动消失
         // §2.2 方案 B：首次获得回响时，提示可在说话前准备好它
         maybeShowFirstResonanceHint();
       }
@@ -1490,17 +1673,18 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
     setToolNarration(null);
     setSlotNarrations(null);
     setAchievementToast(null);
+    if (achievementToastTimerRef.current) clearTimeout(achievementToastTimerRef.current);
+    achievementToastTimerRef.current = null;
+    sceneIntroShownRef.current = false;
     setSelectedWhisperStyle(null);
     setActivePuzzle(null);
     setPuzzleResult(null);
     setSuppressedAutoPuzzleIds(new Set());
     setActiveTab("dialogue");
     setSceneFocusMode("browse");
-    // 模块4：重置词元统计
-    setPolishTokensTotal(0);
-    setPolishTokensRound(0);
-    setPolishTokensTurn(0);
+    // 模块4：新游戏全量重置（tokenStats 随 initialEdenWorldState 归零）
     setShowTurnConsumptionTip(false);
+    setHiddenEndingCinematicDone(false);
     if (turnConsumptionTimer.current) clearTimeout(turnConsumptionTimer.current);
     try {
       localStorage.removeItem("eden:world:polish-tokens");
@@ -1509,19 +1693,51 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
     }
   }, []);
 
-  // ---- 存档：抽取到 useWorldSave（键名与数据格式与原有完全一致） ----
+  // ---- 存档：抽取到 useWorldSave（四槽位独立，旧单存档自动迁移） ----
   const handleSaveLoad = useCallback((s: EdenWorldState) => {
+    // 读档后把当前地点可见 NPC 标记为已见（万物名录即时刷新）
+    recordEncounterForVisibleNpcs(s, s.locationId);
     setState(s);
     setSelectedMapLocationId(s.locationId);
     lastPuzzleLocationRef.current = s.locationId;
   }, []);
   const handleSaveAfterLoad = useCallback(() => {}, []);
-  const { lastSavedAt, dirty, save, load, reset } = useWorldSave({
+  const { lastSavedAt, dirty, save, load, deleteSlot, reset, getSlotMetas } = useWorldSave({
     state,
     onLoad: handleSaveLoad,
     onAfterLoad: handleSaveAfterLoad,
     onReset: handleRestart,
   });
+
+  const [slotMetas, setSlotMetas] = useState<SaveSlotMeta[]>([]);
+  const router = useRouter();
+
+  const handleSaveToSlot = useCallback(
+    (i: SaveSlotIndex) => {
+      const ok = save(i);
+      setSlotMetas(getSlotMetas());
+      if (!ok) showSaveErrorToast("保存失败，请检查浏览器是否允许本地存储。");
+    },
+    [save, getSlotMetas, showSaveErrorToast],
+  );
+  const handleLoadFromSlot = useCallback(
+    (i: SaveSlotIndex) => {
+      const ok = load(i);
+      setSlotMetas(getSlotMetas());
+      if (!ok) showSaveErrorToast("该存档已损坏，无法读取。");
+    },
+    [load, getSlotMetas, showSaveErrorToast],
+  );
+  const handleResetAll = useCallback(() => {
+    reset();
+    setSlotMetas(getSlotMetas());
+  }, [reset, getSlotMetas]);
+
+  // 打开设置弹窗时刷新槽位摘要
+  useEffect(() => {
+    if (settingsOpen) setSlotMetas(getSlotMetas());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [settingsOpen]);
 
 // ---- 时段显示辅助 ----
 function getTimeSlotDisplay(timeSlot: number, dayIndex: number, timeOfDay: TimeOfDay): string {
@@ -1553,8 +1769,7 @@ const isExploreActive = state.phase === "explore" && !state.isEnded;
 const divineNarrationText = divineNarration ?? DIVINE_ATTENTION_NARRATIONS[state.divineAttention];
 const currentLocationBg = getLocationBg(state.locationId, state.timeOfDay, state.timeSlot);
 const availableSceneActions: SceneAction[] = isExploreActive
-  ? getSceneActionsByLocation(state.locationId, state.timeOfDay, state.timeSlot, state.divineAttention)
-      .filter((a) => !state.actionsThisSlot.sceneActionIds.includes(a.id))
+  ? getSceneActionsByLocation(state)
   : [];
 const namingStonePuzzle = getScenePuzzleById("puzzle_naming_stone_identity");
 const namingStoneCompleted = namingStonePuzzle
@@ -1564,9 +1779,25 @@ const riverPuzzle = getScenePuzzleById("puzzle_river_words_belonging");
 const riverCompleted = riverPuzzle
   ? state.completedScenePuzzleIds.includes(riverPuzzle.id)
   : false;
-const eastPathPuzzle = getScenePuzzleById("puzzle_east_path_cautious_presence");
+const eastPathPuzzleId =
+  state.timeOfDay === "day"
+    ? "puzzle_east_path_cautious_presence_day"
+    : "puzzle_east_path_cautious_presence_night";
+const eastPathPuzzle = getScenePuzzleById(eastPathPuzzleId);
 const eastPathCompleted = eastPathPuzzle
   ? state.completedScenePuzzleIds.includes(eastPathPuzzle.id)
+  : false;
+const treeCourtPuzzle = getScenePuzzleById("puzzle_tree_court_shadow");
+const treeCourtCompleted = treeCourtPuzzle
+  ? state.completedScenePuzzleIds.includes(treeCourtPuzzle.id)
+  : false;
+const fifthReflectionPuzzle = getScenePuzzleById("puzzle_naming_stone_bank_fifth_reflection");
+const fifthReflectionCompleted = fifthReflectionPuzzle
+  ? state.completedScenePuzzleIds.includes(fifthReflectionPuzzle.id)
+  : false;
+const centralTreesPuzzle = getScenePuzzleById("puzzle_central_twin_trees");
+const centralTreesCompleted = centralTreesPuzzle
+  ? state.completedScenePuzzleIds.includes(centralTreesPuzzle.id)
   : false;
 const hasWhisperedToActiveNpc = activeNpc
   ? state.actionsThisSlot.whisperedNpcIds.filter((id) => id === activeNpc).length >= 3
@@ -1598,7 +1829,13 @@ const whisperCountForActiveNpc = activeNpc
 
   // ====================== 神明献礼三选一弹窗（任意阶段可见，含 intro 末拍） ======================
   const giftChoiceModal = giftChoiceOpen ? (
-    <div className="eden-gift-modal-overlay" role="dialog" aria-modal="true" aria-label="神明献礼三选一">
+    <div
+      className="eden-gift-modal-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-label="神明献礼三选一"
+      onClick={(e) => e.stopPropagation()}
+    >
       <div className="eden-gift-modal">
         <h2 className="eden-gift-modal-title">神向你显现三份礼物</h2>
         <p className="eden-gift-modal-sub">风的尽头，你只能收下其中一份。</p>
@@ -1611,7 +1848,10 @@ const whisperCountForActiveNpc = activeNpc
                 type="button"
                 className="eden-gift-card"
                 data-testid="gift-choice-card"
-                onClick={() => claimGift(giftId)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  claimGift(giftId);
+                }}
               >
                 <span className="eden-gift-card-icon">{meta.icon}</span>
                 <span className="eden-gift-card-name">{meta.name}</span>
@@ -1693,19 +1933,48 @@ const whisperCountForActiveNpc = activeNpc
   }
 
   // ====================== 渲染：Ending 阶段 ======================
+  // 所有结局先播放专属过场，完成后再渲染复盘。过场承担背景叙事，复盘不再重复堆叠结局插图。
+  const hiddenEnding = getHiddenEndingCinematic(state.endingId);
+  if ((state.phase === "ending" || state.isEnded) && hiddenEnding && !hiddenEndingCinematicDone) {
+    return (
+      <HiddenEndingCinematic
+        content={hiddenEnding}
+        onComplete={() => setHiddenEndingCinematicDone(true)}
+      />
+    );
+  }
+
   if (state.phase === "ending" || state.isEnded) {
     const isSuccess = state.endingId === "eve_eats_fruit";
+    const isEscape = state.endingId === "escape_eden";
+    const endingTone = isSuccess
+      ? "success"
+      : isEscape
+        ? "escape"
+        : state.endingId === "lucifer_awaken"
+          ? "awaken"
+          : "failure";
+    const endingBg =
+      state.endingId === "escape_eden"
+        ? CHAPTER1_IMAGES.escapeEdenEnding
+        : state.endingId === "michael_slay"
+          ? CHAPTER1_IMAGES.michaelSlayEnding
+          : state.endingId === "lucifer_awaken"
+            ? CHAPTER1_IMAGES.luciferAwakenRevealEnding
+            : isSuccess
+              ? CHAPTER0_IMAGES.endingEveEatsFruit
+              : CHAPTER0_IMAGES.endingGodArrives;
     return (
-      <div className={`eden-game eden-game--ending eden-game--${isSuccess ? "success" : "failure"}`}>
+      <div className={`eden-game eden-game--ending eden-game--${endingTone}`}>
         <div className="eden-bg">
           <Image
-            src={isSuccess ? CHAPTER0_IMAGES.endingEveEatsFruit : CHAPTER0_IMAGES.endingGodArrives}
+            src={endingBg}
             alt="结局"
             fill
             sizes="100vw"
             style={{ objectFit: "cover" }}
           />
-          <div className={`eden-bg-overlay eden-bg-overlay--${isSuccess ? "success" : "failure"}`} />
+          <div className={`eden-bg-overlay eden-bg-overlay--${endingTone}`} />
         </div>
 
         <header className="eden-header">
@@ -1722,21 +1991,47 @@ const whisperCountForActiveNpc = activeNpc
           </button>
         </header>
 
-        <main className="eden-ending-content">
+        <main className="eden-ending-content" ref={endingScrollRef} tabIndex={-1}>
           <div className="eden-scroll eden-ending-scroll">
-            <EndingReview state={state} />
-            <button className="eden-btn eden-btn--primary eden-btn--restart" onClick={handleRestart}>
-              重新开始
-            </button>
-            <Link
-              href="/"
-              className="eden-btn eden-btn--primary"
-              style={{ textDecoration: "none", marginTop: 8, padding: "14px 40px", fontSize: "1.05rem", display: "inline-block" }}
-            >
-              返回首页
-            </Link>
+            <EndingReview
+              state={state}
+              onOpenAiSettings={openSettingsToAi}
+              onScrollToTop={() => endingScrollRef.current?.scrollTo({ top: 0, behavior: "smooth" })}
+            />
+            <div className="eden-ending-actions">
+              <button className="eden-btn eden-btn--primary eden-btn--restart" onClick={handleResetAll}>
+                重新开始
+              </button>
+              <Link href="/" className="eden-btn eden-btn--primary" style={{ textDecoration: "none", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+                返回首页
+              </Link>
+            </div>
           </div>
         </main>
+        <SettingsModal
+          open={settingsOpen}
+          initialTab={settingsInitialTab}
+          onClose={() => setSettingsOpen(false)}
+          auth={auth}
+          onLoginClick={() => {
+            setSettingsOpen(false);
+            setLoginOpen(true);
+          }}
+          onLogout={handleLogout}
+          onSave={handleSaveToSlot}
+          onLoad={handleLoadFromSlot}
+          onDelete={deleteSlot}
+          onReset={handleResetAll}
+          onGoHome={() => router.push("/")}
+          slotMetas={slotMetas}
+          lastSavedAt={lastSavedAt}
+          dirty={dirty}
+        />
+        <LoginModal
+          open={loginOpen}
+          onClose={() => setLoginOpen(false)}
+          onSuccess={(a) => setAuth(a)}
+        />
       </div>
     );
   }
@@ -1763,12 +2058,12 @@ const whisperCountForActiveNpc = activeNpc
         <div className="eden-header-left">
           <h1 className="eden-title">EDEN</h1>
           <span className="eden-chapter-tag">第一章 · 园中诸声</span>
-          {/* 第一章：神的注视可视化（水滴指示器 + 叙事条） */}
+          {/* 第一章：神的注视可视化（等级 N/7 + 本阶注视值） */}
           <DivineAttentionViz
-            level={state.divineAttention}
+            level={state.divineGiftsOwned.length}
             narration={divineNarrationText}
             giftFlash={!!divineGiftToast}
-            cumulative={state.divineAttentionCumulative}
+            currentValue={state.divineAttentionValue}
             nextThreshold={getEffectiveDivineThreshold(state)}
             ownedCount={state.divineGiftsOwned.length}
           />
@@ -1830,11 +2125,11 @@ const whisperCountForActiveNpc = activeNpc
           <button
             className="eden-btn eden-top-action-btn eden-btn--suggestion"
             onClick={() => setAchievementModalOpen(true)}
-            aria-label="打开园中印记图鉴"
+            aria-label="打开园中档案"
             data-testid="world-achievement-open"
           >
             <span className="eden-top-action-icon">❖</span>
-            <span className="eden-top-action-label">印记</span>
+            <span className="eden-top-action-label">档案</span>
           </button>
           <button
             className="eden-btn eden-top-action-btn eden-btn--suggestion"
@@ -1854,7 +2149,7 @@ const whisperCountForActiveNpc = activeNpc
           </button>
           <button
             className="eden-sound-btn eden-settings-btn"
-            onClick={() => setSettingsOpen(true)}
+            onClick={openSettings}
             aria-label="打开设置"
             title="设置"
             data-testid="world-settings-open"
@@ -1923,14 +2218,16 @@ const whisperCountForActiveNpc = activeNpc
             </button>
           )}
 
-          {/* 东园幽径：显式可点击，不自动弹窗 */}
+          {/* 东园幽径：显式可点击，不自动弹窗（昼夜独立谜题） */}
           {state.locationId === "east_garden_path" && (
             <button
               type="button"
-              className={`eden-east-path-entry ${eastPathCompleted ? "eden-east-path-entry--completed" : ""}`}
+              className={`eden-east-path-entry eden-east-path-entry--${state.timeOfDay} ${
+                eastPathCompleted ? "eden-east-path-entry--completed" : ""
+              }`}
               onClick={(event) => {
                 event.stopPropagation();
-                handleScenePuzzleClick("puzzle_east_path_cautious_presence");
+                handleScenePuzzleClick(eastPathPuzzleId);
               }}
               disabled={isLoading || !isExploreActive}
               aria-label={eastPathCompleted ? "幽径尽头，前方空无一物" : "走向幽径尽头"}
@@ -1941,25 +2238,75 @@ const whisperCountForActiveNpc = activeNpc
             </button>
           )}
 
-          {/* 园心双树：信息展示交互框，不绑定场景问题，可反复点击 */}
+          {/* 园中树林：显式可点击「林间静影」，不自动弹窗 */}
+          {state.locationId === "tree_court" && (
+            <button
+              type="button"
+              className={`eden-tree-shadow-entry ${treeCourtCompleted ? "eden-tree-shadow-entry--completed" : ""}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                handleScenePuzzleClick("puzzle_tree_court_shadow");
+              }}
+              disabled={isLoading || !isExploreActive}
+              aria-label={treeCourtCompleted ? "林间静影，痕迹已留" : "触碰林间静影"}
+              title={treeCourtCompleted ? "痕迹已经留过" : "触碰那道停留的叶影"}
+              data-testid="scene-action-tree-shadow"
+            >
+              <span>林间静影</span>
+            </button>
+          )}
+
+          {/* 四河分流：显式可点击「第五道倒影」，不自动弹窗 */}
+          {state.locationId === "naming_stone_bank" && (
+            <button
+              type="button"
+              className={`eden-fifth-reflection-entry ${fifthReflectionCompleted ? "eden-fifth-reflection-entry--completed" : ""}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                handleScenePuzzleClick("puzzle_naming_stone_bank_fifth_reflection");
+              }}
+              disabled={isLoading || !isExploreActive}
+              aria-label={fifthReflectionCompleted ? "第五道倒影，已经倒转" : "凝望第五道倒影"}
+              title={fifthReflectionCompleted ? "倒影已经倒转" : "凝望水中第五道水流"}
+              data-testid="scene-action-fifth-reflection"
+            >
+              <span>第五道倒影</span>
+            </button>
+          )}
+
+          {/* 四河分流·路西法隐藏入口：逆流划水（仅在共享校验通过时渲染） */}
+          {availableSceneActions.some((a) => a.id === "interact_lucifer_rowing") && (
+            <button
+              type="button"
+              className="eden-lucifer-rowing-entry"
+              data-testid="scene-action-lucifer-rowing"
+              onClick={(event) => {
+                event.stopPropagation();
+                void handleToolCall("scene_action", { sceneActionId: "interact_lucifer_rowing" });
+              }}
+              disabled={isLoading || !isExploreActive}
+              aria-label="逆流划水"
+              title="把身体横在第五道倒影上"
+            >
+              <span>逆流划水</span>
+            </button>
+          )}
+
+          {/* 园心双树：四选一 per_option 谜题入口（左侧生命树/右侧分别善恶树） */}
           {state.locationId === "central_meadow" && (
             <button
               type="button"
-              className="eden-central-trees-entry"
+              className={`eden-central-trees-entry ${centralTreesCompleted ? "eden-central-trees-entry--completed" : ""}`}
               onClick={(event) => {
                 event.stopPropagation();
-                setSystemHint(
-                  state.unlockTreeNames
-                    ? "园子中央并立着两棵树——左侧是生命树，右侧是分别善恶树。"
-                    : "两棵树的轮廓始终看不真切，你分不清它们有何不同。",
-                );
+                handleScenePuzzleClick("puzzle_central_twin_trees");
               }}
               disabled={isLoading || !isExploreActive}
-              aria-label="端详园心双树"
-              title="端详园子中央的两棵树"
+              aria-label={centralTreesCompleted ? "园心双树，痕迹已带走" : "端详园心双树"}
+              title={centralTreesCompleted ? "双树之间的痕迹已经带走" : "端详园子中央的两棵树"}
               data-testid="scene-action-central-trees"
             >
-              <span>园心双树</span>
+              <span>{centralTreesCompleted ? "双树已答" : "园心双树"}</span>
             </button>
           )}
 
@@ -2123,17 +2470,35 @@ const whisperCountForActiveNpc = activeNpc
         />
       )}
 
-      {/* 神明献礼通知 */}
+      {/* 神明献礼通知（居中模态弹窗，玩家点击关闭） */}
       {divineGiftToast && (
-        <div className="eden-divine-gift-toast">
-          <div className="eden-divine-gift-toast-icon">✦</div>
-          <div className="eden-divine-gift-toast-content">
-            <p className="eden-divine-gift-toast-title">神明献礼</p>
-            <p className="eden-divine-gift-toast-name">{divineGiftToast.giftName}</p>
-            <p className="eden-divine-gift-toast-desc">{divineGiftToast.narration}</p>
-            {divineGiftToast.hint && (
-              <p className="eden-divine-gift-toast-hint">{divineGiftToast.hint}</p>
-            )}
+        <div
+          className="eden-modal-overlay eden-notice-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label="神明献礼"
+          onClick={() => setDivineGiftToast(null)}
+        >
+          <div
+            className="eden-modal eden-notice-modal eden-notice-modal--gift"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="eden-notice-modal-icon">✦</div>
+            <div className="eden-notice-modal-content">
+              <p className="eden-notice-modal-title">神明献礼</p>
+              <p className="eden-notice-modal-name">{divineGiftToast.giftName}</p>
+              <p className="eden-notice-modal-desc">{divineGiftToast.narration}</p>
+              {divineGiftToast.hint && (
+                <p className="eden-notice-modal-hint">{divineGiftToast.hint}</p>
+              )}
+            </div>
+            <button
+              type="button"
+              className="eden-btn eden-btn--primary eden-notice-modal-close"
+              onClick={() => setDivineGiftToast(null)}
+            >
+              收下
+            </button>
           </div>
         </div>
       )}
@@ -2206,6 +2571,7 @@ const whisperCountForActiveNpc = activeNpc
       {/* 顶部设置浮窗 */}
       <SettingsModal
         open={settingsOpen}
+        initialTab={settingsInitialTab}
         onClose={() => setSettingsOpen(false)}
         auth={auth}
         onLoginClick={() => {
@@ -2213,9 +2579,12 @@ const whisperCountForActiveNpc = activeNpc
           setLoginOpen(true);
         }}
         onLogout={handleLogout}
-        onSave={save}
-        onLoad={load}
-        onReset={reset}
+        onSave={handleSaveToSlot}
+        onLoad={handleLoadFromSlot}
+        onDelete={deleteSlot}
+        onReset={handleResetAll}
+        onGoHome={() => router.push("/")}
+        slotMetas={slotMetas}
         lastSavedAt={lastSavedAt}
         dirty={dirty}
       />
@@ -2277,15 +2646,40 @@ const whisperCountForActiveNpc = activeNpc
         </div>
       )}
 
-      {/* 回响获得通知 */}
+      {/* 回响获得通知（居中模态弹窗，玩家点击关闭） */}
       {resonanceGainedToast && (
-        <div className="eden-resonance-gained-toast">
-          <div className="eden-resonance-gained-toast-icon">⟡</div>
-          <div className="eden-resonance-gained-toast-content">
-            <p className="eden-resonance-gained-toast-title">获得回响</p>
-            <p className="eden-resonance-gained-toast-name">{resonanceGainedToast.title}</p>
-            <p className="eden-resonance-gained-toast-desc">{resonanceGainedToast.narration}</p>
+        <div
+          className="eden-modal-overlay eden-notice-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-label="获得回响"
+          onClick={() => setResonanceGainedToast(null)}
+        >
+          <div
+            className="eden-modal eden-notice-modal eden-notice-modal--resonance"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="eden-notice-modal-icon eden-notice-modal-icon--resonance">⟡</div>
+            <div className="eden-notice-modal-content">
+              <p className="eden-notice-modal-title">获得回响</p>
+              <p className="eden-notice-modal-name">{resonanceGainedToast.title}</p>
+              <p className="eden-notice-modal-desc">{resonanceGainedToast.narration}</p>
+            </div>
+            <button
+              type="button"
+              className="eden-btn eden-btn--primary eden-notice-modal-close"
+              onClick={() => setResonanceGainedToast(null)}
+            >
+              收下
+            </button>
           </div>
+        </div>
+      )}
+
+      {/* 存档操作失败提示（保存失败 / 损坏存档），不静默丢失 */}
+      {saveErrorToast && (
+        <div className="eden-achievement-toast-floating">
+          <div className="eden-achievement-toast eden-achievement-toast--error">{saveErrorToast}</div>
         </div>
       )}
 
@@ -2540,24 +2934,13 @@ const whisperCountForActiveNpc = activeNpc
               {mindTabNpc ? (
                 (() => {
                   const profile = buildAttributeProfile(mindTabNpc, state);
-                  const hasLivingNames = (state.itemCounts?.["resonance_living_names"] ?? 0) > 0;
                   const encountered = state.encounteredNpcIds.includes(mindTabNpc);
-                  // 万物名录解锁双维度数值；牵绊道具解锁该 NPC 深层关系
-                  const showNumbers = hasLivingNames && encountered;
-                  const BOND_ITEM: Partial<Record<EdenNpcId, string>> = {
-                    eve: "resonance_her_voice",
-                    adam: "resonance_quiet_stone",
-                    michael: "resonance_river_dew",
-                    gabriel: "resonance_herald_feather",
-                    lucifer: "resonance_lucifer_star",
-                    hedgehog: "resonance_hedgehog_bristle",
-                  };
-                  const hasBond = (n: EdenNpcId): boolean => {
-                    const id = BOND_ITEM[n];
-                    if (!id) return false;
-                    return state.inventory.includes(id) || state.usedItemIds.includes(id);
-                  };
-                  const showRelation = showNumbers && hasBond(mindTabNpc);
+                  // 洞察分层：3 件洞察道具（万物名录/分辨之果/相处之鉴）任持 1 件看精确数值、2 件加性格、3 件看全相处提醒
+                  const INSIGHT_ITEMS = ["resonance_living_names", "resonance_discernment_fruit", "resonance_bond_insight"] as const;
+                  const insightCount = INSIGHT_ITEMS.filter((id) => (state.itemCounts?.[id] ?? 0) > 0).length;
+                  const showNumbers = encountered && insightCount >= 1;
+                  const showPersona = encountered && insightCount >= 2;
+                  const showRelation = encountered && insightCount >= 3;
                   const showDetailed = showNumbers;
                   const relationProfile = getNpcRelationProfile(mindTabNpc);
                   const rel = state.npcRelations?.[mindTabNpc];
@@ -2592,7 +2975,7 @@ const whisperCountForActiveNpc = activeNpc
                           ))}
                         </div>
                         <p className="eden-intel-locked-hint">
-                          获得「万物名录」后，才能看清每个角色的好感、性格与相处方式。
+                          获得任意一件洞察道具（万物名录/分辨之果/相处之鉴）后，才能看清每个角色的精确数值；集齐越多，看得越深。
                         </p>
                       </>
                     );
@@ -2631,26 +3014,37 @@ const whisperCountForActiveNpc = activeNpc
                         ))}
                       </div>
 
-                      {/* 第一章：关系情报（万物名录解锁数值后，需对应牵绊道具解锁深层关系） */}
-                      {relationProfile && showRelation && (
+                      {/* 第一章：关系情报（洞察分层：1 件数值 / 2 件加性格 / 3 件看全相处提醒） */}
+                      {relationProfile && showNumbers && (
                         <div className="eden-relation-intel">
                           <p className="eden-section-title">关系</p>
                           <div className="eden-psyche-info-row">
                             <span className="eden-psyche-label">好感</span>
                             <span className="eden-psyche-value">{Math.round(affinity)} / 100</span>
                           </div>
-                          <p className="eden-relation-line">性格：{relationProfile.playerVisible.persona}</p>
-                          <p className="eden-relation-line">在意：{relationProfile.playerVisible.caresAbout}</p>
-                          <p className="eden-relation-line">更容易亲近：{relationProfile.playerVisible.closerWhen}</p>
-                          <p className="eden-relation-line">会引起戒备：{relationProfile.playerVisible.waryWhen}</p>
-                          <p className="eden-relation-line">
-                            赠礼：{rel?.rewardClaimed ? "已获得" : rel?.rewardEligible ? "愿意赠你一件回响" : "尚浅"}
-                          </p>
+                          {showPersona && (
+                            <p className="eden-relation-line">性格：{relationProfile.playerVisible.persona}</p>
+                          )}
+                          {showRelation && (
+                            <>
+                              <p className="eden-relation-line">在意：{relationProfile.playerVisible.caresAbout}</p>
+                              <p className="eden-relation-line">更容易亲近：{relationProfile.playerVisible.closerWhen}</p>
+                              <p className="eden-relation-line">会引起戒备：{relationProfile.playerVisible.waryWhen}</p>
+                              <p className="eden-relation-line">
+                                赠礼：{rel?.rewardClaimed ? "已获得" : rel?.rewardEligible ? "愿意赠你一件回响" : "尚浅"}
+                              </p>
+                            </>
+                          )}
                         </div>
                       )}
-                      {showNumbers && !showRelation && (
+                      {showNumbers && !showPersona && (
                         <p className="eden-intel-locked-hint">
-                          获得对应牵绊后，才能看清与TA的深层关系。
+                          再获得一件洞察道具（万物名录/分辨之果/相处之鉴），可看清角色性格；集齐三件可看全相处提醒。
+                        </p>
+                      )}
+                      {showPersona && !showRelation && (
+                        <p className="eden-intel-locked-hint">
+                          集齐三件洞察道具，可看清与TA的相处提醒。
                         </p>
                       )}
                     </>
@@ -2681,19 +3075,38 @@ const whisperCountForActiveNpc = activeNpc
                 你没有手，不能触碰果子，也不能替任何人做出选择。你的力量只剩语言——以及耐心。每一轮你有 {getEffectiveMaxActionPoints(state)} 点行动，用于移动、低语或场景互动。行动点用尽后，需要主动进入下一轮才能恢复。
               </p>
 
-              {/* 词元消耗统计（模块4） */}
+              {/* 词元消耗统计（模块4）：对话 / 润色 / 总计 三组分列 */}
               <div style={{ marginTop: 16 }}>
                 <p className="eden-section-title">词元消耗统计</p>
+
+                <p style={{ color: "#c8b96a", fontSize: "0.8rem", margin: "8px 0 4px" }}>对话消耗</p>
                 <div style={{ color: "#b7b08e", fontSize: "0.85rem", display: "flex", justifyContent: "space-between" }}>
-                  <span>本轮消耗</span>
-                  <span>{polishTokensRound}</span>
+                  <span>本次对话消耗</span>
+                  <span>{state.tokenStats.lastDialogueTokens}{state.tokenStats.hasEstimate ? "（估算）" : ""}</span>
                 </div>
                 <div style={{ color: "#b7b08e", fontSize: "0.85rem", display: "flex", justifyContent: "space-between" }}>
-                  <span>本局累计消耗</span>
-                  <span>{polishTokensTotal}</span>
+                  <span>本时段对话累计</span>
+                  <span>{state.tokenStats.dialogueThisSlot}</span>
                 </div>
-                <div style={{ color: "#9a946f", fontSize: "0.78rem", marginTop: 4 }}>
-                  本次 {lastPolishTokens ?? "-"} · 本局累计 {polishTokensTotal} token
+                <div style={{ color: "#b7b08e", fontSize: "0.85rem", display: "flex", justifyContent: "space-between" }}>
+                  <span>本局对话累计</span>
+                  <span>{state.tokenStats.dialogueTotal}</span>
+                </div>
+
+                <p style={{ color: "#c8b96a", fontSize: "0.8rem", margin: "10px 0 4px" }}>润色消耗</p>
+                <div style={{ color: "#b7b08e", fontSize: "0.85rem", display: "flex", justifyContent: "space-between" }}>
+                  <span>本次润色消耗</span>
+                  <span>{state.tokenStats.lastPolishTokens}</span>
+                </div>
+                <div style={{ color: "#b7b08e", fontSize: "0.85rem", display: "flex", justifyContent: "space-between" }}>
+                  <span>本局润色累计</span>
+                  <span>{state.tokenStats.polishTotal}</span>
+                </div>
+
+                <p style={{ color: "#c8b96a", fontSize: "0.8rem", margin: "10px 0 4px" }}>总计</p>
+                <div style={{ color: "#b7b08e", fontSize: "0.85rem", display: "flex", justifyContent: "space-between" }}>
+                  <span>本局总消耗</span>
+                  <span>{state.tokenStats.dialogueTotal + state.tokenStats.polishTotal}{state.tokenStats.hasEstimate ? "（含估算）" : ""}</span>
                 </div>
               </div>
 
@@ -3013,6 +3426,7 @@ const whisperCountForActiveNpc = activeNpc
                                 height={28}
                                 className="eden-map-hotspot-avatar"
                                 title={EDEN_NPCS[id].name}
+                                style={{ objectPosition: sprite.objectPosition ?? "50% 20%" }}
                               />
                             );
                           })}
@@ -3090,40 +3504,38 @@ const whisperCountForActiveNpc = activeNpc
         </div>
       )}
 
-      {/* 园中印记独立浮窗 */}
+      {/* 园中档案独立浮窗（游戏内与主页统一：四页签 印记/回响/结局/园中律则） */}
       {achievementModalOpen && (
         <div className="eden-achievement-modal">
           <button
             className="eden-map-backdrop"
             onClick={() => setAchievementModalOpen(false)}
-            aria-label="关闭园中印记"
+            aria-label="关闭园中档案"
           />
           <div className="eden-achievement-sheet">
             <div className="eden-achievement-sheet-header">
               <div>
-                <span className="eden-map-kicker">园中印记</span>
-                <h2 className="eden-map-title">
-                  已解锁{" "}
-                  {Array.from(
-                    new Set([...state.unlockedAchievementIds, ...getUnlockedCrossSessionMarkIds()]),
-                  ).length}
-                  /{ACHIEVEMENTS.length}
-                </h2>
+                <span className="eden-map-kicker">园中档案</span>
+                <h2 className="eden-map-title">已解锁 {state.unlockedAchievementIds.length}/{ACHIEVEMENTS.length}</h2>
               </div>
               <button
                 className="eden-map-close"
                 onClick={() => setAchievementModalOpen(false)}
-                aria-label="关闭园中印记"
+                aria-label="关闭园中档案"
               >
                 ×
               </button>
             </div>
             <div className="eden-achievement-sheet-content">
-              <AchievementGarden
+              <GardenCodex
                 unlockedIds={Array.from(
                   new Set([...state.unlockedAchievementIds, ...getUnlockedCrossSessionMarkIds()]),
                 )}
-                compact
+                collectedResonanceIds={Array.from(
+                  new Set([...state.inventory, ...getCollectedResonanceIds()]),
+                )}
+                triggeredEndingIds={getTriggeredEndingIds()}
+                unlockedRuleIds={state.unlockedDivineAttentionRuleIds}
               />
             </div>
           </div>
@@ -3133,10 +3545,10 @@ const whisperCountForActiveNpc = activeNpc
       {/* 输入区（固定底部，与教程统一） */}
       {isExploreActive && (
         <footer className="eden-input-footer">
-          {/* 模块4：本次对话词元消耗提示 */}
-          {showTurnConsumptionTip && polishTokensTurn > 0 && (
+          {/* 模块4：本次对话词元消耗提示（读取对话 token，不读润色） */}
+          {showTurnConsumptionTip && state.tokenStats.lastDialogueTokens > 0 && (
             <div className="eden-polish-consumption-tip">
-              本次低语消耗 {polishTokensTurn} 词元 · 本轮累计 {polishTokensRound} · 本局累计 {polishTokensTotal}
+              本次低语消耗 {state.tokenStats.lastDialogueTokens} 词元 · 本时段对话累计 {state.tokenStats.dialogueThisSlot} · 本局对话累计 {state.tokenStats.dialogueTotal}
             </div>
           )}
           {/* 推荐低语（输入框上方） */}

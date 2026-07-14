@@ -36,6 +36,24 @@ const ENDINGS: EndingEntry[] = [
     type: "special",
     desc: "她曾吃下生命树的果子，却仍以神降临结束--延续的承诺没能让她留下，只留下一道回甘。",
   },
+  {
+    id: "escape_eden",
+    title: "园外的清晨",
+    type: "special",
+    desc: "你持旋转的火焰剑从幽径尽头挣脱，幻境在裂缝后退向同一个清晨。你从小径之外醒来，第一次站上一片尚未被命名的土地。",
+  },
+  {
+    id: "michael_slay",
+    title: "守门者之剑",
+    type: "failure",
+    desc: "你一次次以威胁试探伊甸之河的守护者。最后一点容忍归于零时，米迦勒让边界之后的后果真正降临。",
+  },
+  {
+    id: "lucifer_awaken",
+    title: "缸中之醒",
+    type: "special",
+    desc: "晨星碎片照亮第五道倒影。你看见伊甸只是意识经历的园子，也看见了培养舱中的人类身体与正在消散的蛇形代理。",
+  },
 ];
 
 const TYPE_LABEL: Record<EndingEntry["type"], string> = {
@@ -61,6 +79,7 @@ export default function EndingsGallery({ triggeredIds }: EndingsGalleryProps) {
             <div
               key={ending.id}
               className={`eden-codex-ending ${triggered ? "eden-codex-ending--triggered" : "eden-codex-ending--locked"} eden-codex-ending--${ending.type}`}
+              aria-label={`${triggered ? "已达成" : "未达成"}结局：${triggered ? ending.title : TYPE_LABEL[ending.type]}`}
             >
               <div className="eden-codex-ending-head">
                 <h3 className="eden-codex-ending-title">{triggered ? ending.title : "尚未达成的结局"}</h3>

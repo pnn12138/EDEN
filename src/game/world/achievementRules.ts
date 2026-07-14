@@ -163,11 +163,6 @@ export function checkAndUnlockAchievements(state: EdenWorldState): string[] {
     tryUnlock("mark_echo_collector");
   }
 
-  // 幽径密影（隐藏）：东园幽径隐藏互动触发
-  if ((state.sceneActionIds ?? []).includes("interact_east_hidden_stone")) {
-    tryUnlock("mark_hidden_scene");
-  }
-
   // ---- 交互类 ----
   const affinityOf = (id: EdenNpcId) => state.npcRelations[id]?.affinity ?? 0;
 
@@ -197,14 +192,8 @@ export function checkAndUnlockAchievements(state: EdenWorldState): string[] {
   if ((state.npcDialogues ?? []).length >= 50) {
     tryUnlock("mark_question_10");
   }
-  // 未闻之语（隐藏）：与路西法聊到「边界」隐藏话题
-  if (
-    (state.npcDialogues ?? []).some(
-      (d) =>
-        (d.speakerId === "lucifer" || d.targetId === "lucifer") &&
-        d.topicId === "topic_lucifer_boundary",
-    )
-  ) {
+  // 未闻之语（隐藏）：与路西法聊到「边界」隐藏话题（独立 hiddenTopicIds，不依赖 npcDialogues）
+  if ((state.hiddenTopicIds ?? []).includes("topic_lucifer_boundary")) {
     tryUnlock("mark_hidden_dialog");
   }
 
@@ -263,7 +252,7 @@ export function checkAndUnlockAchievements(state: EdenWorldState): string[] {
     }
   }
   // 缸中之醒（隐藏）：路西法隐藏结局触发
-  if ((state.sceneActionIds ?? []).includes("trigger_lucifer_hidden_ending")) {
+  if (state.endingId === "lucifer_awaken") {
     tryUnlock("mark_hidden_ending");
   }
 

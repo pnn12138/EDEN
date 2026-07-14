@@ -12,10 +12,11 @@ import type { ChatMessage, FallbackReasonCode } from "@/services/llm/types";
 import { callLLM } from "@/services/llm/client";
 import {
   buildHedgehogPrompt,
-  sanitizeHedgehogReply,
   getHedgehogFallback,
   type HedgehogHistoryEntry,
 } from "@/agents/hedgehog/buildHedgehogPrompt";
+import { sanitizeWorldReply } from "@/agents/world/worldAgentPrompts";
+import type { WorldToolCall } from "@/game/world/types";
 
 export type HedgehogAgentRequest = {
   playerInput: string;
@@ -27,6 +28,7 @@ export type HedgehogAgentResult = {
   usedFallback: boolean;
   fallbackReason?: FallbackReasonCode;
   usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
+  toolCall?: WorldToolCall | null;
 };
 
 /**
@@ -78,11 +80,10 @@ export async function runHedgehogAgent(
     };
   }
 
-  const rawContent = result.data.content;
-  const cleaned = sanitizeHedgehogReply(rawContent);
+  const sanitized = sanitizeWorldReply(result.data.content, "hedgehog");
 
   // 空输出 → fallback
-  if (!cleaned) {
+  if (!sanitized.reply && !sanitized.toolCall) {
     return {
       reply: getHedgehogFallback(lastHedgehogReply),
       usedFallback: true,
@@ -91,9 +92,10 @@ export async function runHedgehogAgent(
   }
 
   return {
-    reply: cleaned,
+    reply: sanitized.reply,
     usedFallback: result.usedFallback,
     fallbackReason: result.fallbackReason,
     usage: result.data.usage,
+    toolCall: sanitized.toolCall ?? undefined,
   };
 }

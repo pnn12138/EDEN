@@ -14,8 +14,11 @@ import { getClueById } from "@/content/world/clues";
 import { getItemById } from "@/content/world/items";
 import { grantResonance } from "@/game/world/resonanceRules";
 import { getEffectiveMaxActionPoints } from "@/game/world/actionPointRules";
-import { applyDivineAttention } from "@/game/world/divineAttentionRules";
-import { shouldTriggerGiftChoice, rollGiftChoices } from "@/game/world/divineGiftRules";
+import { ensureRelation } from "@/game/world/npcRelationRules";
+import { grantDivineAttention } from "@/game/world/divineAttentionRules";
+import { evaluateDivineGiftProgress, applyGracePrismRetroactive } from "@/game/world/divineGiftRules";
+import { applyTimeRewind } from "@/game/world/timeRewindRules";
+import { triggerEscapeEden } from "@/game/world/endingTriggers";
 import { evaluateFreeTextAnswer, type PuzzleAnswerGrade } from "@/game/world/puzzleAnswerRules";
 
 export type ScenePuzzleRewardResult = {
@@ -41,16 +44,53 @@ function clampMind(value: number): number {
   return Math.max(0, Math.min(100, value));
 }
 
+/** 旧存档兼容：TokenStats 缺字段补默认（嵌套对象整体 ?? + 字段 ??） */
+function normalizeTokenStats(stats: Partial<EdenWorldState["tokenStats"]> | undefined | null): EdenWorldState["tokenStats"] {
+  const s = stats ?? {};
+  return {
+    dialogueThisSlot: s.dialogueThisSlot ?? 0,
+    dialogueTotal: s.dialogueTotal ?? 0,
+    polishTotal: s.polishTotal ?? 0,
+    lastDialogueTokens: s.lastDialogueTokens ?? 0,
+    lastPolishTokens: s.lastPolishTokens ?? 0,
+    hasEstimate: s.hasEstimate ?? false,
+    dialoguePromptTotal: s.dialoguePromptTotal ?? 0,
+    dialogueCompletionTotal: s.dialogueCompletionTotal ?? 0,
+  };
+}
+
 export function normalizePuzzleState(state: EdenWorldState): EdenWorldState {
   return {
     ...state,
     apMaxBonusBase: state.apMaxBonusBase ?? 0,
     apMaxBonusDay: state.apMaxBonusDay ?? 0,
     divineThresholdModifier: state.divineThresholdModifier ?? 0,
+    divineAffinityMultiplier: state.divineAffinityMultiplier ?? 1,
+    playerName: state.playerName ?? "",
     unlockMapNpcLocations: state.unlockMapNpcLocations ?? false,
     unlockTreeNames: state.unlockTreeNames ?? false,
-    completedScenePuzzleIds: [...(state.completedScenePuzzleIds ?? [])],
+    freeMoveUsedThisSlot: state.freeMoveUsedThisSlot ?? 0,
+    freeDialogueUsedThisSlot: state.freeDialogueUsedThisSlot ?? 0,
+    freeDetourBypassUsedThisSlot: state.freeDetourBypassUsedThisSlot ?? 0,
+    michaelSlayClaimed: state.michaelSlayClaimed ?? false,
+    luciferAwakenClaimed: state.luciferAwakenClaimed ?? false,
+    hiddenTopicIds: [...(state.hiddenTopicIds ?? [])],
+    morningFlowRestoredThisSlot: state.morningFlowRestoredThisSlot ?? false,
+    nightTideRestoredThisSlot: state.nightTideRestoredThisSlot ?? false,
+    boundaryMarkForecastActive: state.boundaryMarkForecastActive ?? false,
+    flameSwordClaimed: state.flameSwordClaimed ?? false,
+    tokenStats: normalizeTokenStats(state.tokenStats),
+    completedScenePuzzleIds: migrateEastPathPuzzleIds(state.completedScenePuzzleIds ?? []),
     hasDismissedObjectiveHint: state.hasDismissedObjectiveHint ?? false,
+    divineAttentionValue: state.divineAttentionValue ?? 0,
+    pendingDivineGiftChoice: state.pendingDivineGiftChoice ?? null,
+    unlockedDivineAttentionRuleIds: [...(state.unlockedDivineAttentionRuleIds ?? [])],
+    attentionRuleTriggerCounts: { ...(state.attentionRuleTriggerCounts ?? {}) },
+    michaelDivinePunishmentActive: state.michaelDivinePunishmentActive ?? false,
+    michaelExecutionPending: state.michaelExecutionPending ?? false,
+    luciferZeroAffinityGiftClaimed: state.luciferZeroAffinityGiftClaimed ?? false,
+    luciferSwimStage: state.luciferSwimStage ?? "none",
+    worldEventHistory: (state.worldEventHistory ?? []).map((e) => ({ ...e })),
   };
 }
 
@@ -73,6 +113,9 @@ function cloneWorldStateForPuzzle(state: EdenWorldState): EdenWorldState {
       sceneActionIds: [...(state.actionsThisSlot?.sceneActionIds ?? [])],
       usedItemIds: [...(state.actionsThisSlot?.usedItemIds ?? [])],
       hasWhisperedToWoman: state.actionsThisSlot?.hasWhisperedToWoman ?? false,
+      hasGrantedPaidDayMoveAttention: state.actionsThisSlot?.hasGrantedPaidDayMoveAttention ?? false,
+      hasGrantedPaidNightDialogueAttention: state.actionsThisSlot?.hasGrantedPaidNightDialogueAttention ?? false,
+      moveCount: state.actionsThisSlot?.moveCount ?? 0,
     },
     unlockedAchievementIds: [...(state.unlockedAchievementIds ?? [])],
     usedItemIds: [...(state.usedItemIds ?? [])],
@@ -85,6 +128,28 @@ function cloneWorldStateForPuzzle(state: EdenWorldState): EdenWorldState {
     apMaxBonusBase: state.apMaxBonusBase ?? 0,
     apMaxBonusDay: state.apMaxBonusDay ?? 0,
     divineThresholdModifier: state.divineThresholdModifier ?? 0,
+    divineAffinityMultiplier: state.divineAffinityMultiplier ?? 1,
+    freeMoveUsedThisSlot: state.freeMoveUsedThisSlot ?? 0,
+    freeDialogueUsedThisSlot: state.freeDialogueUsedThisSlot ?? 0,
+    freeDetourBypassUsedThisSlot: state.freeDetourBypassUsedThisSlot ?? 0,
+    michaelSlayClaimed: state.michaelSlayClaimed ?? false,
+    luciferAwakenClaimed: state.luciferAwakenClaimed ?? false,
+    hiddenTopicIds: [...(state.hiddenTopicIds ?? [])],
+    divineAttentionValue: state.divineAttentionValue ?? 0,
+    pendingDivineGiftChoice: state.pendingDivineGiftChoice ?? null,
+    unlockedDivineAttentionRuleIds: [...(state.unlockedDivineAttentionRuleIds ?? [])],
+    attentionRuleTriggerCounts: { ...(state.attentionRuleTriggerCounts ?? {}) },
+    michaelDivinePunishmentActive: state.michaelDivinePunishmentActive ?? false,
+    michaelExecutionPending: state.michaelExecutionPending ?? false,
+    luciferZeroAffinityGiftClaimed: state.luciferZeroAffinityGiftClaimed ?? false,
+    luciferSwimStage: state.luciferSwimStage ?? "none",
+    worldEventHistory: (state.worldEventHistory ?? []).map((e) => ({ ...e })),
+    morningFlowRestoredThisSlot: state.morningFlowRestoredThisSlot ?? false,
+    nightTideRestoredThisSlot: state.nightTideRestoredThisSlot ?? false,
+    boundaryMarkForecastActive: state.boundaryMarkForecastActive ?? false,
+    flameSwordClaimed: state.flameSwordClaimed ?? false,
+    tokenStats: normalizeTokenStats(state.tokenStats),
+    playerName: state.playerName ?? "",
     unlockMapNpcLocations: state.unlockMapNpcLocations ?? false,
     unlockTreeNames: state.unlockTreeNames ?? false,
   });
@@ -92,6 +157,19 @@ function cloneWorldStateForPuzzle(state: EdenWorldState): EdenWorldState {
 
 export function isScenePuzzleCompleted(state: EdenWorldState, puzzleId: string): boolean {
   return (state.completedScenePuzzleIds ?? []).includes(puzzleId);
+}
+
+/**
+ * 旧东园幽径谜题（单 id）拆为昼夜两个独立谜题后的读档迁移。
+ * 旧存档只记录过一次「东园幽径」交互，保守视为「白天已完成」（夜晚仍可做一次）。
+ */
+function migrateEastPathPuzzleIds(ids: string[]): string[] {
+  if (!ids.includes("puzzle_east_path_cautious_presence")) return [...ids];
+  const next = ids.filter((id) => id !== "puzzle_east_path_cautious_presence");
+  if (!next.includes("puzzle_east_path_cautious_presence_day")) {
+    next.push("puzzle_east_path_cautious_presence_day");
+  }
+  return next;
 }
 
 export function isScenePuzzleAvailable(puzzle: ScenePuzzle, state: EdenWorldState): boolean {
@@ -117,6 +195,13 @@ function isSuccessfulOption(puzzle: ScenePuzzle, option: ScenePuzzleOption): boo
 
 function addReward(results: ScenePuzzleRewardResult[], reward: ScenePuzzleRewardResult): void {
   results.push(reward);
+}
+
+// 场景题主动引目对应的"园中律则"ID（首次触发解锁；十倍刻度下注视 +N 经 grantDivineAttention）。
+function getPuzzleAttentionRuleId(puzzleId: string, optionId: string): "scene_uplight" | undefined {
+  // 仰光之痕：主动让目光落在自己身上 → scene_uplight
+  if (puzzleId === "puzzle_tree_court_shadow" && optionId === "look_up") return "scene_uplight";
+  return undefined;
 }
 
 // ---- per_option 模式：每选项独立结算（无成功/失败之分，全部完成事件） ----
@@ -156,11 +241,15 @@ function applyPerOptionAnswer(
   let divineGiftChoice: string[] | null = null;
 
   // wasPending 必须在应用 divineThresholdModifier / divineAttentionDelta 之前取
-  const wasPending = shouldTriggerGiftChoice(next);
+  const wasPending = !!next.pendingDivineGiftChoice && next.pendingDivineGiftChoice.length > 0;
 
   // 1. 道具（主道具 + 额外保留道具）
   if (effect.itemId) {
     grantResonance(next, effect.itemId, 1);
+    // 恩泽棱镜：获时设倍率 2 并补算已持祝福的正向差额
+    if (effect.itemId === "resonance_grace_prism") {
+      applyGracePrismRetroactive(next);
+    }
     const item = getItemById(effect.itemId);
     rewards.push({ type: "item", id: effect.itemId, title: item ? `回响：${item.title}` : effect.itemId });
   }
@@ -192,9 +281,15 @@ function applyPerOptionAnswer(
   if (effect.zeroActionPoints) next.actionPoints = 0;
   if (effect.restoreActionPointsToMax) next.actionPoints = getEffectiveMaxActionPoints(next);
 
-  // 4. 神明注视值（累计，不调 applyDivineAttention，避免可视等级与 accel 乘数）
+  // 4. 神明注视值（十倍刻度：所有正向注视统一经 grantDivineAttention 单一入口）
   if (effect.divineAttentionDelta) {
-    next.divineAttentionCumulative = Math.max(0, next.divineAttentionCumulative + effect.divineAttentionDelta);
+    const ruleId = getPuzzleAttentionRuleId(puzzle.id, optionId);
+    grantDivineAttention(next, {
+      amount: effect.divineAttentionDelta,
+      ruleId,
+      source: "puzzle",
+      isHighRisk: true,
+    });
     rewards.push({ type: "attention", title: `神的注视 +${effect.divineAttentionDelta}` });
   }
 
@@ -203,16 +298,85 @@ function applyPerOptionAnswer(
     next.divineThresholdModifier = (next.divineThresholdModifier ?? 0) + effect.divineThresholdModifier;
   }
 
+  // 5.4 永久 AP 上限奖励总和限制（Task 4 Step 3：base + day 合计最多 +2）
+  // 注意：effect 已在上方（2.行动点上限加成）写入 next，此处仅做"上限钳制 + 溢出转当前 AP"，
+  // 不可再次累加，否则单次 +1 会被算成 +2。
+  const AP_BONUS_CAP = 2;
+  if (effect.apMaxBonusBase || effect.apMaxBonusDay) {
+    const total = (next.apMaxBonusBase ?? 0) + (next.apMaxBonusDay ?? 0);
+    if (total > AP_BONUS_CAP) {
+      const overflow = total - AP_BONUS_CAP;
+      // 优先削减 daylight 上限（清醒之眼），余额从 base 扣
+      const dayCut = Math.min(next.apMaxBonusDay ?? 0, overflow);
+      next.apMaxBonusDay = (next.apMaxBonusDay ?? 0) - dayCut;
+      const baseCut = overflow - dayCut;
+      next.apMaxBonusBase = (next.apMaxBonusBase ?? 0) - baseCut;
+      // 溢出转化为当前行动点回复（不超过有效上限）
+      const apRoom = getEffectiveMaxActionPoints(next) - next.actionPoints;
+      const apGain = Math.max(0, Math.min(overflow, apRoom));
+      if (apGain > 0) {
+        next.actionPoints += apGain;
+      }
+    }
+  }
+
+  // 5.5 加百列好感 ±N（东园越界惩罚，下限 0）
+  if (effect.gabrielAffinityDelta) {
+    const rel = next.npcRelations["gabriel"] ?? ensureRelation(next, "gabriel");
+    rel.affinity = Math.max(0, rel.affinity + effect.gabrielAffinityDelta);
+    rewards.push({
+      type: "trust",
+      title: `加百列好感 ${effect.gabrielAffinityDelta > 0 ? "+" : ""}${effect.gabrielAffinityDelta}`,
+    });
+  }
+
+  // 5.5 心智敬仰：夏娃/亚当对神的敬畏/顺从 ±N（天使残羽：透露神与天使都吃过此树）
+  if (effect.eveObedienceDelta) {
+    next.eveMind.obedience = clampMind(next.eveMind.obedience + effect.eveObedienceDelta);
+    rewards.push({
+      type: "trust",
+      title: `女人对神的敬仰 ${effect.eveObedienceDelta > 0 ? "+" : ""}${effect.eveObedienceDelta}`,
+    });
+  }
+  if (effect.adamObedienceDelta) {
+    next.adamMind.obedience = clampMind(next.adamMind.obedience + effect.adamObedienceDelta);
+    rewards.push({
+      type: "trust",
+      title: `亚当对神的敬仰 ${effect.adamObedienceDelta > 0 ? "+" : ""}${effect.adamObedienceDelta}`,
+    });
+  }
+
   // 6. 解锁开关
   if (effect.unlockMapNpcLocations) next.unlockMapNpcLocations = true;
   if (effect.unlockTreeNames) next.unlockTreeNames = true;
 
-  // 7. 触发献礼（仅当此前未 pending 且现在满足门槛）
-  if (!wasPending && shouldTriggerGiftChoice(next)) {
-    divineGiftChoice = rollGiftChoices(next.divineGiftsOwned);
+  // 6.5 溯源之水：时间回溯（重置除保留项外的全部状态）
+  if (effect.triggerTimeRewind) {
+    applyTimeRewind(next, puzzle.id);
   }
 
-  next.completedScenePuzzleIds = [...next.completedScenePuzzleIds, puzzle.id];
+  // 6.6 逃离判定：持有火焰剑则进入 escape_eden 隐藏结局
+  if (effect.triggerEscapeCheck && next.inventory.includes("resonance_flaming_sword")) {
+    triggerEscapeEden(next);
+  }
+
+  // 7. 触发献礼（仅当此前未 pending、现在满足门槛且尚未结束）
+  if (!next.isEnded && !wasPending && evaluateDivineGiftProgress(next)) {
+    divineGiftChoice = next.pendingDivineGiftChoice ?? null;
+  }
+
+  // 8. 标记完成：可重复选项（maxStacks>1）在道具未达上限前不锁死谜题，允许再来一次；
+  //    拿满上限、或选取了不可重复选项（默认 maxStacks=1）才锁死。
+  //    用途：园心双树「拾月光」可重复至 2 枚，叠加每时段无视绕行 2 次。
+  const maxStacks = option.maxStacks ?? 1;
+  let markCompleted = true;
+  if (maxStacks > 1 && effect.itemId) {
+    const owned = next.itemCounts[effect.itemId] ?? 0;
+    if (owned < maxStacks) markCompleted = false;
+  }
+  if (markCompleted) {
+    next.completedScenePuzzleIds = [...next.completedScenePuzzleIds, puzzle.id];
+  }
   return {
     success: true,
     alreadyCompleted: false,
@@ -274,14 +438,16 @@ export function applyScenePuzzleAnswer(
 
   if (!success) {
     if (puzzle.failure.attentionDelta) {
-      applyDivineAttention(next, puzzle.failure.attentionDelta);
+      grantDivineAttention(next, {
+        amount: puzzle.failure.attentionDelta,
+        source: "puzzle",
+        isHighRisk: true,
+      });
       addReward(rewards, {
         type: "attention",
         title: `神的注视 +${puzzle.failure.attentionDelta}`,
       });
-      divineGiftChoice = shouldTriggerGiftChoice(next)
-        ? rollGiftChoices(next.divineGiftsOwned)
-        : null;
+      divineGiftChoice = evaluateDivineGiftProgress(next);
     }
 
     return {
@@ -328,16 +494,18 @@ export function applyScenePuzzleAnswer(
   }
 
   if (puzzle.rewards.attentionDelta) {
-    applyDivineAttention(next, puzzle.rewards.attentionDelta);
+    grantDivineAttention(next, {
+      amount: puzzle.rewards.attentionDelta,
+      source: "puzzle",
+      isHighRisk: true,
+    });
     addReward(rewards, {
       type: "attention",
       title: puzzle.rewards.attentionDelta > 0
         ? `神的注视 +${puzzle.rewards.attentionDelta}`
         : `神的注视 ${puzzle.rewards.attentionDelta}`,
     });
-    divineGiftChoice = shouldTriggerGiftChoice(next)
-      ? rollGiftChoices(next.divineGiftsOwned)
-      : null;
+    divineGiftChoice = evaluateDivineGiftProgress(next);
   }
 
   next.completedScenePuzzleIds = [...next.completedScenePuzzleIds, puzzle.id];
@@ -379,10 +547,19 @@ function applyFreeTextAnswer(
   const grade = result?.grade ?? "wrong";
   const success = grade === "correct" || grade === "close";
 
+  // 刻名石留名：成功时把玩家输入持久化到 state（存档保留玩家名称）
+  if (puzzle.id === "puzzle_naming_stone_identity" && success && answerText.trim()) {
+    next.playerName = answerText.trim();
+  }
+
   if (!success) {
     const hint = result?.feedback ?? puzzle.failure.hint;
     if (puzzle.failure.attentionDelta) {
-      applyDivineAttention(next, puzzle.failure.attentionDelta);
+      grantDivineAttention(next, {
+        amount: puzzle.failure.attentionDelta,
+        source: "puzzle",
+        isHighRisk: true,
+      });
     }
     return {
       success: false,

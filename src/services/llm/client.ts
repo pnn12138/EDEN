@@ -10,8 +10,8 @@
 // 安全：
 // - 只在服务端运行（Next.js API Route）
 // - 不暴露 API Key 到前端
-// - 环境变量缺失时自动 fallback 到 mock
-// - fallback 原因码不含敏感信息
+// - 环境变量缺失或真实 provider 失败时返回失败原因，不伪造 mock 回复
+// - 失败原因码不含敏感信息
 // ============================================================
 
 import type { ChatMessage, LLMCallResult, LLMProvider, FallbackReasonCode } from "./types";
@@ -34,8 +34,7 @@ export type { ChatMessage, LLMChatRequest, LLMChatResponse, LLMProvider, Fallbac
  * - "deepseek"   → 调用 DeepSeek V4（OpenAI 兼容接口）
  * - "mock"        → 返回本地固定回复
  *
- * 环境变量缺失 / 请求失败 → 自动 fallback 到 mock
- * usedFallback + fallbackReason 在整条链路中始终可追踪
+ * 环境变量缺失 / 请求失败 → 原样返回失败原因，由上层显示连接错误。
  */
 export async function callLLM(
   messages: ChatMessage[],
@@ -44,20 +43,12 @@ export async function callLLM(
   const provider = resolveProvider();
   const config = resolveProviderConfig(provider);
 
-  // ---- Provider 配置缺失 → fallback 到 mock ----
+  // ---- Provider 配置缺失：不伪造模型回复 ----
   if (!config && provider !== "mock") {
-    if (options?.fallbackToMock === false) {
-      return {
-        ok: false,
-        error: "provider_config_missing",
-        usedFallback: true,
-        fallbackReason: "provider_config_missing" as FallbackReasonCode,
-      };
-    }
-    const mockResult = await callMockProvider(messages);
     return {
-      ...mockResult,
-      usedFallback: true,
+      ok: false,
+      error: "provider_config_missing",
+      usedFallback: false,
       fallbackReason: "provider_config_missing" as FallbackReasonCode,
     };
   }
@@ -77,25 +68,18 @@ export async function callLLM(
         return result;
       }
 
-      // 真实 provider 失败 → fallback 到 mock
+      // 真实 provider 失败：将原因交给上层，不伪造本地回复
       const fallbackReason: FallbackReasonCode =
         result.error === "provider_timeout"
           ? "provider_timeout"
-          : "provider_request_failed";
+          : result.error === "llm_data_missing"
+            ? "llm_data_missing"
+            : "provider_request_failed";
 
-      if (options?.fallbackToMock === false) {
-        return {
-          ok: false,
-          error: fallbackReason,
-          usedFallback: true,
-          fallbackReason,
-        };
-      }
-
-      const mockResult = await callMockProvider(messages);
       return {
-        ...mockResult,
-        usedFallback: true,
+        ok: false,
+        error: fallbackReason,
+        usedFallback: false,
         fallbackReason,
       };
     }
@@ -109,9 +93,9 @@ export async function callLLM(
  * 流式统一 LLM 调用入口（逐字生成）。
  *
  * 行为：
- * - mock provider 或配置缺失 → 直接降级为非流式 callLLM，一次性 yield 完整文本。
+ * - mock provider → 直接使用 mock；配置缺失不产生伪造回复。
  * - 真实 provider（volcengine / deepseek）→ 调用 callOpenAICompatibleStream 逐字 yield。
- * - 流式过程中抛错 → 自动降级为非流式 callLLM 再试一次，yield 完整文本。
+ * - 流式过程中抛错 → 直接抛出，由 API/前端显示连接中断。
  *
  * 调用方（api/world/route.ts）负责把逐字增量以 SSE 推送给前端。
  */
@@ -122,14 +106,15 @@ export async function* callLLMStream(
   const provider = resolveProvider();
   const config = resolveProviderConfig(provider);
 
-  // mock / 配置缺失：无法流式，直接返回完整文本
-  if (provider === "mock" || !config) {
+  // mock：无法流式，直接返回 mock 文本；配置缺失不产生伪造回复
+  if (provider === "mock") {
     const result = await callLLM(messages, options);
     if (result.ok && result.data?.content) {
       yield result.data.content;
     }
     return;
   }
+  if (!config) throw new Error("provider_config_missing");
 
   try {
     yield* callOpenAICompatibleStream(
@@ -139,11 +124,7 @@ export async function* callLLMStream(
       options?.temperature,
       options?.maxTokens,
     );
-  } catch {
-    // 流式失败 → 降级非流式再试一次
-    const result = await callLLM(messages, options);
-    if (result.ok && result.data?.content) {
-      yield result.data.content;
-    }
+  } catch (error) {
+    throw error;
   }
 }
