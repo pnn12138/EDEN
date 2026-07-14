@@ -25,6 +25,8 @@ export type WorldSaveSlotData = {
   state: EdenWorldState;
   savedAt: string; // ISO 字符串
   slotIndex: SaveSlotIndex;
+  /** 玩家自定义存档名；缺省（或空格）时界面显示为「存档 N」 */
+  name?: string;
 };
 
 /** 槽位 i 的存储 key */
@@ -53,6 +55,8 @@ export type SaveSlotMeta = {
   empty: boolean;
   /** 该槽位存档损坏（不可解析或非本章节数据），保留不删除 */
   corrupted?: boolean;
+  /** 玩家自定义存档名；空槽/损坏槽为 null，正常槽缺省时显示为「存档 N」 */
+  name: string | null;
   savedAtLabel: string | null;
   chapterSceneLabel: string | null;
   timeSlotLabel: string | null;
@@ -230,10 +234,12 @@ export function getWorldSaveSlotMetas(): SaveSlotMeta[] {
     const r = readSlotDetailed(i);
     if (r.status === "ok") {
       const s = r.data.state;
+      const customName = r.data.name?.trim();
       return {
         index: i,
         empty: false,
         corrupted: false,
+        name: customName ? customName : `存档 ${i}`,
         savedAtLabel: formatClock(new Date(r.data.savedAt)),
         chapterSceneLabel: `第一章 · ${LOCATION_NAMES[s.locationId] ?? s.locationId}`,
         timeSlotLabel: timeSlotDisplay(s.timeSlot, s.dayIndex, s.timeOfDay),
@@ -243,6 +249,7 @@ export function getWorldSaveSlotMetas(): SaveSlotMeta[] {
       index: i,
       empty: r.status === "empty",
       corrupted: r.status === "corrupt",
+      name: null,
       savedAtLabel: null,
       chapterSceneLabel: null,
       timeSlotLabel: null,
@@ -364,16 +371,57 @@ export function useWorldSave({
     return () => window.clearInterval(id);
   }, []);
 
+  // ---- 终局立即持久化：结局触发（isEnded=true）后立刻写入 autosave 与活跃手动槽 ----
+  // 避免「触发结局后刷新页面，读到旧的手动槽/自动保存而丢失结局」的问题。
+  // 5 分钟自动保存间隔太长，玩家在结局界面刷新会回到触发前的存档，导致隐藏结局无法完成。
+  useEffect(() => {
+    if (!state.isEnded) return;
+    const savedAt = new Date().toISOString();
+    try {
+      window.localStorage.setItem(
+        AUTOSAVE_KEY,
+        JSON.stringify({ state: stateRef.current, savedAt }),
+      );
+    } catch {
+      /* localStorage 不可用时静默忽略 */
+    }
+    const active = lastActiveSlotRef.current;
+    if (active) {
+      try {
+        const existing = readSlotDetailed(active);
+        const existingName =
+          existing.status === "ok" ? existing.data.name?.trim() : "";
+        window.localStorage.setItem(
+          slotKey(active),
+          JSON.stringify({
+            state: stateRef.current,
+            savedAt,
+            slotIndex: active,
+            name: existingName || `存档 ${active}`,
+          }),
+        );
+      } catch {
+        /* localStorage 不可用时静默忽略 */
+      }
+    }
+  }, [state.isEnded]);
+
+
   /**
    * 保存到指定手动槽。返回是否成功（失败多为 localStorage 不可用）。
    * 同时持久化 last-active 槽位。
+   * @param name 可选自定义存档名；省略时保留已有名（若有），否则默认「存档 N」。
    */
-  const save = useCallback((i: SaveSlotIndex): boolean => {
+  const save = useCallback((i: SaveSlotIndex, name?: string): boolean => {
     try {
+      const existing = readSlotDetailed(i);
+      const existingName = existing.status === "ok" ? existing.data.name?.trim() : "";
+      const slotName = name?.trim() || existingName || `存档 ${i}`;
       const data: WorldSaveSlotData = {
         state: stateRef.current,
         savedAt: new Date().toISOString(),
         slotIndex: i,
+        name: slotName,
       };
       window.localStorage.setItem(slotKey(i), JSON.stringify(data));
       window.localStorage.setItem(LAST_ACTIVE_KEY, String(i));
@@ -385,6 +433,23 @@ export function useWorldSave({
       return true;
     } catch {
       return false;
+    }
+  }, []);
+
+  /**
+   * 仅修改指定槽位的存档名（不覆盖进度）。
+   * 空槽 / 损坏槽 / 非本章节数据均不处理；空名回退为「存档 N」。
+   */
+  const renameSlot = useCallback((i: SaveSlotIndex, name: string): void => {
+    try {
+      const raw = window.localStorage.getItem(slotKey(i));
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as WorldSaveSlotData;
+      if (!parsed || parsed.state?.chapterId !== "chapter1_garden_voices") return;
+      parsed.name = name.trim() || `存档 ${i}`;
+      window.localStorage.setItem(slotKey(i), JSON.stringify(parsed));
+    } catch {
+      /* localStorage 不可用时静默忽略 */
     }
   }, []);
 
@@ -452,6 +517,7 @@ export function useWorldSave({
     lastActiveSlot,
     save,
     load,
+    renameSlot,
     deleteSlot,
     reset,
     getSlotMetas,

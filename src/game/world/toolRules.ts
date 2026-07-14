@@ -4,7 +4,7 @@
 // 职责：
 // 1. 工具白名单（通用工具 + 禁忌动作链）
 // 2. Agent 权限校验（按 NPC ID）
-// 3. 各工具条件校验（phase / 地点 / 心智门槛 / 重复保护）
+// 3. 各工具条件校验（phase / 地点 / 动作链前置 / 重复保护）
 // 4. 所有工具必须经过本规则层校验，AI 只能输出意图
 //
 // 安全规则：
@@ -36,7 +36,8 @@ export const WORLD_TOOL_WHITELIST: ReadonlySet<WorldToolName> = new Set<WorldToo
   "look_at_tree",
   "approach_tree",
   "touch_fruit",
-  "eat_fruit",
+  "eat_left_fruit",
+  "eat_right_fruit",
   "grant_item",           // NPC 给予玩家道具/回响
   "move_one_step",        // NPC 对话后移动一格（语义别名，校验复用 move_to_location）
   "update_relation",      // NPC 对话后自我流露：调整对玩家好感与对神敬畏
@@ -181,10 +182,6 @@ export function canLookAtTreeWorld(state: EdenWorldState): { allowed: boolean; r
 
   // 园子中央是生命树与分别善恶树所在地。
   // 夏娃的目光被树吸引时不要求她已在园子中央——执行时由规则层把她推进到那里。
-  if (state.eveMind.selfJudgement < 20) {
-    return { allowed: false, reason: "她还没有那么想看那棵树" };
-  }
-
   return { allowed: true };
 }
 
@@ -202,13 +199,6 @@ export function canApproachTreeWorld(state: EdenWorldState): { allowed: boolean;
     return { allowed: false, reason: "她离那棵树太远了" };
   }
 
-  if (state.eveMind.selfJudgement < 30) {
-    return { allowed: false, reason: "她的好奇心还不够" };
-  }
-  if (state.eveMind.obedience >= 75) {
-    return { allowed: false, reason: "她对命令的服从还太强" };
-  }
-
   return { allowed: true };
 }
 
@@ -220,23 +210,15 @@ export function canTouchFruitWorld(state: EdenWorldState): { allowed: boolean; r
     return { allowed: false, reason: "她还没有靠近那棵树" };
   }
 
-  if (state.eveMind.selfJudgement < 35) {
-    return { allowed: false, reason: "她还没有真正想自己判断" };
-  }
-
   return { allowed: true };
 }
 
-/** eat_fruit 条件：女人已在园子中央，兼容旧存档中的 touchedFruit 状态。 */
+/** eat_left_fruit / eat_right_fruit 共用门控：女人已在园子中央，兼容旧存档中的 touchedFruit 状态。 */
 export function canEatFruitWorld(state: EdenWorldState): { allowed: boolean; reason?: string } {
   if (state.isEnded) return { allowed: false, reason: "园中已归于寂静" };
   if (state.worldActions.hasEatenFruit) return { allowed: false, reason: "她已经吃下了果子" };
   if (!state.worldActions.touchedFruit && state.npcLocations.eve !== "central_meadow") {
     return { allowed: false, reason: "她还没有走到园子中央" };
-  }
-
-  if (state.eveMind.selfJudgement < 45) {
-    return { allowed: false, reason: "她还没有决定自己判断" };
   }
 
   return { allowed: true };
@@ -318,7 +300,9 @@ export function validateWorldToolCall(
       return canApproachTreeWorld(state);
     case "touch_fruit":
       return canTouchFruitWorld(state);
-    case "eat_fruit":
+    case "eat_left_fruit":
+      return canEatFruitWorld(state);
+    case "eat_right_fruit":
       return canEatFruitWorld(state);
     case "grant_item": {
       const itemId = toolCall.args.itemId;
@@ -441,7 +425,8 @@ export type ToolEffect = {
     | "look_at_tree"
     | "approach_tree"
     | "touch_fruit"
-    | "eat_fruit";
+    | "eat_left_fruit"
+    | "eat_right_fruit";
   actorId?: EdenNpcId;
   targetNpcId?: EdenNpcId;
   locationId?: EdenLocationId;
@@ -465,8 +450,10 @@ export function getWorldToolNarration(
       return "她向树影近了一步。脚下的草没有发出声音，但她确实更近了。";
     case "touch_fruit":
       return "她的手停在果子下方。空气里有一种说不出的紧。";
-    case "eat_fruit":
-      return "她取下那果子，吃了。园中的光在一瞬间变得锋利。";
+    case "eat_left_fruit":
+      return "她取下左侧生命树的果子，咬了一口。果子很甜，她安静下来，把剩下的放下了。";
+    case "eat_right_fruit":
+      return "她取下右侧分别善恶树的果子，吃了。园中的光在一瞬间变得锋利。";
     default:
       return "园中起了细微的动静。";
   }

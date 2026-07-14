@@ -384,8 +384,10 @@ function toolNarration(tool: WorldToolName): string {
       return "靠近了那棵树";
     case "touch_fruit":
       return "把手停在果子下方";
-    case "eat_fruit":
-      return "取下果子吃了";
+    case "eat_left_fruit":
+      return "取下左侧生命树的果子吃了";
+    case "eat_right_fruit":
+      return "取下右侧分别善恶树的果子吃了";
     case "move_to_location":
       return "在园中移动";
     case "speak_to_npc":

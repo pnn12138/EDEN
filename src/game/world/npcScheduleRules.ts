@@ -4,13 +4,12 @@
 // 不做完整 NPC 自主规划器。每次时段推进时做规则化结算：
 // - 神的注视升高时，刺猬警觉或躲藏
 // - 夜晚伊甸之河出现天使边界提示
-// - 本轮被低语过的女人/亚当，可在时段结束时选择移动一格
 //
-// NPC 行动只做叙事和轻量状态影响，不抢玩家控制权。
+// 女人与亚当的「移动」不再在此处硬编码：他们各自通过 move_to_location 工具自行决定去哪里，
+// 在对话回合内经邻接校验后真正生效。本文件只做叙事与轻量心智/情绪状态影响，不抢玩家控制权。
 // ============================================================
 
 import type { EdenWorldState, EdenNpcId } from "@/game/world/types";
-import { grantNpcMeetingAttentionIfNew } from "@/game/world/divineAttentionRules";
 
 export type NpcSlotResolution = {
   npcId: EdenNpcId;
@@ -60,72 +59,12 @@ export function resolveNpcSlotBehaviors(state: EdenWorldState): NpcSlotResolutio
     });
   }
 
-  // 3. 只有本轮被低语过的 NPC，才会在时段结束时考虑移动。
-  //    女人只在「园中树林 / 园子中央 / 万物受名处」之间移动；
-  //    每次最多移动一格，避免玩家找不到她。
-  if (spokenNpcIds.has("eve") && !state.isEnded) {
-    if (
-      state.npcLocations.eve === "tree_court" &&
-      (state.eveMind.selfJudgement >= 45 || state.worldActions.lookedAtTree)
-    ) {
-      state.npcLocations.eve = "central_meadow";
-      const meeting = grantNpcMeetingAttentionIfNew(state, "eve", "central_meadow");
-      pushResolution({
-        npcId: "eve",
-        narration: `那个女人离开园中树林，走向园子中央。她没有看蛇，只是望着两棵树所在的方向。${meeting ? ` ${meeting}` : ""}`,
-      });
-    } else if (
-      state.npcLocations.eve === "central_meadow" &&
-      !state.worldActions.lookedAtTree &&
-      state.eveMind.selfJudgement >= 25 &&
-      state.eveMind.selfJudgement < 45
-    ) {
-      state.npcLocations.eve = "adam_garden_work";
-      const meeting = grantNpcMeetingAttentionIfNew(state, "eve", "adam_garden_work");
-      pushResolution({
-        npcId: "eve",
-        narration: `那个女人没有继续靠近树。她去了万物受名处，像是想向亚当问清那句禁令。${meeting ? ` ${meeting}` : ""}`,
-      });
-    } else if (
-      state.npcLocations.eve === "adam_garden_work" &&
-      (state.eveMind.selfJudgement >= 45 || state.worldActions.lookedAtTree)
-    ) {
-      state.npcLocations.eve = "central_meadow";
-      const meeting = grantNpcMeetingAttentionIfNew(state, "eve", "central_meadow");
-      pushResolution({
-        npcId: "eve",
-        narration: `从万物受名处回来后，那个女人又走向园子中央。她的问题没有被亚当完全安放。${meeting ? ` ${meeting}` : ""}`,
-      });
-    }
-  }
-
-  // 4. 亚当只有被本轮低语触动后，才可能离开万物受名处。
-  //    他最多移动到园子中央，用来回应女人靠近树或对禁令产生疑问。
-  if (spokenNpcIds.has("adam") && !state.isEnded) {
-    if (
-      state.npcLocations.adam === "adam_garden_work" &&
-      (state.npcLocations.eve === "central_meadow" ||
-        state.worldActions.lookedAtTree ||
-        state.adamMind.attachmentToEve >= 80)
-    ) {
-      state.npcLocations.adam = "central_meadow";
-      const meeting = grantNpcMeetingAttentionIfNew(state, "adam", "central_meadow");
-      pushResolution({
-        npcId: "adam",
-        narration: `亚当放下手里的工，走向园子中央。他似乎在寻找那个女人，也在回想自己听见的命令。${meeting ? ` ${meeting}` : ""}`,
-      });
-    } else if (
-      state.npcLocations.adam === "central_meadow" &&
-      state.npcLocations.eve === "adam_garden_work"
-    ) {
-      state.npcLocations.adam = "adam_garden_work";
-      const meeting = grantNpcMeetingAttentionIfNew(state, "adam", "adam_garden_work");
-      pushResolution({
-        npcId: "adam",
-        narration: `亚当离开园子中央，回到万物受名处。那个女人在那里等着一个答案。${meeting ? ` ${meeting}` : ""}`,
-      });
-    }
-  }
+  // 3. 女人与亚当的移动都不再由时段结算硬编码：是否离开当前所在、往哪里去，
+  //    现由各自信的 Agent 通过 move_to_location 工具自行决定（在对话回合结束后才真正生效，
+  //    见 world/route.ts 的延迟生效逻辑与邻接校验）。此处不再自动搬运任何人的位置，
+  //    以免「亚当被强制送到园子中央」这类脚本化行为覆盖他自己的意愿（他应自己选择去哪里）。
+  //    万物受名处（adam_garden_work）本就与园子中央相邻，亚当只需发出
+  //    move_to_location（args: { locationId: "central_meadow" }）即可合法前往。
 
   state.npcActionPoints = remainingNpcActions;
   return resolutions;

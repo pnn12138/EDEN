@@ -5,7 +5,7 @@
 // - 图片尺寸：玩家设置 > 服务端 IMAGE_SIZE > 按 provider/model 推断
 //   · Ark / Seedream / volcengine → "2K"（已验证需要 2K，1024x1024 会失败回退）
 //   · 其它 OpenAI 兼容端点 → "1024x1024"（或玩家自定义）
-// - 图片数量：服务端校验 1 <= count <= min(6, playedSlots)
+// - 图片数量：服务端校验 1 <= count <= min(6, playedSlots)（由 AI 依据日志丰富度判定，时段数与上限共同约束）
 // - Ark 响应 data[0].url（直链）与 data[0].b64_json（base64 → data: URL）
 // ============================================================
 
@@ -52,7 +52,7 @@ export function resolveImageSize(
   return defaultImageSizeFor(media?.imageProvider, media?.imageModel);
 }
 
-/** 服务端校验图片数量：1 <= count <= min(6, playedSlots)。 */
+/** 服务端校验图片数量：1 <= count <= min(6, playedSlots)（由 AI 依据日志密度判定上限）。 */
 export function clampImageCount(requested: number, playedSlots: number): number {
   const max = Math.max(1, Math.min(MAX_ENDING_IMAGE_COUNT, playedSlots));
   if (!Number.isFinite(requested) || requested < 1) return 1;

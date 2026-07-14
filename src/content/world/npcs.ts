@@ -77,7 +77,7 @@ export const EDEN_NPCS: Record<EdenNpcId, EdenNpcMeta> = {
     usesLLM: false,
     hasVoice: false,
     promptSummary:
-      "分别善恶树是世界对象，不是对话 NPC。它不是奖励物，而是不可逆选择的载体。它承载禁忌动作链：look_at_tree → approach_tree → touch_fruit → eat_fruit。玩家不能直接触碰，只能通过低语影响女人（内部 id: eve）让她自己靠近。",
+      "分别善恶树是世界对象，不是对话 NPC。它不是奖励物，而是不可逆选择的载体。它承载禁忌动作链：look_at_tree → approach_tree → touch_fruit → eat_left_fruit / eat_right_fruit。玩家不能直接触碰，只能通过低语影响女人（内部 id: eve）让她自己靠近；只有夏娃吃下右侧分别善恶树的果子才会触发结局。",
   },
 
   // ---- 三天使 NPC ----

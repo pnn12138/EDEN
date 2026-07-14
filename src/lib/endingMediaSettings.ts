@@ -35,7 +35,7 @@ export function defaultEndingMediaSettings(): EndingMediaSettings {
     imageBaseUrl: "",
     imageModel: "",
     imageSize: "",
-    imageCount: 3,
+    imageCount: 6,
     imageHope: "",
   };
 }

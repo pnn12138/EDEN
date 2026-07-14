@@ -699,7 +699,7 @@ export async function POST(request: NextRequest) {
     }
 
     // ---- 禁忌动作链不可通过本端点直接调用 ----
-    if (tool === "look_at_tree" || tool === "approach_tree" || tool === "touch_fruit" || tool === "eat_fruit") {
+    if (tool === "look_at_tree" || tool === "approach_tree" || tool === "touch_fruit" || tool === "eat_left_fruit" || tool === "eat_right_fruit") {
       return NextResponse.json({
         ok: false,
         state,

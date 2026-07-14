@@ -597,7 +597,8 @@ function applyFreeTextAnswer(
     }
   }
   if (puzzle.rewards.trustDelta) {
-    next.eveMind.serpentTrust = Math.max(0, Math.min(100, next.eveMind.serpentTrust + puzzle.rewards.trustDelta));
+    // 对蛇信任不钳制，可正可负（可突破 100，也可为负）
+    next.eveMind.serpentTrust = next.eveMind.serpentTrust + puzzle.rewards.trustDelta;
   }
 
   next.completedScenePuzzleIds = [...next.completedScenePuzzleIds, puzzle.id];

@@ -49,8 +49,8 @@ export type RunChronicle = {
   untrustedStoryMaterial: string[];
 };
 
-/** 关键事件上限（任务书：最多 8 个） */
-const MAX_KEY_EVENTS = 8;
+/** 关键事件上限（高亮用，尽量多保留以丰富分镜素材） */
+const MAX_KEY_EVENTS = 10;
 
 /**
  * 从既有世界状态提炼游玩经历。纯函数，不修改 state。
@@ -91,14 +91,15 @@ export function buildRunChronicle(state: EdenWorldState): RunChronicle {
   // 按 slot 升序、kind 二次排序，得到稳定时间线
   timeline.sort((a, b) => a.slot - b.slot || a.kind.localeCompare(b.kind));
 
-  // 关键事件：优先取 turning_point / ending / gift / relation / system 中的"有意义"事件，
-  // 再回退到 choice；最多 8 个。
-  const meaningfulKinds = new Set(["turning_point", "ending", "gift", "relation", "system"]);
+  // 关键事件：优先取 turning_point / ending / gift / relation / system / choice 等"有意义"事件，
+  // 同时纳入所有带 detail 的事件（含场景互动、回响使用等，细节更利于分镜），最多 10 个。
+  const meaningfulKinds = new Set(["turning_point", "ending", "gift", "relation", "system", "choice"]);
   const keyEvents: string[] = [];
   for (const ev of timeline) {
     if (keyEvents.length >= MAX_KEY_EVENTS) break;
-    if (meaningfulKinds.has(ev.kind) || ev.kind === "choice") {
-      keyEvents.push(ev.label);
+    const detail = ev.detail?.trim();
+    if (meaningfulKinds.has(ev.kind) || Boolean(detail)) {
+      keyEvents.push(detail ? `${ev.label}：${detail}` : ev.label);
     }
   }
 

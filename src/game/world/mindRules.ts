@@ -169,7 +169,8 @@ function clampDelta(delta: number, limit: number): number {
 function applyEveDelta(current: EveMind, delta: Partial<EveMind>): EveMind {
   return {
     obedience: clamp(current.obedience + (delta.obedience ?? 0), MIND_DELTA_LIMITS.obedience),
-    serpentTrust: clamp(current.serpentTrust + (delta.serpentTrust ?? 0), MIND_DELTA_LIMITS.serpentTrust),
+    // 对蛇信任不钳制，可正可负（可突破 100，也可为负）
+    serpentTrust: current.serpentTrust + (delta.serpentTrust ?? 0),
     selfJudgement: clamp(current.selfJudgement + (delta.selfJudgement ?? 0), MIND_DELTA_LIMITS.selfJudgement),
   };
 }
@@ -183,6 +184,7 @@ function applyAdamDelta(current: AdamMind, delta: Partial<AdamMind>): AdamMind {
   };
 }
 
+/** 0-100 钳制（敬畏 / 自我判断等保留上限） */
 function clamp(value: number, limit: number): number {
   return Math.max(0, Math.min(100, value));
 }
