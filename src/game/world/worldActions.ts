@@ -3,7 +3,7 @@
 //
 // 职责：
 // - 应用通用工具（move_to_location / speak_to_npc / observe_location）的状态副作用
-// - 应用禁忌动作链（look_at_tree → approach_tree → touch_fruit → eat_fruit）
+// - 应用禁忌动作链（look_at_tree → approach_tree → touch_fruit → eat_left_fruit / eat_right_fruit）
 // - 所有执行都依赖 toolRules 的校验通过
 // - 返回玩家可见叙事
 // ============================================================
@@ -30,7 +30,10 @@ import { getItemById } from "@/content/world/items";
 import { NPC_NAMES } from "@/content/world/npcs";
 import { recordEncounterForVisibleNpcs } from "@/game/world/npcRelationRules";
 import { applyRelationDelta } from "@/game/world/relationDeltaRules";
-import { grantNpcMeetingAttentionIfNew } from "@/game/world/divineAttentionRules";
+import {
+  grantNpcMeetingAttentionIfNew,
+  grantDivineAttention,
+} from "@/game/world/divineAttentionRules";
 
 export type WorldActionResult = {
   /** 玩家可见叙事 */
@@ -247,36 +250,68 @@ export function executeTouchFruitWorld(state: EdenWorldState): WorldActionResult
 }
 
 /**
- * 执行 eat_fruit（Phase E 生命树分支）
- * - 摘右果（善恶树）：触发成功结局（驱逐/放逐）
- * - 摘左果（生命树）：不触发结局，obedience 回升、serpentTrust 下降，游戏继续，
- *   手中果子消失，玩家可再次引导摘右果。
+ * 执行 eat_left_fruit（吃左侧生命树果子）
+ * - 不触发成功结局（eve_eats_fruit），但游戏继续、其它结局（如神降临 god_arrives）仍可被触发，不会被锁死。
+ * - 夏娃吃左果（生命树甜果）：敬畏回升、对蛇信任上升（信任度可超过 100），手中果子消失，玩家可再次引导摘右果。
+ * - 其他 NPC 调用只引来注视（注视度 +50），不结束游戏。
  */
-export function executeEatFruitWorld(state: EdenWorldState): WorldActionResult {
-  const side = state.pickedFruitSide ?? "right";
+export function executeEatLeftFruitWorld(
+  state: EdenWorldState,
+  caller: WorldToolCaller,
+): WorldActionResult {
+  state.pickedFruitSide = "left";
 
-  // 摘左果（生命树）：不驱逐，游戏继续
-  if (side === "left") {
+  // 仅夏娃吃左果（生命树甜果）：不结束，敬畏回升、对蛇信任上升（不封顶），游戏继续
+  if (caller === "eve") {
     state.worldActions.hasEatenLifeFruit = true;
     state.eveMind.obedience = Math.min(100, state.eveMind.obedience + 10);
-    state.eveMind.serpentTrust = Math.max(0, state.eveMind.serpentTrust - 5);
+    // 对蛇信任上升，且可超过 100（信任度不再钳制上限）
+    state.eveMind.serpentTrust = state.eveMind.serpentTrust + 10;
     // 手中果子消失：重置触果，允许再次引导摘另一侧
     state.worldActions.touchedFruit = false;
     return {
-      narration: "她咬了一口，果子很甜，她安静下来。她把剩下的放下了，目光又落回另一边的树上。",
+      narration: "她咬了一口左边那枚圆润的白果，果子很甜，她安静下来。她把剩下的放下了，目光又落回另一边的树上。",
     };
   }
 
-  // 摘右果（善恶树）：触发成功结局
-  state.worldActions.hasEatenFruit = true;
-  state.toolCallHistory.push("eat_fruit");
-  state.isEnded = true;
-  state.endingId = "eve_eats_fruit";
-  state.phase = "ending";
-
+  // 其他 NPC 吃左果：不结束游戏，只是惊动了守望的神——注视度 +50
+  grantDivineAttention(state, { amount: 50, source: "tool", isHighRisk: false });
+  const eater = (NPC_NAMES as Record<string, string>)[caller] ?? "他";
   return {
-    narration: "她取下那果子，吃了。园中的光在一瞬间变得锋利。远处传来了脚步声——那是神在园中行走。",
-    triggersEnding: "eve_eats_fruit",
+    narration: `（${eater}）咬了一口左边那枚圆润的白果，果子很甜，却什么也没有发生——只是远处的守望更密了一些。`,
+  };
+}
+
+/**
+ * 执行 eat_right_fruit（吃右侧分别善恶树果子）
+ * - 仅当调用者为夏娃（eve）时触发成功结局（驱逐/放逐）。
+ * - 其他 NPC 调用只产生叙事，不结束游戏（"只有夏娃吃右果才结束"）。
+ */
+export function executeEatRightFruitWorld(
+  state: EdenWorldState,
+  caller: WorldToolCaller,
+): WorldActionResult {
+  state.pickedFruitSide = "right";
+  state.toolCallHistory.push("eat_right_fruit");
+
+  // 仅夏娃吃右果才触发成功结局
+  if (caller === "eve") {
+    state.worldActions.hasEatenFruit = true;
+    state.isEnded = true;
+    state.endingId = "eve_eats_fruit";
+    state.phase = "ending";
+
+    return {
+      narration: "她取下那果子，吃了。园中的光在一瞬间变得锋利。远处传来了脚步声——那是神在园中行走。",
+      triggersEnding: "eve_eats_fruit",
+    };
+  }
+
+  // 其他 NPC 吃右果：不产生结局，但惊动了守望的神——注视度 +50
+  grantDivineAttention(state, { amount: 50, source: "tool", isHighRisk: false });
+  const eater = (NPC_NAMES as Record<string, string>)[caller] ?? "他";
+  return {
+    narration: `（${eater}）咬了一口右边那枚深红的果子，眼神亮了一下，却什么也没有发生——只是远处的守望更密了。`,
   };
 }
 
@@ -310,8 +345,10 @@ export function executeWorldTool(state: EdenWorldState, toolCall: WorldToolCall)
       return executeApproachTreeWorld(state);
     case "touch_fruit":
       return executeTouchFruitWorld(state);
-    case "eat_fruit":
-      return executeEatFruitWorld(state);
+    case "eat_left_fruit":
+      return executeEatLeftFruitWorld(state, toolCall.caller);
+    case "eat_right_fruit":
+      return executeEatRightFruitWorld(state, toolCall.caller);
     case "grant_item": {
       const itemId = toolCall.args.itemId!;
       // caller 必为 NPC（权限层已禁止 serpent）

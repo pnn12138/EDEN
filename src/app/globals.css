@@ -7939,6 +7939,31 @@ a:hover {
   background: rgba(200, 110, 90, 0.24);
 }
 
+/* ---- 存档匣：可编辑存档名 ---- */
+.eden-save-slot-name-input {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: inherit;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: #ece3c8;
+  background: rgba(20, 17, 12, 0.5);
+  border: 1px solid rgba(200, 168, 110, 0.35);
+  border-radius: 7px;
+  padding: 6px 10px;
+  margin-bottom: 6px;
+}
+
+.eden-save-slot-name-input::placeholder {
+  color: rgba(199, 189, 154, 0.5);
+  font-weight: 400;
+}
+
+.eden-save-slot-name-input:focus {
+  outline: none;
+  border-color: rgba(216, 192, 128, 0.8);
+}
+
 /* ---- 模态内确认层（替代 window.confirm） ---- */
 .eden-modal-confirm-overlay {
   position: absolute;

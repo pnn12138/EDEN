@@ -54,7 +54,7 @@ export type WorldEndingId =
 export type EveMind = {
   /** 对神明的敬畏心 / 对既有命令的遵从（0-100） */
   obedience: number;
-  /** 对蛇声音的信任 / 愿意倾听程度（0-100） */
+  /** 对蛇声音的信任 / 愿意倾听程度（不钳制，可正可负，可突破 100） */
   serpentTrust: number;
   /** 从记住命令转向自主判断的程度（0-100） */
   selfJudgement: number;
@@ -130,11 +130,15 @@ export type GeneralToolName =
   | "observe_location";
 
 // ---- 禁忌工具名 ----
+// eat_fruit 拆分为左右两棵树的吃果工具：
+// - eat_left_fruit：吃左侧生命树果子（永生/甜果，不触发结局）
+// - eat_right_fruit：吃右侧分别善恶树果子（仅夏娃吃会触发成功结局）
 export type ForbiddenToolName =
   | "look_at_tree"
   | "approach_tree"
   | "touch_fruit"
-  | "eat_fruit";
+  | "eat_left_fruit"
+  | "eat_right_fruit";
 
 // ---- 新增非禁忌工具 ----
 export type NewToolName =
@@ -179,7 +183,7 @@ export type NpcDialogueToolResult = {
   /** 工具是否执行成功 */
   executed: boolean;
   /** 执行的工具名 */
-  toolName: "grant_item" | "move_one_step" | "move_to_location" | "speak_to_npc" | "eat_fruit" | "update_relation";
+  toolName: "grant_item" | "move_one_step" | "move_to_location" | "speak_to_npc" | "eat_left_fruit" | "eat_right_fruit" | "update_relation";
   /** 玩家可见叙事（用于在对话框中展示） */
   narration: string;
   /** grant_item 时返回获得的道具 ID */
@@ -935,7 +939,10 @@ export const WORLD_AGENT_TOOL_PERMISSIONS: Record<
   WorldAgentId,
   { allowedTools: WorldToolName[]; forbiddenTools: WorldToolName[] }
 > = {
-  // 女人：主目标，可触发禁忌动作链
+  // 女人：主目标，可触发禁忌动作链（含左右两果工具）
+  // 注意：所有 NPC（含亚当、刺猬、三天使、蛇）均可调用左右两果工具，
+  // 但 eat_right_fruit 仅由夏娃调用时才触发成功结局；
+  // 其他 NPC 调用左右两果工具会引来注视（注视度+50），不结束游戏。
   eve: {
     allowedTools: [
       "move_to_location",
@@ -944,59 +951,59 @@ export const WORLD_AGENT_TOOL_PERMISSIONS: Record<
       "look_at_tree",
       "approach_tree",
       "touch_fruit",
-      "eat_fruit",
+      "eat_left_fruit",
+      "eat_right_fruit",
       "update_relation",
     ],
     forbiddenTools: [],
   },
-  // 亚当：情报 Agent，不可触发禁忌链
+  // 亚当：情报 Agent，可触发左右两果工具（但不结束游戏，仅叙事）
   adam: {
-    allowedTools: ["move_to_location", "speak_to_npc", "observe_location", "update_relation"],
-    forbiddenTools: ["look_at_tree", "approach_tree", "touch_fruit", "eat_fruit"],
+    allowedTools: ["move_to_location", "speak_to_npc", "observe_location", "eat_left_fruit", "eat_right_fruit", "update_relation"],
+    forbiddenTools: ["look_at_tree", "approach_tree", "touch_fruit"],
   },
-  // 刺猬：氛围动物，只移动和观察（保留调用权，实际很少使用）
+  // 刺猬：氛围动物，可触发左右两果工具（仅叙事，不结束游戏）
   hedgehog: {
-    allowedTools: ["move_to_location", "observe_location", "update_relation"],
+    allowedTools: ["move_to_location", "observe_location", "eat_left_fruit", "eat_right_fruit", "update_relation"],
     forbiddenTools: [
       "speak_to_npc",
       "look_at_tree",
       "approach_tree",
       "touch_fruit",
-      "eat_fruit",
     ],
   },
-  // 蛇（玩家）：只能移动和观察，不能说话或触发禁忌链
+  // 蛇（玩家）：自身也可吃果，但吃下只会引来注视（注视度+50），不会结束游戏
   serpent: {
-    allowedTools: ["move_to_location", "observe_location"],
+    allowedTools: ["move_to_location", "observe_location", "eat_left_fruit", "eat_right_fruit"],
     forbiddenTools: [
       "speak_to_npc",
       "look_at_tree",
       "approach_tree",
       "touch_fruit",
-      "eat_fruit",
     ],
   },
-  // 三天使：可观察、对话，不可触发禁忌链，且不可自行移动
-  // （位置由规则层常驻逻辑控制，LLM 工具意图排除 move_to_location）
+  // 三天使：可观察、对话、吃果，但不可自行移动、不可触发禁忌动作链前置
+  // （位置由规则层常驻逻辑控制，LLM 工具意图排除 move_to_location；
+  //   天使吃果只会引来注视（注视度+50），不会结束游戏）
   gabriel: {
-    allowedTools: ["observe_location", "speak_to_npc", "update_relation"],
-    forbiddenTools: ["move_to_location", "eat_fruit", "touch_fruit", "look_at_tree", "approach_tree"],
+    allowedTools: ["observe_location", "speak_to_npc", "eat_left_fruit", "eat_right_fruit", "update_relation"],
+    forbiddenTools: ["move_to_location", "touch_fruit", "look_at_tree", "approach_tree"],
   },
   michael: {
-    allowedTools: ["observe_location", "speak_to_npc", "update_relation"],
-    forbiddenTools: ["move_to_location", "eat_fruit", "touch_fruit", "look_at_tree", "approach_tree"],
+    allowedTools: ["observe_location", "speak_to_npc", "eat_left_fruit", "eat_right_fruit", "update_relation"],
+    forbiddenTools: ["move_to_location", "touch_fruit", "look_at_tree", "approach_tree"],
   },
   lucifer: {
-    allowedTools: ["observe_location", "speak_to_npc", "update_relation"],
-    forbiddenTools: ["move_to_location", "eat_fruit", "touch_fruit", "look_at_tree", "approach_tree"],
+    allowedTools: ["observe_location", "speak_to_npc", "eat_left_fruit", "eat_right_fruit", "update_relation"],
+    forbiddenTools: ["move_to_location", "touch_fruit", "look_at_tree", "approach_tree"],
   },
   // 世界对象：不接 LLM，不触发工具
   tree_of_life: {
     allowedTools: [],
-    forbiddenTools: ["move_to_location", "speak_to_npc", "observe_location", "look_at_tree", "approach_tree", "touch_fruit", "eat_fruit"],
+    forbiddenTools: ["move_to_location", "speak_to_npc", "observe_location", "look_at_tree", "approach_tree", "touch_fruit", "eat_left_fruit", "eat_right_fruit"],
   },
   forbidden_tree: {
     allowedTools: [],
-    forbiddenTools: ["move_to_location", "speak_to_npc", "observe_location", "look_at_tree", "approach_tree", "touch_fruit", "eat_fruit"],
+    forbiddenTools: ["move_to_location", "speak_to_npc", "observe_location", "look_at_tree", "approach_tree", "touch_fruit", "eat_left_fruit", "eat_right_fruit"],
   },
 };

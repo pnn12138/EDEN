@@ -1,0 +1,45 @@
+# ============================================================
+# EDEN Docker 构建忽略（配合根目录 Dockerfile 的 COPY . . 使用）
+# 目的：构建镜像时只复制「运行时必需」文件，避免把依赖、密钥、
+#       测试与评审资料卷进镜像，减小镜像体积并防止密钥泄露。
+# 镜像内会重新执行 npm ci + npm run build 生成依赖与 .next。
+# ============================================================
+
+# 依赖与构建产物（由镜像内重新生成）
+node_modules
+.next
+out
+build
+*.tsbuildinfo
+next-env.d.ts
+
+# 本地密钥 / 环境
+.env
+.env*.local
+.edgeone
+
+# 测试与评审资料（运行时不需要）
+doc
+design
+scripts
+tests
+coverage
+playwright-report
+test-results
+
+# Agent / 本地元数据
+.codebuddy
+.codegraph
+.claude
+.agents
+.obsidian
+.cnb
+.git
+.gitignore
+AGENTS.md
+README.md
+*.md
+
+# 系统 / 日志
+.DS_Store
+*.log

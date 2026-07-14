@@ -227,7 +227,7 @@ export default function HomePage() {
                     onClick={() => handleReadSave(slot.index)}
                     data-testid={`home-slot-load-${slot.index}`}
                   >
-                    <strong>存档 {slot.index}</strong>
+                    <strong>{slot.name ?? `存档 ${slot.index}`}</strong>
                     {slot.empty ? (
                       <span>暂无存档</span>
                     ) : slot.corrupted ? (

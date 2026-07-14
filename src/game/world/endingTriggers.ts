@@ -91,7 +91,7 @@ export function getGabrielSilenceExplanation(): string {
 
 /**
  * 路西法好感首次归零时的一次性余烬发放。
- * 效果：米迦勒/加百列 affinity -30（下限 0）；女人 serpentTrust +10（上限 100）；
+ * 效果：米迦勒/加百列 affinity -30（下限 0）；女人 serpentTrust +10（不钳制，可正可负）；
  * 亚当对蛇怀疑 -10（下限 0）；加 guard（luciferZeroAffinityGiftClaimed）绝不重复。
  * 返回是否触发。
  */
@@ -107,8 +107,8 @@ export function grantLuciferFallenStarAsh(state: EdenWorldState): boolean {
     const rel = state.npcRelations[angelId];
     if (rel) rel.affinity = Math.max(0, rel.affinity - 30);
   }
-  // 女人 serpentTrust +10（上限 100）
-  state.eveMind.serpentTrust = Math.min(100, state.eveMind.serpentTrust + 10);
+  // 女人 serpentTrust +10（信任可突破 100，不钳制上限）
+  state.eveMind.serpentTrust = state.eveMind.serpentTrust + 10;
   // 亚当对蛇怀疑 -10（下限 0）
   state.adamMind.suspicionTowardSerpent = Math.max(0, state.adamMind.suspicionTowardSerpent - 10);
 

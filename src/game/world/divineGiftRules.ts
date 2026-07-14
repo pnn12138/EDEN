@@ -176,7 +176,8 @@ function settleDivineGiftRelation(state: EdenWorldState): void {
   rel("michael").affinity = rel("michael").affinity + pos(15);
   rel("gabriel").affinity = Math.max(0, rel("gabriel").affinity + pos(15));
   rel("lucifer").affinity = Math.max(0, rel("lucifer").affinity + pos(15));
-  state.eveMind.serpentTrust = Math.max(0, state.eveMind.serpentTrust + pos(10));
+  // 对蛇信任不钳制，可正可负
+  state.eveMind.serpentTrust = state.eveMind.serpentTrust + pos(10);
   state.adamMind.suspicionTowardSerpent = Math.max(
     0,
     state.adamMind.suspicionTowardSerpent - pos(10),
@@ -194,7 +195,8 @@ export function applyGracePrismRetroactive(state: EdenWorldState): void {
   rel("michael").affinity = rel("michael").affinity + 15 * ownedCount;
   rel("gabriel").affinity = Math.max(0, rel("gabriel").affinity + 15 * ownedCount);
   rel("lucifer").affinity = Math.max(0, rel("lucifer").affinity + 15 * ownedCount);
-  state.eveMind.serpentTrust = Math.max(0, state.eveMind.serpentTrust + 10 * ownedCount);
+  // 对蛇信任不钳制，可正可负
+  state.eveMind.serpentTrust = state.eveMind.serpentTrust + 10 * ownedCount;
   state.adamMind.suspicionTowardSerpent = Math.max(
     0,
     state.adamMind.suspicionTowardSerpent - 10 * ownedCount,
@@ -305,6 +307,7 @@ export function applyGiftCapstone(state: EdenWorldState): void {
         rewardClaimed: false,
         lastAffinitySignature: null,
         lastAffinityChangeReason: null,
+        lastObedienceChangeReason: null,
       });
     r.affinity = Math.max(r.affinity, 100);
     r.rewardEligible = true;

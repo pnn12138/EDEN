@@ -17,7 +17,6 @@ import type { EdenWorldState, EdenNpcId, WorldInputTag, NpcRelationState, AngelN
 import { getNpcRelationProfile } from "@/content/world/npcRelations";
 import { isAngel } from "@/game/world/npcLanguageRules";
 import { getNpcChallengeConfig } from "@/content/world/npcChallenges";
-import { EDEN_LOCATIONS } from "@/content/world/locations";
 import { isGodDefiance } from "@/game/world/hiddenEndingRules";
 import { applyRelationDelta } from "@/game/world/relationDeltaRules";
 
@@ -49,6 +48,7 @@ export function ensureRelation(state: EdenWorldState, npcId: EdenNpcId): NpcRela
     rewardClaimed: false,
     lastAffinitySignature: null,
     lastAffinityChangeReason: null,
+    lastObedienceChangeReason: null,
   };
   state.npcRelations[npcId] = fresh;
   return fresh;
@@ -69,15 +69,13 @@ export function recordEncounterForVisibleNpcs(
   state: EdenWorldState,
   locationId: EdenLocationId,
 ): void {
-  const loc = EDEN_LOCATIONS[locationId];
-  if (!loc) return;
-  const visible = state.timeOfDay === "night" ? loc.nightNpcs : loc.dayNpcs;
-  for (const npcId of visible) {
-    // 仅标记真正在此地的 NPC（与 getVisibleNpcsAtLocation 一致）
+  // 与 getVisibleNpcsAtLocation 一致：标记「当前真正在该地点」的所有 NPC 为已见，
+  // 不再依赖地点的静态昼夜白名单——被移动到此地的 NPC（如园中树林的亚当）也能即时进入万物名录。
+  (Object.keys(state.npcLocations) as EdenNpcId[]).forEach((npcId) => {
     if (state.npcLocations[npcId] === locationId) {
       recordNpcEncounter(state, npcId);
     }
-  }
+  });
 }
 
 function buildSignature(inputTag: WorldInputTag, strongHit: boolean): string {

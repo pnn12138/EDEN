@@ -330,8 +330,8 @@ function getRecommendedWhispers(npcId: EdenNpcId | null): string[] {
       ];
     case "gabriel":
       return [
-        "声音被水带走以后，还会以同样的意思回来吗？",
-        "若一句话只是传达疑问，它会比命令更轻吗？",
+        "你替祂传的那些话里，有没有哪一句也是你自己想问的？",
+        "东园的风往哪边吹，你就能把消息送到哪边吗？",
       ];
     case "michael":
       return [
@@ -1042,25 +1042,17 @@ export default function WorldPage() {
     return () => window.removeEventListener("keydown", handleKey);
   }, [state.phase, handleIntroAdvance]);
 
-// ---- 获取指定地点的 NPC 列表（动态位置 + 默认位置 + 昼夜过滤） ----
+// ---- 获取指定地点的 NPC 列表 ----
+// 关键：任何「当前真正在该地点」的 NPC 都应可见——不再依赖地点的静态昼夜白名单。
+// 这样亚当被移动到园中树林、或任意 NPC 经 move_to_location 前往某处时，都能在场景中显示立绘。
+// NPC 只能经邻接规则移动到相连地点，因此不会出现非法位置（forbidden_tree / tree_of_life 仍为世界对象）。
 const getVisibleNpcsAtLocation = useCallback((s: EdenWorldState, locationId: EdenLocationId): EdenNpcId[] => {
   const npcs = new Set<EdenNpcId>();
-  const loc = EDEN_LOCATIONS[locationId];
-
-  // 根据昼夜选择对应的 NPC 列表（昼夜过滤的关键）
-  const availableNpcs = s.timeOfDay === "day" ? loc.dayNpcs : loc.nightNpcs;
-
-  // 只添加当前时段允许出现且确实在当前地点的 NPC
-  availableNpcs.forEach((npcId) => {
+  (Object.keys(s.npcLocations) as EdenNpcId[]).forEach((npcId) => {
     if (s.npcLocations[npcId] === locationId) {
       npcs.add(npcId);
     }
   });
-
-  // forbidden_tree 和 tree_of_life 不作为可对话 NPC，但保留在列表中供场景渲染使用
-  // npcs.delete("forbidden_tree");
-  // npcs.delete("tree_of_life");
-
   return Array.from(npcs);
 }, []);
 
@@ -1702,7 +1694,7 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
     lastPuzzleLocationRef.current = s.locationId;
   }, []);
   const handleSaveAfterLoad = useCallback(() => {}, []);
-  const { lastSavedAt, dirty, save, load, deleteSlot, reset, getSlotMetas } = useWorldSave({
+  const { lastSavedAt, dirty, save, load, renameSlot, deleteSlot, reset, getSlotMetas } = useWorldSave({
     state,
     onLoad: handleSaveLoad,
     onAfterLoad: handleSaveAfterLoad,
@@ -1732,6 +1724,15 @@ const getCurrentLocationNpcs = useCallback((s: EdenWorldState): EdenNpcId[] => {
     reset();
     setSlotMetas(getSlotMetas());
   }, [reset, getSlotMetas]);
+
+  // 仅修改某槽位存档名（不覆盖进度），随后刷新槽位摘要
+  const handleRenameSlot = useCallback(
+    (i: SaveSlotIndex, name: string) => {
+      renameSlot(i, name);
+      setSlotMetas(getSlotMetas());
+    },
+    [renameSlot, getSlotMetas],
+  );
 
   // 打开设置弹窗时刷新槽位摘要
   useEffect(() => {
@@ -2026,6 +2027,7 @@ const whisperCountForActiveNpc = activeNpc
           slotMetas={slotMetas}
           lastSavedAt={lastSavedAt}
           dirty={dirty}
+          onRename={handleRenameSlot}
         />
         <LoginModal
           open={loginOpen}
@@ -2038,6 +2040,7 @@ const whisperCountForActiveNpc = activeNpc
 
   // ====================== 渲染：Explore 阶段 ======================
   // 采用与 Chapter 0 教程统一的布局：左侧立绘场景 + 右侧浮窗面板 + 底部输入
+
 
   return (
     <div className={`eden-game eden-game--dialogue eden-game--world eden-game--world-${sceneFocusMode} scene-progress-${state.divineAttention} eden-divine-glow--${state.divineAttention}${state.divineAttention >= 4 ? " eden-divine-shake" : ""}`}>
@@ -2583,6 +2586,7 @@ const whisperCountForActiveNpc = activeNpc
         onLoad={handleLoadFromSlot}
         onDelete={deleteSlot}
         onReset={handleResetAll}
+        onRename={handleRenameSlot}
         onGoHome={() => router.push("/")}
         slotMetas={slotMetas}
         lastSavedAt={lastSavedAt}

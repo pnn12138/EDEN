@@ -68,10 +68,6 @@ export type ResonanceEffect = {
 
 type PendingConsumableEffect = EdenWorldState["pendingConsumableEffects"][number];
 
-function clampMind(value: number): number {
-  return Math.max(0, Math.min(100, value));
-}
-
 function matchesAction(item: WorldItem | undefined, actionKind: ResonanceActionKind): boolean {
   if (!item || item.kind !== "consumable") return false;
   return item.bindTargets?.some((target) => {
@@ -543,7 +539,8 @@ export function applyPendingConsumableToDoveMessage(
   }
 
   if (bonusSerpentTrust !== 0) {
-    state.eveMind.serpentTrust = clampMind(state.eveMind.serpentTrust + bonusSerpentTrust);
+    // 对蛇信任不钳制，可正可负（可突破 100，也可为负）
+    state.eveMind.serpentTrust = state.eveMind.serpentTrust + bonusSerpentTrust;
   }
 
   return { bonusSerpentTrust, silentGrassActive, narrations };

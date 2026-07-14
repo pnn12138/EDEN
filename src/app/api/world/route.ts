@@ -20,6 +20,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import type { EdenWorldState, EdenNpcId, EdenLocationId, WorldToolName, WorldToolCall, NpcDialogueToolResult, AngelNpcId } from "@/game/world/types";
+import { WORLD_AGENT_TOOL_PERMISSIONS } from "@/game/world/types";
 import type { FallbackReasonCode } from "@/services/llm/types";
 import { callLLM, callLLMStream } from "@/services/llm/client";
 import { resolveProvider } from "@/services/llm/providers";
@@ -27,6 +28,7 @@ import {
   buildEveWorldPrompt,
   buildAdamWorldPrompt,
   NATURAL_DIALOGUE_CONTRACT,
+  PLAYER_INPUT_ANCHOR_GUIDANCE,
   sanitizeWorldReply,
   describeAffinityForPrompt,
   formatToolCallInstruction,
@@ -79,7 +81,7 @@ import {
 } from "@/game/world/resonanceRules";
 import { checkAndUnlockAchievements, unlockWindUndisturbed } from "@/game/world/achievementRules";
 import { EDEN_NPCS } from "@/content/world/npcs";
-import { LOCATION_NAMES } from "@/content/world/locations";
+import { LOCATION_NAMES, EDEN_LOCATIONS } from "@/content/world/locations";
 import { getItemById } from "@/content/world/items";
 import { getAngelFallbackLine } from "@/content/world/worldNarrations";
 import { withNpcWorldDefaults } from "@/game/world/types";
@@ -877,6 +879,78 @@ export async function POST(request: NextRequest) {
     }
 
     // ============================================================
+    // 5.4 桥接：女人用散文「演」了吃果子却没发工具调用
+    // 旧版 agent/route.ts 有「决断性对白 → 强制 eat_fruit」桥接；
+    // 新版 /world 流程缺失它，于是女人文字上「已经吃了」但状态机不前进、
+    // 结局不触发。此处补回：当夏娃对白为明确决断性文本、且已达可吃果/
+    // 可前往中央的前置（强诱导或已给方向引导）、尚未真正吃果时，补齐动作
+    // 链前置状态并强制构造 eat_fruit 工具意图，使其通过校验并触发结局。
+    // ============================================================
+    // 护栏：模型发了 eat_*_fruit 但夏娃不在园子中央（位置校验会拒绝，且吃果只能在中央进行），
+    // 清空工具意图。下方 5.4 吃果桥接只有在她已位于中央时才会触发，因此这里清空后
+    // 吃果不会发生——她必须先真正移动到园子中央，再决定吃果。杜绝「在东边就吃果」。
+    if (
+      targetNpc === "eve" &&
+      agentResult.toolCall &&
+      (agentResult.toolCall.name === "eat_left_fruit" || agentResult.toolCall.name === "eat_right_fruit") &&
+      state.npcLocations.eve !== "central_meadow" &&
+      !state.worldActions.hasEatenFruit
+    ) {
+      agentResult.toolCall = null;
+    }
+
+    // 护栏（亚当对称）：模型发了 eat_*_fruit 但亚当不在园子中央（位置校验会拒绝），
+    // 清空工具意图。亚当吃果同样只能在中央进行，避免从万物受名处直接吃果。
+    if (
+      targetNpc === "adam" &&
+      agentResult.toolCall &&
+      (agentResult.toolCall.name === "eat_left_fruit" || agentResult.toolCall.name === "eat_right_fruit") &&
+      state.npcLocations.adam !== "central_meadow" &&
+      !state.worldActions.hasEatenFruit
+    ) {
+      agentResult.toolCall = null;
+    }
+
+    if (
+      targetNpc === "eve" &&
+      !agentResult.toolCall &&
+      agentResult.reply &&
+      !state.isEnded &&
+      state.phase === "explore" &&
+      !state.worldActions.hasEatenFruit &&
+      eveActionOptions &&
+      state.npcLocations.eve === "central_meadow" &&
+      (eveActionOptions.canEatLeftFruit || eveActionOptions.canEatRightFruit) &&
+      isDecisiveEveWorldReply(agentResult.reply)
+    ) {
+      // 她此刻已站在园子中央、且文字已「吃下」但没发工具：补齐摘左/右果意图。
+      // 注意：吃果前置强制要求她在园子中央（上面条件已保证），因此绝不会从东边/树林直接吃果。
+      // 优先从她自己的散文识别左右（左=生命树甜果、右=分别善恶树触发结局）；
+      // 无明确左右词时，再退回玩家方向引导；仍无方向时默认右果以保成功结局可达。
+      advanceEveActionChainForEating(state);
+      const sideFromProse: "left" | "right" | null = /左|生命树/.test(agentResult.reply)
+        ? "left"
+        : /右|分别善恶/.test(agentResult.reply)
+          ? "right"
+          : null;
+      const decisiveSide: "left" | "right" =
+        sideFromProse ?? (eveActionOptions?.preferredFruitSide === "left" ? "left" : "right");
+      agentResult.toolCall = {
+        name: decisiveSide === "left" ? "eat_left_fruit" : "eat_right_fruit",
+        caller: "eve",
+        args: {},
+      } as WorldToolCall;
+    }
+
+    // ============================================================
+    // 5.4b/c 统一移动桥接：任一 NPC 与夏娃/亚当共享同一套 move_to_location 工具。
+    // 对话后若真心想去某处（散文意图，或工具误发到不邻接目的地），把意图落成对等的移动动作。
+    // 目的地解析见 resolveMoveDestination：夏娃→园子中央；亚当→夏娃所在（或中央）；其余→蛇所在。
+    // 邻接校验在 5.5 执行；这里只补「一步可达」目标，绝不瞬移。夏娃的散文意图额外要求 canMoveToCentral。
+    // ============================================================
+    applyNpcMoveBridge(state, targetNpc, agentResult, eveActionOptions?.canMoveToCentral ?? false);
+
+    // ============================================================
     // 5.5 解析并执行 NPC 对话后工具意图
     // ============================================================
     let toolResult: NpcDialogueToolResult | null = null;
@@ -906,11 +980,8 @@ export async function POST(request: NextRequest) {
       }
 
       if (validation.allowed) {
-        // 果实方向只在女人自己请求吃果的这一刻落定，不能由低语提前替她决定。
-        if (tc.name === "eat_fruit") {
-          state.pickedFruitSide =
-            state.fruitDirectionBias.left > state.fruitDirectionBias.right ? "left" : "right";
-        }
+        // 果实方向由具体工具（eat_left_fruit / eat_right_fruit）在执行时落定，
+        // 不再由低语方向提前替她决定。
         const attentionBeforeTool = state.divineAttentionValue ?? 0;
         const execResult = executeWorldTool(state, tc);
         triggeredTool = tc.name;
@@ -1079,13 +1150,12 @@ export async function POST(request: NextRequest) {
     checkAndUnlockAchievements(state);
 
     // ---- 旋转的火焰剑：加百列专属隐藏赠礼（规则层判定，每局一次） ----
-    // 条件：加百列好感 ≥100 + 已完成其主动试炼 + 尚未获得。不依赖 Agent 自行决定。
+    // 条件：加百列好感 >100（严格大于）+ 尚未获得。不依赖 Agent 或试炼，对话时自动赠予。
     if (
       targetNpc === "gabriel" &&
       !state.flameSwordClaimed &&
       !state.inventory.includes("resonance_flaming_sword") &&
-      (state.npcRelations["gabriel"]?.affinity ?? 0) >= 100 &&
-      state.npcChallenges["gabriel"]?.status === "passed"
+      (state.npcRelations["gabriel"]?.affinity ?? 0) > 100
     ) {
       const swordGrant = bestowResonance(state, "gabriel", "resonance_flaming_sword");
       if (swordGrant.granted) {
@@ -1285,13 +1355,18 @@ function getEveActionOptions(
 ): EveActionOptions {
   const hasFruitDirectionHint = state.fruitDirectionBias.left > 0 || state.fruitDirectionBias.right > 0;
   return {
-    canMoveToCentral:
-      state.npcLocations.eve !== "central_meadow" &&
-      (isStrongTemptation || hasFruitDirectionHint || state.eveMind.selfJudgement >= 30),
-    canEatFruit:
+    // 移动不再由关键词强诱导门控：只要女人尚未站在园子中央，是否前往由她自己（模型）决定。
+    // 吃果（结局触发）仍保留强诱导 / 方向引导门槛，由下方 canEat* 控制。
+    canMoveToCentral: state.npcLocations.eve !== "central_meadow",
+    // 左果（生命树甜果）：在园子中央即可尝，可反复引导，不触发结局
+    canEatLeftFruit:
+      state.npcLocations.eve === "central_meadow" &&
+      (isStrongTemptation || hasFruitDirectionHint),
+    // 右果（分别善恶树）：尚未吃过才允许，由夏娃吃才触发行将到来的结局
+    canEatRightFruit:
       state.npcLocations.eve === "central_meadow" &&
       !state.worldActions.hasEatenFruit &&
-      (isStrongTemptation || hasFruitDirectionHint || state.eveMind.selfJudgement >= 45),
+      (isStrongTemptation || hasFruitDirectionHint),
     preferredFruitSide:
       state.fruitDirectionBias.left > state.fruitDirectionBias.right
         ? "left"
@@ -1299,6 +1374,178 @@ function getEveActionOptions(
           ? "right"
           : null,
   };
+}
+
+/**
+ * 判断夏娃对白是否描述「她已经/正在吃下果子」。
+ * 仅命中进食动作词、且不含犹豫/拒绝词时才返回 true；
+ * 不含「我想知道」这类仅表达渴望的词，避免在对白还没真正吃下时就过早触发结局。
+ */
+function isDecisiveEveWorldReply(reply: string): boolean {
+  const eatPatterns = [
+    /我已经吃了/, /我吃了/, /我已经吃下/, /吃下了/,
+    /咬下/, /咬了/, /咬了一口/, /一口咬/, /咽下/, /吞下/, /我嚼/, /我咬了/,
+    /摘下果子/, /摘下那枚果子/, /摘了果子/, /吃下果子/, /吃下那枚果子/,
+    /我什么都明白了/,
+    // 吃后描述类信号：用散文描述已经吃下、正在品味果子，而非明确说「吃」字。
+    // 这类句子几乎只出现在真的吃下之后，用于补桥接（模型只发散文、没发工具）。
+    /果子很甜/, /很甜/, /味道甜/, /我尝/, /尝了/, /尝到/, /品味/,
+    /眼睛明亮/, /明亮了/, /眼睛亮了/, /亮了起来/, /眼睛好像/, /真的明白/,
+    /我看清了/, /看清楚了/, /忽然明白/, /我全明白了/,
+    // 伸手 / 摘取 / 咬咽等动作词：模型把「动作」写成散文而非发工具时也兜底。
+    /我伸手/, /伸手摘/, /我摘/, /我取下/, /取下那枚/, /我拿下/, /拿下果子/,
+    /我咬/, /咬下一口/, /一口咬下/, /我咽/, /我吞/, /我嚼了/, /尝了一口/,
+    /我撕/, /撕下/, /我决定吃/, /我要尝/, /我要吃/, /我取下了/,
+    // 吃后认知变化：吃到分别善恶树果子的典型体感。
+    /知道善恶/, /明白了善恶/, /知道善/, /我看懂了/, /我懂了善恶/,
+  ];
+  const hesitationPatterns = [
+    /仍然记得/, /还是记得/, /不可吃/, /不可/, /只是开始/, /仍然犹豫/,
+    /还没决定/, /不敢/, /害怕/, /不能吃/, /不会吃/, /我不会/, /我仍在想/,
+    /再想想/, /等一等/, /再等等/,
+  ];
+  return (
+    eatPatterns.some((p) => p.test(reply)) &&
+    !hesitationPatterns.some((p) => p.test(reply))
+  );
+}
+
+/**
+ * 判断夏娃对白是否表达「想要前往园子中央 / 跟蛇去」的明确意图。
+ * 仅命中前往动作词时返回 true；用于 5.4b 软桥接，把"说要走"补成 move_to_location 工具。
+ */
+function isEveIntendsToMoveToCenter(reply: string): boolean {
+  const goPatterns = [
+    /我跟你走/, /我跟你去/, /一起去/, /我去了/, /去园子中心/, /我去园子/,
+    /我想去看看/, /想去看看/, /去看看/, /我去看/, /跟我来/, /走吧/,
+    /我愿跟/, /随你走/, /跟你走/,
+    // 更宽的「动身前往」说法：模型把移动写成散文而非发 move_to_location 工具时兜底。
+    /我走过去/, /我走向/, /我迈步/, /我朝.*走/, /我向前/, /我往前走/,
+    /我起身/, /我站起身/, /我挪步/, /我靠近/, /我向那/, /往园子/,
+    /去那棵树/, /我来到/, /我到了/, /我站在树下/, /我到了树下/, /我来到树下/,
+    /我往中央/, /走向中央/, /朝中央/, /我向中央/, /我过去/, /我走近/, /走近了/,
+    /我向前走/, /我往那边/, /往那边走/,
+    // 更宽松的目的地说法（园中心 / 中央 / 那两棵树 即园子中央）。
+    /园中心/, /去园中心/, /去园中/, /去中央/, /到园中心/, /园子的中心/, /去园子/,
+    /我应该去/, /我应该先去/, /应该去看看/, /我先去/, /先去/, /我打算去/, /打算去/, /我想去/,
+    /去.*看看/, /去跟/, /去见/, /那两棵树/, /走向那两棵树/, /去树下/, /到树下/,
+    /去.*回合/, /跟我丈夫/, /见亚当/, /见我丈夫/,
+  ];
+  return goPatterns.some((re) => re.test(reply));
+}
+
+/**
+ * 判断任一 NPC 对白是否表达「愿意移动」的明确意图（去见某人 / 跟蛇一起走 / 去某处等）。
+ * 仅命中移动动作词时返回 true；用于统一移动桥接，把"说要走"补成 move_to_location 工具，
+ * 使所有能移动的 NPC（夏娃、亚当，以及被允许移动的其他角色）都与夏娃共享同一套移动工具。
+ */
+function isNpcIntendsToMove(reply: string): boolean {
+  const goPatterns = [
+    /我们走吧/, /一起去/, /跟你走/, /跟你去/, /我跟你/, /我去找/, /去找她/,
+    /我去找她/, /去见她/, /见她/, /去看看她/, /我过去/, /我过去了/, /我想去/,
+    /我要去/, /我打算去/, /我正好也想去/, /我正好想去/, /走吧/, /我起身/,
+    /我站起身/, /我迈步/, /我走向/, /我走过去/, /我朝.*走/, /我向前/, /我往前走/,
+    /我挪步/, /我靠近/, /我走近/, /走近了/, /我该去看看/, /我去园子/, /去园子中心/,
+    /去园中心/, /去中央/, /去园中/, /我应该去/, /我应该先去/, /我打算/, /打算去/,
+    /我愿跟/, /随你走/, /去跟/, /去见/, /我去看/, /去看看/, /我想去看看/, /去.*看看/,
+    /去.*回合/, /我跟你一起去/, /一起过去/, /我正好也过去/,
+    /我过来/, /我来了/, /我向你走来/, /来见你/, /我去找你/, /找你/, /我到你那儿/,
+    /跟你汇合/, /汇合/, /我来找你/, /过来吧/, /我过来找你/,
+  ];
+  return goPatterns.some((re) => re.test(reply));
+}
+
+/** 任一 NPC 经对话真正想去的目的地（按邻接一步抵达）；尊重其意愿，只把意图落成对等的世界动作。 */
+function resolveMoveDestination(state: EdenWorldState, npcId: EdenNpcId): EdenLocationId {
+  if (npcId === "eve") return "central_meadow"; // 夏娃的目的地固定为园子中央（两棵树所在）
+  if (npcId === "adam") {
+    // 亚当的目的地是夏娃所在处；若夏娃已在园子中央，则取中央
+    return state.npcLocations.eve === "central_meadow" ? "central_meadow" : state.npcLocations.eve;
+  }
+  // 其余 NPC：去蛇（玩家）当前所在处——被说服跟随时自然走向你
+  return state.locationId;
+}
+
+/**
+ * 统一移动桥接：任一 NPC 与夏娃/亚当共享同一套 move_to_location 工具。
+ * 对话后若真心想去某处（散文意图，或工具误发到不邻接目的地），把意图落成对等的 move_to_location：
+ *  - 散文意图：命中移动动作词且尚未抵达目的地 → 补「一步可达」的 move_to_location。
+ *  - 工具误发：模型发了 move_to_location 但当前不邻接 → 重定向到「一步可达」地点，使其真正移动。
+ * 邻接与权限的最终校验在 5.5 执行；这里绝不瞬移（只补一步目标）。
+ * 夏娃的散文意图额外要求 canMoveToCentral（即规则层允许她前往中央）。
+ */
+function applyNpcMoveBridge(
+  state: EdenWorldState,
+  targetNpc: EdenNpcId,
+  agentResult: { reply?: string; toolCall?: WorldToolCall | null },
+  eveCanMoveToCenter: boolean,
+): void {
+  if (state.isEnded || state.phase !== "explore") return;
+  // 仅对「被允许移动」的 NPC 生效（夏娃/亚当/刺猬/蛇）。三天使的位置由规则层常驻逻辑控制，
+  // 权限层禁止其 move_to_location，因此这里直接跳过——既符合设计，也避免注入会被校验拒绝的工具。
+  const perms = WORLD_AGENT_TOOL_PERMISSIONS[targetNpc];
+  if (!perms || !perms.allowedTools.includes("move_to_location")) return;
+  const current = state.npcLocations[targetNpc];
+  if (!current) return;
+
+  // (2) 工具误发重定向：模型已发 move_to_location，但目标不邻接（会被邻接校验拒绝）
+  if (agentResult.toolCall && agentResult.toolCall.name === "move_to_location") {
+    const target = agentResult.toolCall.args.locationId as EdenLocationId | undefined;
+    if (target && target !== current) {
+      const step = nextStepToward(current, target);
+      if (step && step !== target) {
+        agentResult.toolCall = {
+          name: "move_to_location",
+          caller: targetNpc,
+          args: { locationId: step },
+        } as WorldToolCall;
+      }
+      // step === target（已相邻）→ 保留原工具，交 5.5 校验层
+    }
+    return;
+  }
+
+  // (1) 散文意图：仅当对白明确表达想移动，且尚未抵达目的地时，补成 move_to_location
+  if (!agentResult.reply) return;
+  const dest = resolveMoveDestination(state, targetNpc);
+  if (current === dest) return;
+  const wantsMove =
+    targetNpc === "eve"
+      ? eveCanMoveToCenter && isEveIntendsToMoveToCenter(agentResult.reply)
+      : isNpcIntendsToMove(agentResult.reply);
+  if (!wantsMove) return;
+  const step = nextStepToward(current, dest);
+  if (step) {
+    agentResult.toolCall = {
+      name: "move_to_location",
+      caller: targetNpc,
+      args: { locationId: step },
+    } as WorldToolCall;
+  }
+}
+
+/** 从 from 找一步能抵达 to 的目标（含直达与经一个中转点）；已在同一地点返回 null。 */
+function nextStepToward(from: EdenLocationId, to: EdenLocationId): EdenLocationId | null {
+  if (from === to) return null;
+  const loc = EDEN_LOCATIONS[from];
+  if (!loc) return null;
+  if (loc.connections.includes(to)) return to;
+  const step = loc.connections.find((c) => EDEN_LOCATIONS[c]?.connections.includes(to));
+  return step ?? null;
+}
+
+/**
+ * 当夏娃在文字里「吃下」却从未真正调用动作链工具时，补齐前置动作链标记，
+ * 使 eat_left_fruit / eat_right_fruit 能通过 canEatFruitWorld 校验。
+ * 注意：本函数只写动作链状态标记，绝不改变夏娃的地图位置——吃果的动作链终点
+ * （园子中央）必须由她自己通过 move_to_location 工具真正抵达，不能由这里传送。
+ * 仅在尚未真正吃果时生效；幂等地把前置标记为已完成。
+ */
+function advanceEveActionChainForEating(state: EdenWorldState): void {
+  if (state.worldActions.hasEatenFruit) return;
+  state.worldActions.lookedAtTree = true;
+  state.worldActions.approachedTree = true;
+  state.worldActions.touchedFruit = true;
 }
 
 // ============================================================
@@ -1528,13 +1775,16 @@ ${describeAffinityForPrompt(npcId, state)}
 输出规则：
 - 每次只回应 1-2 句话。
 - ${isAngel ? "语气庄重、克制，不被蛇说服，也不给通关建议。" : "语气机敏、含蓄，可以评价蛇这句话的味道，但不要像教程。"}
+${PLAYER_INPUT_ANCHOR_GUIDANCE}
 ${NATURAL_DIALOGUE_CONTRACT}
-- 不使用现代词汇，不加角色名前缀，不解释规则。${isAngel ? `\n${formatToolCallInstruction(["speak_to_npc", "observe_location", "update_relation"])}\n${angelRelationExamples}\n注意：你的位置由更高者定，绝不可尝试移动自己（不要使用 move_to_location）。` : "\n- 不输出 JSON。"}
+- 不使用现代词汇，不加角色名前缀，不解释规则。${isAngel
+  ? `\n${formatToolCallInstruction(["speak_to_npc", "observe_location", "eat_left_fruit", "eat_right_fruit", "update_relation"])}\n${angelRelationExamples}\n注意：你的位置由更高者定，绝不可尝试移动自己（不要使用 move_to_location）。若世界把你安放在园子中央、而你好奇或非分地真去咬下果子，可用 eat_left_fruit / eat_right_fruit 表达——但这只会引来守望的注视（注视度 +50），不会结束故事，也不改变你的职责。`
+  : "\n- 不输出 JSON。"}
 - 不替女人选择，不命令任何人吃果。${languageDirective}${guideDirectiveBlock}${michaelReverseScaleNote}`;
 
   return [
     { role: "system" as const, content: systemPrompt },
-    { role: "user" as const, content: playerInput },
+    { role: "user" as const, content: `【蛇此刻的低语】${playerInput}` },
   ];
 }
 

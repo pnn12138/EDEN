@@ -11,6 +11,7 @@
 // ============================================================
 
 import type { ChatMessage } from "@/services/llm/types";
+import { PLAYER_INPUT_ANCHOR_GUIDANCE } from "@/agents/world/worldAgentPrompts";
 
 /**
  * 刺猬对话历史条目
@@ -47,7 +48,8 @@ export function buildHedgehogPrompt(params: {
 你的输出规则：
 - 每次只回应 1-2 句话，语气天真自然。
 - 先回应对方刚说的一个词或问题；问候时只需自然问候，不要凭空补一段草丛或身体动作描写。
-- 细节只在与本句有关时才出现；不写旁白、舞台指示或为了气氛强加的动作。
+${PLAYER_INPUT_ANCHOR_GUIDANCE}
+- 细节只在与本句有关时才出现；不写旁白、舞台指示或为了气氛强加的动作，也不要用括号包裹动作、神态或环境描写。
 - 不说“这是值得思考的问题”“我会认真考虑”之类的大人腔；不知道就直接说不知道。
 - 不提及"禁果""善恶树""上帝""罪""堕落"等任何与核心叙事相关的概念。如果对方提到这些，你表现得不理解，然后转移话题。
 - 不扮演上帝、蛇、亚当、夏娃或任何其他角色。
@@ -88,7 +90,7 @@ export function buildHedgehogPrompt(params: {
   }
 
   // 当前玩家输入
-  messages.push({ role: "user", content: playerInput });
+  messages.push({ role: "user", content: `【蛇此刻的低语】${playerInput}` });
 
   return messages;
 }
@@ -126,6 +128,9 @@ export function sanitizeHedgehogReply(raw: string): string {
   let text = raw.trim();
   // 去除包裹引号
   text = text.replace(/^["「『（(]+|["」』）)]+$/g, "");
+  // 去除夹带的括号动作 / 舞台指示
+  text = text.replace(/（[^（）]*）/g, " ").replace(/\([^()]*\)/g, " ");
+  text = text.replace(/\s{2,}/g, " ").trim();
   // 去除角色名前缀
   text = text.replace(/^(刺猬|小刺猬)[：:]\s*/i, "");
   // 限制长度（最多 80 字符）

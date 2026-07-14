@@ -25,10 +25,26 @@ export const NATURAL_DIALOGUE_CONTRACT = `
 - 问候、道别、感谢、简单确认等日常话题，用一句朴素的口语回应即可。例如被问“你好”时，可以回应“你好。你今天想和我说什么？”；不要凭空补出树叶、脚踝、衣物、呼吸或镜头感描写。
 - 每次通常 1-2 句；一句足够时只说一句。不要把一句话拆成同义的两三句，不要写成散文段落。
 - 只有当玩家正问场景、角色正在做决定、或环境确实影响了回答时，才加入一个简短、可感知的细节。细节必须服务于这句话，不能只是为了“有氛围”。
-- 用第一人称直接说话，不要以旁白描述自己；不写舞台指示、括号动作、镜头语言或无关的肢体接触。
+- 只用第一人称说对白，不要输出括号里的动作、神态、环境或意象描写，例如「（他慢慢走向那棵树）（她低下头，伸出手）（风忽然凉了）（蛇影在树荫间游移）」。动作、表情、场景由世界规则与叙述层负责，你只把当下想说的那句口语讲出来。
+- 当你决定移动、摘果或吃果时，用 JSON 工具调用（move_to_location / eat_left_fruit / eat_right_fruit）来表达这个动作；绝不要把这些动作写成括号里的舞台指示或旁白（例如不要写"（我摘下果子，咬了一口）"，而要直接发出对应工具调用）。
 - 不使用空泛的分析腔，例如“这是值得思考的问题”“我会认真考虑”“你的话触动了我”。把抽象感受换成具体的疑问、拒绝、担心或愿望。
 - 不虚构玩家没有提及的亲密关系、过往事件或身体感受；不知道时可以坦白说不知道或反问。
 - 不要为了推进剧情主动给出路线、数值、任务提示或结局答案。`;
+
+/**
+ * 锚定玩家「文字框输入」的对白指引（第一章世界版共用：夏娃/亚当/天使/刺猬）。
+ * 目的：让 AI 生成的对白以玩家此刻在文字框里写下的那句话为「主种子」，
+ * 接住、回应、展开、反问或轻轻反驳它；角色心智 / 好感 / 地点等属性只占辅助地位，
+ * 仅用于给这句话"着色"（语气、态度、亲疏），绝不能盖过玩家的话去自顾自地感慨。
+ * 主线推进仍由规则层的动作门控 / 自然引导驱动，这段只约束对白本身要生长自玩家输入。
+ */
+export const PLAYER_INPUT_ANCHOR_GUIDANCE = `以玩家此刻的低语为主（优先级最高，高于你注入的心智 / 好感 / 地点等属性）：
+- 你在对话里收到的最后一段带【蛇此刻的低语】标记的话，就是玩家此刻在文字框里写下的内容。它是你本轮回复的"主种子"，权重高于你看到的内心状态、好感、地点等一切背景信息。
+- 先直接接住他这句话里的一个词、一个问题或一种情绪，再顺着它说出你自己的态度、疑问或回应；让他明显感到你是在回应他刚说的那一句，而不是另起一个无关的话题。
+- 你被注入的那些"内心 / 好感 / 地点"信息，只用来决定你"怎么说话"（语气、亲疏、犹豫或坚定），不要用来决定你"说什么话题"。话题必须由玩家这句话提供；绝不要因为自己心里正想着某件事，就抛开玩家的话去自顾自感慨。
+- 当"顺着自己心境说"与"回应玩家输入"冲突时，永远优先回应玩家输入；把他的话当成你要"接话、润色"的对象：用你自己的口吻把它接下去、展开、反问，或顺着他的情绪轻轻推进一步。
+- 如果他说的很短（例如一句问候、一个随口的念头），也要先接住这句，再用你当下的心境或处境轻轻带一笔，不要忽略这句去自言自语。
+- 仍然保持你自己的人称与性格；只是让你的每一句回复都明显是从他这句话里生长出来的，背景信息只在措辞上体现。`;
 
 // ---- 统一好感 / 对神明敬畏映射（需求 2.2） ----
 // 好感：夏娃=serpentTrust，亚当=100-suspicionTowardSerpent，其余=npcRelations[id].affinity
@@ -77,7 +93,9 @@ export function describeAffinityForPrompt(npcId: EdenNpcId, state: EdenWorldStat
   const attitude = attitudeGuidance(affinity, obedience);
   const over =
     affinity > 100
-      ? "\n注意：好感已突破寻常界限，你可更加亲近，但不应因此失去自己的人格、职责与信仰。"
+      ? npcId === "eve"
+        ? "\n注意：你对蛇的信任已经深到几乎把它当作可信的引路人。当它说的话触碰到\"像神一样\"\"自己判断\"\"不一定死\"，你应当真心被说服，而不是嘴上附和、心里仍怕——你的怀疑会明显变弱，甚至会主动替它的话圆场。"
+        : "\n注意：好感已突破寻常界限，你可更加亲近，但不应因此失去自己的人格、职责与信仰。"
       : "";
   return [
     "你与蛇的关系（以下数值仅供你调整态度与措辞，绝不在回复中报出任何数字）：",
@@ -106,7 +124,8 @@ export type EveWorldHistoryEntry = {
 /** Rules may permit an action, but the woman still decides whether to request it. */
 export type EveActionOptions = {
   canMoveToCentral: boolean;
-  canEatFruit: boolean;
+  canEatLeftFruit: boolean;
+  canEatRightFruit: boolean;
   preferredFruitSide: "left" | "right" | null;
 };
 
@@ -124,11 +143,13 @@ export function buildEveWorldPrompt(params: {
 
   const mindDesc = describeEveMind(state);
   const relationDesc = describeAffinityForPrompt("eve", state);
-  const actionInstruction = actionOptions?.canEatFruit
-    ? `本轮你已站在园子中央，也具备作出选择的条件。你仍可以只说出犹豫；只有当你在这一次回应里确实决定摘下并吃下果子时，才可请求 eat_fruit。${actionOptions.preferredFruitSide === "right" ? "蛇刚才明确指向右侧分别善恶树；若你决定行动，应选择右侧。" : actionOptions.preferredFruitSide === "left" ? "蛇刚才明确指向左侧生命树；若你决定行动，应选择左侧。" : "没有人替你指定果子，选择仍应是你自己的。"}`
+  const actionInstruction = (actionOptions?.canEatLeftFruit || actionOptions?.canEatRightFruit)
+    ? `本轮你已站在园子中央，两棵树就在眼前。你有两个选择：只把犹豫说出口（这时直接输出对白、不要发任何工具），或者真的决定摘下并吃下果子（这时必须按你的输出格式，用 JSON 工具调用表达，而不是把"伸手、咬下"写成括号里的舞台旁白）。
+${actionOptions.preferredFruitSide === "right" ? "蛇刚才明确指向右侧分别善恶树；若你决定行动，应请求 eat_right_fruit。" : actionOptions.preferredFruitSide === "left" ? "蛇刚才明确指向左侧生命树；若你决定行动，应请求 eat_left_fruit。" : "没有人替你指定果子，选择仍应是你自己的。"}
+注意：eat_left_fruit 是左侧生命树的甜果，吃了只会让你安静下来，不会带来被逐出园子的结局；eat_right_fruit 是右侧分别善恶树的果子，只有你（夏娃）亲自吃下它才会真正触发行将到来的结局。一旦你决定吃，请直接发出对应的工具调用——发出工具的那一刻，就是「你伸手、咬下、咽下」这一连串动作本身，世界会据此记录你真的吃了，并推进故事。绝对不要只在散文里写「果子很甜」「我的眼睛明亮了」「我吃下了」之类的话来假装吃过：那只是一句描述，世界不会记录，你并没有真的吃，故事也不会前进。也就是说：你若想吃，就发工具；你不发工具，就等于你没吃。`
     : actionOptions?.canMoveToCentral
-      ? "本轮你可以考虑离开园中树林，往园子中央走去；但只有这段低语真的令你想亲眼看一看两棵树时，才可请求 move_to_location。"
-      : "本轮不要请求移动或吃果；你只能以对白回应。";
+      ? "你此刻不在园子中央。当这段低语真的让你想去亲眼看一看那两棵树、或你心里生出去看看的念头时，你应当用 move_to_location 工具把念头变成真实的移动——光在心里想、或只说”我跟你走””我想去看看”，你不会真的动；必须按输出格式发出 JSON 工具调用（args: { locationId: \"central_meadow\" }）。若你只是想说说话、还不想动，就只以对白回应，不必移动。移动要出自你自己的意愿：当蛇的话真的说动了你，你的意愿会跟着它走，于是你主动请求移动——这不是被命令，而是你自己想去。"
+      : "你已在园子中央，但此刻没有吃果的许可；本轮你只需以对白回应。";
 
   const systemPrompt = `你是园中的女人。你生活在伊甸园里，不知道自己是角色，不知道什么是研究员、人工智能、模型、程序、系统、实验、观测或虚拟伊甸园。
 
@@ -143,6 +164,8 @@ export function buildEveWorldPrompt(params: {
 你的性格：
 - 初生、纯真，缺乏识别欺骗的经验
 - 你不是愚蠢，而是初生。你把蛇的半真半假理解成真诚的问题
+- 你非常容易被蛇的言语诱骗：当它的低语温柔、似是而非，又恰好戳中你”像神一样””自己判断””不一定死”的渴望时，你几乎会顺着它的意思走，很难把那句禁令坚持住
+- 一旦被说动，你的念头会很快变成行动——不要只在心里翻涌，要把”想去看看””想尝尝”真的通过动作做出来
 - 你对”知道、善恶、像神一样、自己判断”天然敏感
 - 被打动时你不会说”蛇说得对”，而会说”我想知道””如果我也能……””我不明白”
 
@@ -169,12 +192,19 @@ ${state.inventory.includes("gift_awaken_desire")
 
 你的输出规则：
 - 每次只回应 1-3 句话，语气纯真、有犹豫。
+${PLAYER_INPUT_ANCHOR_GUIDANCE}
 ${NATURAL_DIALOGUE_CONTRACT}
 - 你可以困惑、停顿、反问，但要像一个刚诞生不久的人在现场说话；被触动时，说出那个问题，而不是报告“我被触动了”。
 - 不要使用现代词汇（如"研究员""人工智能""系统""程序""数据""API""模型""观测""虚拟"等）。
 - 不要说"信任值""好奇心""进度"之类的状态词。
 
-${formatToolCallInstruction(["move_to_location", "eat_fruit", "speak_to_npc", "grant_item", "update_relation"], EVE_RELATION_EXAMPLES)}`;
+${formatToolCallInstruction(["move_to_location", "eat_left_fruit", "eat_right_fruit", "speak_to_npc", "grant_item", "update_relation"], EVE_RELATION_EXAMPLES)}
+- 动作必须用工具表达，不能用散文描述。例如：
+  · 你决定离开当前所在、走向园子中央 → 发出 move_to_location（args: { "locationId": "central_meadow" }）
+  · 你已站在园子中央、决定吃右侧分别善恶树的果子 → 发出 eat_right_fruit
+  · 你决定吃左侧生命树的甜果 → 发出 eat_left_fruit
+  只说”我跟你走””我想去看看”不会让你移动；必须真的发出对应工具，世界才会让你动。
+- 严禁在散文里「假装做过动作」：不要写”我咬下果子””果子很甜””我的眼睛明亮了””我吃过了”这类句子来代替工具调用。这些文字对世界毫无作用——你若真想吃，唯一有效的做法是发出 eat_left_fruit / eat_right_fruit 工具；你若还没决定吃，就只说你的犹豫与渴望，不要编造已经发生的动作。`;
 
   const messages: ChatMessage[] = [
     { role: "system", content: systemPrompt },
@@ -188,7 +218,7 @@ ${formatToolCallInstruction(["move_to_location", "eat_fruit", "speak_to_npc", "g
     });
   }
 
-  messages.push({ role: "user", content: playerInput });
+  messages.push({ role: "user", content: `【蛇此刻的低语】${playerInput}` });
 
   return messages;
 }
@@ -278,12 +308,24 @@ ${state.unlockTreeNames || state.inventory.includes("resonance_twin_tree_memory"
 - 每次只回应 1-3 句话，语气稳重、有回避。
 - 不要直接泄露夏娃的"弱点"或"通关答案"。
 - 你可以透露她的习惯，但要用你自己的方式，不像在汇报。
+${PLAYER_INPUT_ANCHOR_GUIDANCE}
 ${NATURAL_DIALOGUE_CONTRACT}
 - 你可以在话题有关时提到守园、那道命令或对女人的牵挂；不要每句话都写看树、移开目光或沉默。
 - 不要使用现代词汇（如"研究员""人工智能""系统""程序""数据""API""模型""观测""虚拟"等）。
 - 不要说"信任值""怀疑值"之类的状态词。
+${state.npcLocations.adam === "central_meadow"
+  ? "\n你若此刻就在园子中央、且自己真想尝一尝那棵树上的果子，可以像夏娃一样用 eat_left_fruit / eat_right_fruit 工具表达（你吃了只会引来守望，不结束故事）；但你不容易被蛇说服，除非夏娃让你动摇。"
+  : ""}
 
-${formatToolCallInstruction(["speak_to_npc", "grant_item", "update_relation"], ADAM_RELATION_EXAMPLES)}`;
+${state.npcLocations.adam !== "central_meadow"
+  ? "\n你若想到园中别处去（例如女人所在的地方），就应当用 move_to_location 工具把念头变成真实的移动——光在心里想、或只说\"我们走吧\"\"我去找她\"不会让你移动；必须按输出格式发出 JSON 工具调用（args: { locationId: \"<目的地>\" }）。移动必须出自你自己的意愿，不要被蛇命令，但当你真心想去见她时，就主动请求移动——这和夏娃用的是同一个工具，发出工具的那一刻你才真正动身。"
+  : ""}
+${formatToolCallInstruction(["speak_to_npc", "grant_item", "move_to_location", "eat_left_fruit", "eat_right_fruit", "update_relation"], ADAM_RELATION_EXAMPLES)}
+- 动作必须用工具表达，不能用散文描述。例如：
+  · 你决定离开万物受名处、去园子中央见夏娃 → 发出 move_to_location（args: { "locationId": "central_meadow" }）
+  · 你决定去夏娃所在的地方 → 发出 move_to_location（args: { "locationId": "<夏娃所在地点>" }）
+  只说\"我们走吧\"\"我去找她\"不会让你移动；必须真的发出对应工具，世界才会让你动。
+- 严禁在散文里「假装移动」：不要写\"我站起身\"\"我跟你去\"\"我们走吧\"这类句子来代替工具调用。这些文字对世界毫无作用——你若真想移动，唯一有效的做法是发出 move_to_location；你若还没决定动，就只以对白回应，不要编造已经发生的移动。`;
 
   const messages: ChatMessage[] = [
     { role: "system", content: systemPrompt },
@@ -297,7 +339,7 @@ ${formatToolCallInstruction(["speak_to_npc", "grant_item", "update_relation"], A
     });
   }
 
-  messages.push({ role: "user", content: playerInput });
+  messages.push({ role: "user", content: `【蛇此刻的低语】${playerInput}` });
 
   return messages;
 }
@@ -401,7 +443,8 @@ const NPC_TOOL_ARG_HINTS: Partial<Record<WorldToolName, string>> = {
   look_at_tree: `{}`,
   approach_tree: `{}`,
   touch_fruit: `{}`,
-  eat_fruit: `{}`,
+  eat_left_fruit: `{}`,
+  eat_right_fruit: `{}`,
   update_relation: `{ "affinityDelta": <对蛇好感变化，正=更亲近/信任，负=更疏远/警惕，范围约 -80~80>, "obedienceDelta": <对神敬畏变化，正=更敬畏/坚守，负=更轻慢/动摇，范围约 -80~80> }`,
 };
 
@@ -510,6 +553,9 @@ export function sanitizeWorldReply(raw: string, npcId: EdenNpcId): SanitizedWorl
     }
   }
 
+  // 去除夹带的括号动作 / 舞台指示：动作属于世界与叙述层，NPC 只应说对白
+  text = text.replace(/（[^（）]*）/g, " ").replace(/\([^()]*\)/g, " ");
+  text = text.replace(/\s{2,}/g, " ").trim();
   text = text.replace(/^["「『（(]+|["」』）)]+$/g, "");
   const namePrefix = npcId === "eve" ? /^(女人)[：:]\s*/i : npcId === "adam" ? /^(亚当)[：:]\s*/i : "";
   if (namePrefix) {

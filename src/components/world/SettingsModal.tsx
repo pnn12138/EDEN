@@ -32,6 +32,8 @@ type SettingsModalProps = {
   onSave: (slotIndex: SaveSlotIndex) => void;
   onLoad: (slotIndex: SaveSlotIndex) => void;
   onDelete: (slotIndex: SaveSlotIndex) => void;
+  /** 仅修改某槽位存档名（不覆盖进度） */
+  onRename: (slotIndex: SaveSlotIndex, name: string) => void;
   onReset: () => void;
   onGoHome: () => void;
   /** 打开时默认选中的页签（如由结局页"打开设置"跳到 AI 创作）；缺省为存档匣 */
@@ -60,6 +62,7 @@ export default function SettingsModal({
   onSave,
   onLoad,
   onDelete,
+  onRename,
   onReset,
   onGoHome,
   initialTab,
@@ -217,7 +220,7 @@ export default function SettingsModal({
           {(
             [
               ["cabinet", "存档匣"],
-              ["ai", "AI 创作"],
+              ["ai", "模型配置"],
               ["account", "账号"],
             ] as [TabId, string][]
           ).map(([id, label]) => (
@@ -270,7 +273,20 @@ export default function SettingsModal({
                   </div>
                   {slotMetas.map((m) => (
                     <div key={m.index} className={`eden-save-slot ${m.empty || m.corrupted ? "eden-save-slot--empty" : ""}`}>
-                      <span className="eden-save-slot-title">存档 {m.index}</span>
+                      {m.empty || m.corrupted ? (
+                        <span className="eden-save-slot-title">存档 {m.index}</span>
+                      ) : (
+                        <input
+                          className="eden-save-slot-name-input"
+                          type="text"
+                          value={m.name ?? ""}
+                          maxLength={24}
+                          placeholder={`存档 ${m.index}`}
+                          aria-label={`存档 ${m.index} 名称`}
+                          data-testid={`world-slot-name-${m.index}`}
+                          onChange={(e) => onRename(m.index, e.target.value)}
+                        />
+                      )}
                       {m.empty ? (
                         <span className="eden-save-slot-empty-hint">暂无存档</span>
                       ) : m.corrupted ? (
@@ -311,12 +327,12 @@ export default function SettingsModal({
             </section>
           )}
 
-          {/* AI 创作（仅 sessionStorage，不写入游戏存档） */}
+          {/* 模型配置（仅 sessionStorage，不写入游戏存档） */}
           {tab === "ai" && (
             <section className="eden-settings-section">
-              <span className="eden-settings-section-title">AI 创作</span>
+              <span className="eden-settings-section-title">模型配置</span>
               <p className="eden-settings-hint-text">
-                这些配置仅保存在当前浏览器会话，刷新后不再留存，也不写入游戏存档。空字段表示继承服务端环境变量。仅允许 HTTPS 地址。
+                以下配置只在本浏览器会话内有效，关闭页面后不会保留，也不会写入游戏存档。留空即使用服务端默认；地址仅支持 HTTPS。
               </p>
               <div className="eden-ai-media-form">
                 <fieldset className="eden-ai-media-group">
@@ -352,7 +368,7 @@ export default function SettingsModal({
                       value={media.imageCount}
                       onChange={(e) => setMediaField("imageCount", Math.max(1, Math.min(6, Number(e.target.value) || 1)))}
                     />
-                    <span className="eden-ai-media-note">AI 会根据本局日志决定实际张数，最多不超过此值。</span>
+                    <span className="eden-ai-media-note">AI 会依据本局经历决定实际张数，不会超过此上限。</span>
                   </label>
                   <label>
                     结局创作希望
@@ -362,7 +378,7 @@ export default function SettingsModal({
                       placeholder="例如：更突出河流、月光与蛇离开伊甸的孤独感"
                       rows={3}
                     />
-                    <span className="eden-ai-media-note">AI 会结合本局日志判断哪些画面确实有足够素材。</span>
+                    <span className="eden-ai-media-note">AI 会结合本局经历判断哪些画面确实有足够素材。</span>
                   </label>
                 </fieldset>
               </div>

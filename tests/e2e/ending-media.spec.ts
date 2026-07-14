@@ -109,14 +109,14 @@ test.describe("结局媒体：UI 兜底与打开设置", () => {
     await expect(page.getByTestId("ending-memory-open-settings")).toHaveCount(0);
   });
 
-  test("生成失败（接口 500）时「打开设置」打开设置并切到 AI 创作页", async ({ page }) => {
+  test("生成失败（接口 500）时「打开设置」打开设置并切到模型配置页", async ({ page }) => {
     await seedFinished(page);
     await page.route("**/api/world/ending-media", (route) => route.fulfill({ status: 500, body: "{}" }));
     await page.getByTestId("ending-memory-generate").click();
     await expect(page.getByTestId("ending-memory-open-settings")).toBeVisible({ timeout: 10000 });
     await page.getByTestId("ending-memory-open-settings").click();
-    // 设置浮窗打开并定位到「AI 创作」页签
-    await expect(page.locator(".eden-settings-tab", { hasText: "AI 创作" })).toHaveAttribute("aria-selected", "true");
+    // 设置浮窗打开并定位到「模型配置」页签
+    await expect(page.locator(".eden-settings-tab", { hasText: "模型配置" })).toHaveAttribute("aria-selected", "true");
     await expect(page.getByText("图像 Provider")).toBeVisible();
   });
 });
