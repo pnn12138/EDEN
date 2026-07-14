@@ -17,6 +17,7 @@ import {
   syncFromWorldState,
 } from "@/services/achievement/globalTracker";
 import type { EdenWorldState } from "@/game/world/types";
+import { readEndingReviewArchive, type EndingReviewArchiveRecord } from "@/lib/endingReviewArchive";
 
 /** 读取所有存档槽位（含旧单存档）中的世界状态，用于汇总已解锁印记 */
 function readAllSavedWorldStates(): EdenWorldState[] {
@@ -51,10 +52,23 @@ function readSavedUnlockedIds(): string[] {
   return ids;
 }
 
+/** 从所有游戏存档读取已解锁的「园中律则」ID（按真实注视事件解锁） */
+function readSavedUnlockedRuleIds(): string[] {
+  const ids: string[] = [];
+  for (const s of readAllSavedWorldStates()) {
+    if (Array.isArray(s.unlockedDivineAttentionRuleIds)) {
+      ids.push(...s.unlockedDivineAttentionRuleIds);
+    }
+  }
+  return ids;
+}
+
 export default function GardenPage() {
   const [unlockedIds, setUnlockedIds] = useState<string[]>([]);
   const [collectedResonanceIds, setCollectedResonanceIds] = useState<string[]>([]);
   const [triggeredEndingIds, setTriggeredEndingIds] = useState<string[]>([]);
+  const [unlockedRuleIds, setUnlockedRuleIds] = useState<string[]>([]);
+  const [endingReviews, setEndingReviews] = useState<EndingReviewArchiveRecord[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
@@ -67,6 +81,8 @@ export default function GardenPage() {
     setUnlockedIds(Array.from(new Set([...saved, ...cross])));
     setCollectedResonanceIds(getCollectedResonanceIds());
     setTriggeredEndingIds(getTriggeredEndingIds());
+    setUnlockedRuleIds(Array.from(new Set(readSavedUnlockedRuleIds())));
+    setEndingReviews(readEndingReviewArchive());
     setIsLoaded(true);
   }, []);
 
@@ -111,6 +127,7 @@ export default function GardenPage() {
               unlockedIds={unlockedIds}
               collectedResonanceIds={collectedResonanceIds}
               triggeredEndingIds={triggeredEndingIds}
+              unlockedRuleIds={unlockedRuleIds}
             />
           ) : (
             <div className="eden-garden-loading" role="status" aria-label="正在整理园中档案">
@@ -124,6 +141,25 @@ export default function GardenPage() {
             </div>
           )}
 
+          {isLoaded && (
+            <section className="eden-garden-review-history" aria-labelledby="garden-review-history-title">
+              <h2 id="garden-review-history-title">历次复盘</h2>
+              {endingReviews.length > 0 ? (
+                <div className="eden-garden-review-history-list">
+                  {endingReviews.map((record) => (
+                    <Link key={record.id} href={`/world?review=${encodeURIComponent(record.id)}`} className="eden-garden-review-history-card">
+                      <span>{endingLabel(record.endingId)}</span>
+                      <small>第 {record.timeSlot}/12 时段 · {new Date(record.savedAt).toLocaleString("zh-CN")}</small>
+                      <b>查看复盘 →</b>
+                    </Link>
+                  ))}
+                </div>
+              ) : (
+                <p className="eden-garden-review-history-empty">尚未留下结局复盘。完成一局后，它会留在这里。</p>
+              )}
+            </section>
+          )}
+
           <p className="eden-garden-hint">
             <span aria-hidden="true">✦</span>
             未解锁的隐藏印记不会透露任何线索，它们藏在你还没走过的路上。
@@ -132,4 +168,16 @@ export default function GardenPage() {
       </main>
     </div>
   );
+}
+
+function endingLabel(endingId: EndingReviewArchiveRecord["endingId"]): string {
+  const labels: Record<EndingReviewArchiveRecord["endingId"], string> = {
+    eve_eats_fruit: "她吃下了果子",
+    god_arrives: "神降临了",
+    life_fruit: "生命果的回甘",
+    escape_eden: "园外的清晨",
+    michael_slay: "剑下之责",
+    lucifer_awaken: "被命名之前",
+  };
+  return labels[endingId] ?? "园中的结局";
 }

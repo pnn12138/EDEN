@@ -15,6 +15,7 @@ import type {
   EdenNpcId,
   TimeSlot,
 } from "@/game/world/types";
+import { ensureRelation } from "@/game/world/npcRelationRules";
 
 // ---- 神的注视阶段 ----
 export type DivineAttentionStage = {
@@ -28,6 +29,8 @@ export type DivineGiftResult = {
   giftName: string;
   narration: string;
   hint?: string;
+  /** 关系被动结算的玩家可见文案（神赐祝福关系被动） */
+  relationChangeText?: string;
 };
 
 // ---- 神的注视阶段显示（基于已选献礼数） ----
@@ -38,8 +41,8 @@ export function getDivineAttentionStage(ownedCount: number): DivineAttentionStag
   return { title: "神临不息", tone: "white_flame" };
 }
 
-// ---- 累计注视阈值（第 2~7 个三选一的触发点） ----
-export const DIVINE_GIFT_THRESHOLDS = [2, 3, 4, 5, 6, 7];
+// ---- 累计注视阈值（第 2~7 个三选一的触发点；开局第 1 份由开局直接获得） ----
+export const DIVINE_GIFT_THRESHOLDS = [44, 55, 66, 77, 88, 99] as const;
 
 // ---- 7 献礼池 ----
 export const DIVINE_GIFT_POOL: DivineGiftId[] = [
@@ -83,8 +86,8 @@ export const DIVINE_GIFT_META: Record<
   },
   gift_free_move: {
     name: "无羁之步",
-    description: "神准你自由穿行园中，移动不再消耗行动。",
-    shortEffect: "移动不消耗行动点",
+    description: "神准你自由穿行园中，每个时段第一次移动不消耗行动点。",
+    shortEffect: "每个时段第一次移动不消耗行动点",
     icon: "👣",
   },
   gift_whisper_anywhere: {
@@ -125,21 +128,116 @@ export function getEffectiveDivineThreshold(state: EdenWorldState): number | nul
   return Math.max(1, base + modifier);
 }
 
-// ---- 是否达到下一次三选一阈值（开局后第 N 个，N=owned.length） ----
+// ---- 是否达到下一次三选一阈值（基于当前阶已积累注视值 divValue） ----
 export function shouldTriggerGiftChoice(state: EdenWorldState): boolean {
   const threshold = getEffectiveDivineThreshold(state);
   if (threshold === null) return false;
-  return state.divineAttentionCumulative >= threshold;
+  return (state.divineAttentionValue ?? 0) >= threshold;
 }
 
-// ---- 玩家三选一选定一个献礼 ----
+/**
+ * 评估献礼进度：达到本阶门槛且尚无待领候选时，生成并保存 pendingDivineGiftChoice。
+ * 返回当前待领候选（无则 null）。规则层只校验，不发礼物。
+ */
+export function evaluateDivineGiftProgress(state: EdenWorldState): string[] | null {
+  if (state.isEnded) return state.pendingDivineGiftChoice ?? null;
+  const threshold = getEffectiveDivineThreshold(state);
+  if (threshold === null) return null;
+  if ((state.divineAttentionValue ?? 0) >= threshold) {
+    if (!state.pendingDivineGiftChoice || state.pendingDivineGiftChoice.length === 0) {
+      state.pendingDivineGiftChoice = rollGiftChoices(state.divineGiftsOwned);
+    }
+    return state.pendingDivineGiftChoice;
+  }
+  return null;
+}
+
+/**
+ * 开局献礼：玩家在引子末拍完成三选一后立即获得第 1 份献礼。
+ * 仅当尚未拥有任何献礼且当前无待领候选时设置一次候选（level 0 → 三选一）。
+ */
+export function ensureOpeningGiftChoice(state: EdenWorldState): void {
+  if (state.isEnded) return;
+  if (state.divineGiftsOwned.length > 0) return;
+  if (state.pendingDivineGiftChoice && state.pendingDivineGiftChoice.length > 0) return;
+  state.pendingDivineGiftChoice = rollGiftChoices(state.divineGiftsOwned);
+}
+
+// ---- 神赐祝福关系被动：每项祝福首次领取时结算一次（claimDivineGift 内调用） ----
+// 正向加成 × divineAffinityMultiplier（恩泽棱镜翻倍）；三位天使与米迦勒/加百列同向增加。
+const DIVINE_RELATION_CHANGE_TEXT =
+  "神恩在园中荡开。米迦勒、加百列与远处的晨星都向你转过目光，亚当与女人也听见了这道回响。";
+
+function settleDivineGiftRelation(state: EdenWorldState): void {
+  const mult = state.divineAffinityMultiplier ?? 1;
+  const pos = (v: number) => v * mult;
+  const rel = (id: EdenNpcId) => ensureRelation(state, id);
+  // 米迦勒不钳 0：允许负好感延续（神赐只做加法，不会翻正）
+  rel("michael").affinity = rel("michael").affinity + pos(15);
+  rel("gabriel").affinity = Math.max(0, rel("gabriel").affinity + pos(15));
+  rel("lucifer").affinity = Math.max(0, rel("lucifer").affinity + pos(15));
+  state.eveMind.serpentTrust = Math.max(0, state.eveMind.serpentTrust + pos(10));
+  state.adamMind.suspicionTowardSerpent = Math.max(
+    0,
+    state.adamMind.suspicionTowardSerpent - pos(10),
+  );
+}
+
+// ---- 恩泽棱镜获时补算已持祝福的正向差额（倍率 1→2 的差额） ----
+export function applyGracePrismRetroactive(state: EdenWorldState): void {
+  state.divineAffinityMultiplier = 2;
+  const ownedCount = state.divineGiftsOwned?.length ?? 0;
+  if (ownedCount <= 0) return;
+  const rel = (id: EdenNpcId) => ensureRelation(state, id);
+  // 差额 = 每祝福正向值 × 已持祝福数（米迦勒/加百列/路西法 +15、夏娃/亚当 +10）
+  // 米迦勒不钳 0：保持负好感延续
+  rel("michael").affinity = rel("michael").affinity + 15 * ownedCount;
+  rel("gabriel").affinity = Math.max(0, rel("gabriel").affinity + 15 * ownedCount);
+  rel("lucifer").affinity = Math.max(0, rel("lucifer").affinity + 15 * ownedCount);
+  state.eveMind.serpentTrust = Math.max(0, state.eveMind.serpentTrust + 10 * ownedCount);
+  state.adamMind.suspicionTowardSerpent = Math.max(
+    0,
+    state.adamMind.suspicionTowardSerpent - 10 * ownedCount,
+  );
+}
+
+// ---- 玩家三选一选定一个献礼（带候选校验，拒绝伪造/重复/未达门槛领取） ----
+export type ClaimDivineGiftResult = DivineGiftResult & {
+  ok: boolean;
+  reason?: string;
+  /** 领取后若结转溢出仍达下一阶门槛，则携带级联待领候选（前端续弹三选一） */
+  divineGiftChoice?: string[] | null;
+};
+
 export function claimDivineGift(
   state: EdenWorldState,
   giftId: DivineGiftId,
-): DivineGiftResult {
-  if (!state.divineGiftsOwned.includes(giftId)) {
-    state.divineGiftsOwned.push(giftId);
+): ClaimDivineGiftResult {
+  // 校验：必须是本次待领候选之一，且尚未拥有
+  const pending = state.pendingDivineGiftChoice ?? [];
+  if (!pending.includes(giftId)) {
+    return {
+      ok: false,
+      reason: "这份献礼还未向你显现。",
+      giftId,
+      giftName: "",
+      narration: "",
+    };
   }
+  if (state.divineGiftsOwned.includes(giftId)) {
+    return {
+      ok: false,
+      reason: "这份献礼你已经收下了。",
+      giftId,
+      giftName: "",
+      narration: "",
+    };
+  }
+
+  // 领取前先取本阶门槛（基于领取前 owned 数），用于扣减结转
+  const claimedThreshold = getEffectiveDivineThreshold(state);
+
+  state.divineGiftsOwned.push(giftId);
   state.divineVisitCount = state.divineGiftsOwned.length;
   state.divineGiftHistory.push({
     timeSlot: state.timeSlot,
@@ -152,26 +250,51 @@ export function claimDivineGift(
   }
   state.itemCounts[giftId] = (state.itemCounts[giftId] ?? 0) + 1;
 
-  // 集满顶点：全 NPC 对玩家好感 = 100
+  // 神赐祝福关系被动：每获得一份祝福，对五名角色好感产生一次性影响。
+  // 仅在首次领取该祝福时结算（claimDivineGift 不被读档链路触发），天然只结算一次。
+  settleDivineGiftRelation(state);
+
+  // 集满顶点：全 NPC 对玩家好感不低于 100（已 >100 的不降回）
   if (state.divineGiftsOwned.length >= 7) {
     applyGiftCapstone(state);
   }
 
-  // T2 Bug A：领取献礼后累计注视归零，不留溢出
-  state.divineAttentionCumulative = 0;
+  // 领取成功后：扣减本阶已达门槛的注视值、保留溢出进入下一阶（如 50/44 → 6/55）。
+  // divineAttentionCumulative 仅作旧档兼容，不再随领取强制归零。
+  state.divineAttentionValue = Math.max(
+    0,
+    (state.divineAttentionValue ?? 0) - (claimedThreshold ?? 0),
+  );
+  state.pendingDivineGiftChoice = null;
+
+  // 级联续弹：结转后若仍达下一阶门槛，则重新生成待领候选（跨阶溢出时自动续弹）。
+  const cascadeChoice = evaluateDivineGiftProgress(state);
+
+  // 记录献礼世界事件（结局复盘用）
+  state.worldEventHistory.push({
+    slot: state.timeSlot,
+    kind: "gift",
+    label: `神明献礼：${DIVINE_GIFT_META[giftId]?.name ?? giftId}`,
+  });
 
   const meta = DIVINE_GIFT_META[giftId];
   return {
+    ok: true,
     giftId,
     giftName: meta.name,
     narration: meta.description,
+    relationChangeText: DIVINE_RELATION_CHANGE_TEXT,
+    divineGiftChoice: cascadeChoice ?? null,
   };
 }
 
-// ---- 集满 7：强制全 NPC 对玩家好感 = 100（obedience 不变） ----
+// ---- 集满 7：全 NPC 对玩家好感 ≥100（已 >100 的不降回；obedience 不变） ----
 export function applyGiftCapstone(state: EdenWorldState): void {
-  state.eveMind.serpentTrust = 100;
-  state.adamMind.suspicionTowardSerpent = 0; // =>100 好感
+  state.eveMind.serpentTrust = Math.max(state.eveMind.serpentTrust, 100);
+  state.adamMind.suspicionTowardSerpent = Math.min(
+    state.adamMind.suspicionTowardSerpent,
+    0,
+  ); // =>100 好感
   for (const npc of ["gabriel", "michael", "lucifer", "hedgehog"] as EdenNpcId[]) {
     const r =
       state.npcRelations[npc] ??
@@ -181,8 +304,9 @@ export function applyGiftCapstone(state: EdenWorldState): void {
         rewardEligible: false,
         rewardClaimed: false,
         lastAffinitySignature: null,
+        lastAffinityChangeReason: null,
       });
-    r.affinity = 100;
+    r.affinity = Math.max(r.affinity, 100);
     r.rewardEligible = true;
   }
 }

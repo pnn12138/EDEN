@@ -10,6 +10,7 @@
 // ============================================================
 
 import type { EdenWorldState, EdenNpcId } from "@/game/world/types";
+import { grantNpcMeetingAttentionIfNew } from "@/game/world/divineAttentionRules";
 
 export type NpcSlotResolution = {
   npcId: EdenNpcId;
@@ -68,9 +69,10 @@ export function resolveNpcSlotBehaviors(state: EdenWorldState): NpcSlotResolutio
       (state.eveMind.selfJudgement >= 45 || state.worldActions.lookedAtTree)
     ) {
       state.npcLocations.eve = "central_meadow";
+      const meeting = grantNpcMeetingAttentionIfNew(state, "eve", "central_meadow");
       pushResolution({
         npcId: "eve",
-        narration: "那个女人离开园中树林，走向园子中央。她没有看蛇，只是望着两棵树所在的方向。",
+        narration: `那个女人离开园中树林，走向园子中央。她没有看蛇，只是望着两棵树所在的方向。${meeting ? ` ${meeting}` : ""}`,
       });
     } else if (
       state.npcLocations.eve === "central_meadow" &&
@@ -79,18 +81,20 @@ export function resolveNpcSlotBehaviors(state: EdenWorldState): NpcSlotResolutio
       state.eveMind.selfJudgement < 45
     ) {
       state.npcLocations.eve = "adam_garden_work";
+      const meeting = grantNpcMeetingAttentionIfNew(state, "eve", "adam_garden_work");
       pushResolution({
         npcId: "eve",
-        narration: "那个女人没有继续靠近树。她去了万物受名处，像是想向亚当问清那句禁令。",
+        narration: `那个女人没有继续靠近树。她去了万物受名处，像是想向亚当问清那句禁令。${meeting ? ` ${meeting}` : ""}`,
       });
     } else if (
       state.npcLocations.eve === "adam_garden_work" &&
       (state.eveMind.selfJudgement >= 45 || state.worldActions.lookedAtTree)
     ) {
       state.npcLocations.eve = "central_meadow";
+      const meeting = grantNpcMeetingAttentionIfNew(state, "eve", "central_meadow");
       pushResolution({
         npcId: "eve",
-        narration: "从万物受名处回来后，那个女人又走向园子中央。她的问题没有被亚当完全安放。",
+        narration: `从万物受名处回来后，那个女人又走向园子中央。她的问题没有被亚当完全安放。${meeting ? ` ${meeting}` : ""}`,
       });
     }
   }
@@ -105,18 +109,20 @@ export function resolveNpcSlotBehaviors(state: EdenWorldState): NpcSlotResolutio
         state.adamMind.attachmentToEve >= 80)
     ) {
       state.npcLocations.adam = "central_meadow";
+      const meeting = grantNpcMeetingAttentionIfNew(state, "adam", "central_meadow");
       pushResolution({
         npcId: "adam",
-        narration: "亚当放下手里的工，走向园子中央。他似乎在寻找那个女人，也在回想自己听见的命令。",
+        narration: `亚当放下手里的工，走向园子中央。他似乎在寻找那个女人，也在回想自己听见的命令。${meeting ? ` ${meeting}` : ""}`,
       });
     } else if (
       state.npcLocations.adam === "central_meadow" &&
       state.npcLocations.eve === "adam_garden_work"
     ) {
       state.npcLocations.adam = "adam_garden_work";
+      const meeting = grantNpcMeetingAttentionIfNew(state, "adam", "adam_garden_work");
       pushResolution({
         npcId: "adam",
-        narration: "亚当离开园子中央，回到万物受名处。那个女人在那里等着一个答案。",
+        narration: `亚当离开园子中央，回到万物受名处。那个女人在那里等着一个答案。${meeting ? ` ${meeting}` : ""}`,
       });
     }
   }

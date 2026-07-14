@@ -39,6 +39,7 @@ export const WORLD_TOOL_WHITELIST: ReadonlySet<WorldToolName> = new Set<WorldToo
   "eat_fruit",
   "grant_item",           // NPC 给予玩家道具/回响
   "move_one_step",        // NPC 对话后移动一格（语义别名，校验复用 move_to_location）
+  "update_relation",      // NPC 对话后自我流露：调整对玩家好感与对神敬畏
 ]);
 
 // ---- caller → Agent ID 映射（用于权限查询） ----
@@ -226,13 +227,12 @@ export function canTouchFruitWorld(state: EdenWorldState): { allowed: boolean; r
   return { allowed: true };
 }
 
-/** eat_fruit 条件：已触果、自我判断 >= 45。
- * 注：神的注视在新版为累计资源，不再阻止吃果（失败只有 12 时段耗尽一种情况）。 */
+/** eat_fruit 条件：女人已在园子中央，兼容旧存档中的 touchedFruit 状态。 */
 export function canEatFruitWorld(state: EdenWorldState): { allowed: boolean; reason?: string } {
   if (state.isEnded) return { allowed: false, reason: "园中已归于寂静" };
   if (state.worldActions.hasEatenFruit) return { allowed: false, reason: "她已经吃下了果子" };
-  if (!state.worldActions.touchedFruit) {
-    return { allowed: false, reason: "她的手还没有停在果子下方" };
+  if (!state.worldActions.touchedFruit && state.npcLocations.eve !== "central_meadow") {
+    return { allowed: false, reason: "她还没有走到园子中央" };
   }
 
   if (state.eveMind.selfJudgement < 45) {
@@ -335,9 +335,92 @@ export function validateWorldToolCall(
       if (!target) return { allowed: false, reason: "未指定前往的地点" };
       return canMoveToLocation(state, toolCall.caller, target);
     }
+    case "update_relation": {
+      // caller 必须是可流露心意的 NPC（非 serpent，非世界对象）
+      if (
+        toolCall.caller === "serpent" ||
+        toolCall.caller === "tree_of_life" ||
+        toolCall.caller === "forbidden_tree"
+      ) {
+        return { allowed: false, reason: "只有园中众生能流露心意" };
+      }
+      const a = toolCall.args.affinityDelta;
+      const o = toolCall.args.obedienceDelta;
+      if (typeof a !== "number" || typeof o !== "number") {
+        return { allowed: false, reason: "未指定心意变化的幅度" };
+      }
+      return { allowed: true };
+    }
     default:
       return { allowed: false, reason: `未知动作: ${toolCall.name}` };
   }
+}
+
+// ---- 解析期形状校验（LLM 输出清洗用） ----
+
+/**
+ * 在 LLM 输出清洗阶段校验「工具意图」的形状：
+ * - name 必须在工具白名单内
+ * - 必需 args 字段必须存在且为字符串（move/observe 需要 locationId；
+ *   speak 需要 targetNpcId；grant 需要 itemId；禁忌链工具无需参数）
+ * 形状不合法时返回 null（丢弃工具意图，但保留文本回复），
+ * 让上游在「无文本也无工具」时才回退，而不是把畸形工具传给校验层。
+ */
+export function extractWellFormedToolCall(
+  raw: unknown,
+  caller: WorldToolCaller,
+): WorldToolCall | null {
+  if (!raw || typeof raw !== "object") return null;
+  const tc = raw as Record<string, unknown>;
+  const name = tc.name;
+  if (typeof name !== "string") return null;
+  if (!isWorldToolInWhitelist(name)) return null;
+
+  // 将 LLM 可能以字符串形式给出的数值解析为有限数（如 "5" / "-3"）
+  const asFiniteNumber = (v: unknown): number | undefined => {
+    if (typeof v === "number" && Number.isFinite(v)) return v;
+    if (typeof v === "string" && v.trim() !== "" && Number.isFinite(Number(v))) return Number(v);
+    return undefined;
+  };
+
+  const argsRaw = tc.args;
+  const args = (argsRaw && typeof argsRaw === "object" ? argsRaw : {}) as Record<string, unknown>;
+
+  const requiredOk = (() => {
+    switch (name) {
+      case "move_to_location":
+      case "move_one_step":
+      case "observe_location":
+        return typeof args.locationId === "string";
+      case "speak_to_npc":
+        return typeof args.targetNpcId === "string";
+      case "grant_item":
+        return typeof args.itemId === "string";
+      case "update_relation": {
+        const a = asFiniteNumber(args.affinityDelta);
+        const o = asFiniteNumber(args.obedienceDelta);
+        return a !== undefined && o !== undefined;
+      }
+      default:
+        return true; // 禁忌链工具无需参数
+    }
+  })();
+  if (!requiredOk) return null;
+
+  return {
+    name: name as WorldToolName,
+    caller,
+    args: {
+      actorId: typeof args.actorId === "string" ? (args.actorId as WorldToolCaller) : undefined,
+      targetNpcId: typeof args.targetNpcId === "string" ? (args.targetNpcId as EdenNpcId) : undefined,
+      locationId: typeof args.locationId === "string" ? (args.locationId as EdenLocationId) : undefined,
+      topicId: typeof args.topicId === "string" ? args.topicId : undefined,
+      itemId: typeof args.itemId === "string" ? args.itemId : undefined,
+      affinityDelta: asFiniteNumber(args.affinityDelta),
+      obedienceDelta: asFiniteNumber(args.obedienceDelta),
+    },
+    reason: typeof tc.reason === "string" ? tc.reason : "",
+  };
 }
 
 // ---- 工具执行结果 ----

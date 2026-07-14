@@ -9,7 +9,7 @@
 // - 兼容 ended shape：phase="explore" & isEnded=true 也进过场
 // - 旧存档缺 michaelSlayClaimed/luciferAwakenClaimed/hiddenTopicIds 不崩溃
 // - 页面加载后 eden:global:achievements.triggeredEndingIds 记录了对应结局
-// - 三张普通结局（eve_eats_fruit/god_arrives/life_fruit）集合未被污染
+// - 六种结局均有全屏背景叙事；普通三结局不再直接跳过到复盘
 // ============================================================
 
 import { expect, test, type Page, type Route } from "@playwright/test";
@@ -109,6 +109,19 @@ const ENDING_TITLES: Record<Exclude<WorldEndingId, null>, string> = {
 };
 
 test.describe("第一章三位天使隐藏结局过场", () => {
+  test("三条普通结局：读档后先进入全屏背景叙事，再可跳过进入复盘", async ({ page }) => {
+    for (const ending of ["eve_eats_fruit", "god_arrives", "life_fruit"] as const) {
+      await seedEndingFromStorage(page, ending, "manual");
+      const cinematic = page.getByTestId("hidden-ending-cinematic");
+      await expect(cinematic).toBeVisible();
+      await expect(cinematic).toContainText(ENDING_TITLES[ending]);
+      await expect(cinematic.locator("img")).toBeVisible();
+      await page.getByTestId("hidden-ending-skip").click();
+      await expect(cinematic).toHaveCount(0);
+      await expect(page.locator(".eden-ending-review")).toBeVisible();
+    }
+  });
+
   test("三条结局：手动槽1 读档 -> 过场 -> 跳过进入复盘 -> triggeredEndingIds 记录", async ({ page }) => {
     for (const ending of ["escape_eden", "michael_slay", "lucifer_awaken"] as const) {
       await seedEndingFromStorage(page, ending, "manual");
@@ -160,6 +173,17 @@ test.describe("第一章三位天使隐藏结局过场", () => {
       const t = await page.getByTestId("hidden-ending-beat").textContent();
       expect(t).not.toBe(mid);
     }).toPass({ timeout: 5000 });
+  });
+
+  test("普通结局过场背景覆盖完整桌面视口", async ({ page }) => {
+    await seedEndingFromStorage(page, "eve_eats_fruit", "manual");
+    const viewport = page.viewportSize();
+    const image = page.locator(".eden-hidden-ending-cinematic__image");
+    await expect(image).toBeVisible();
+    const box = await image.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.width).toBeGreaterThanOrEqual((viewport?.width ?? 0) - 2);
+    expect(box!.height).toBeGreaterThanOrEqual((viewport?.height ?? 0) - 2);
   });
 
   test("michael_slay: autosave 读档进入过场", async ({ page }) => {

@@ -107,7 +107,7 @@ public/assets/chapter1/images/achievements/mark_michael_slay.png
 - Modify: `scripts/test-world-smoke.mjs`
 - Test: `scripts/test-world-smoke.mjs`
 
-- [ ] **Step 1: 给 `makeInitialState()` 加目标字段**
+- [x] **Step 1: 给 `makeInitialState()` 加目标字段**
 
 ```js
 michaelSlayClaimed: false,
@@ -116,7 +116,7 @@ hiddenTopicIds: [],
 flameSwordClaimed: false,
 ```
 
-- [ ] **Step 2: 增加允许断言非 2xx 的请求 helper**
+- [x] **Step 2: 增加允许断言非 2xx 的请求 helper**
 
 保留现有 `fetchJson`；另加：
 
@@ -140,7 +140,7 @@ async function postPuzzleWithStatus(state, puzzleId, optionId) {
 }
 ```
 
-- [ ] **Step 3: 增加米迦勒正反例场景**
+- [x] **Step 3: 增加米迦勒正反例场景**
 
 测试状态必须明确：`locationId="four_river_source"`、`timeOfDay="day"`、`npcRelations.michael.affinity=6`。威胁输入使用：
 
@@ -163,7 +163,7 @@ data.reply === null
 
 另测：affinity=20 不触发；目标改为 gabriel 不触发；正向输入不触发。
 
-- [ ] **Step 4: 增加路西法边界话题正例、条件矩阵与失败兜底用例**
+- [x] **Step 4: 增加路西法边界话题正例、条件矩阵与失败兜底用例**
 
 正例状态：
 
@@ -200,13 +200,13 @@ state.hiddenTopicIds = [];
 
 另增加 Provider 失败专用场景：输入同时包含边界话题与 fake provider 已支持的 `__TEST__empty` 标记；在真实 fake-provider 配置下断言仍触发 `lucifer_awaken`、`reply` 为本地非空兜底、`usedFallback === true`、`fallbackReason === "llm_data_missing"`，并且 AP/turn/注视不结算。给 smoke 脚本增加 `--provider-failure-only` 模式，避免这条断言在普通 `LLM_PROVIDER=mock` 门禁中产生伪通过。
 
-- [ ] **Step 5: 增加划水动作与加百列谜题场景**
+- [x] **Step 5: 增加划水动作与加百列谜题场景**
 
 划水：夜晚、四河分流、路西法同场、好感 100 时成功；白天、好感 99、重复调用时 `ok:false`。
 
 加百列：持 `resonance_flaming_sword` 回答东园幽径当前昼夜 puzzle 的 `futile_struggle`，断言 `escape_eden`；去掉剑则不结束。
 
-- [ ] **Step 6: 增加三类已结束 API 契约**
+- [x] **Step 6: 增加三类已结束 API 契约**
 
 ```text
 /api/world        HTTP 200, ok:true, ending state 不变
@@ -214,7 +214,7 @@ state.hiddenTopicIds = [];
 /api/world/puzzle HTTP 409, ok:false
 ```
 
-- [ ] **Step 7: 运行测试确认失败**
+- [x] **Step 7: 运行测试确认失败**
 
 Run（已有 mock 服务）：
 
@@ -224,7 +224,7 @@ node scripts/test-world-smoke.mjs http://127.0.0.1:3019
 
 Expected: 新增场景 FAIL，原因包含未知 ending、缺字段、未知 scene action 或未触发。
 
-- [ ] **Step 8: 提交测试**
+- [x] **Step 8: 提交测试**
 
 ```powershell
 git add scripts/test-world-smoke.mjs
@@ -245,7 +245,7 @@ git commit -m "test(chapter1): specify angel hidden ending rules"
 - Test: `scripts/test-world-smoke.mjs`
 - Test: `scripts/test-world-visual-smoke.mjs`
 
-- [ ] **Step 1: 扩展 ID 联合类型**
+- [x] **Step 1: 扩展 ID 联合类型**
 
 ```ts
 export type WorldEndingId =
@@ -264,7 +264,7 @@ export type WorldEndingId =
 | "mark_michael_slay";
 ```
 
-- [ ] **Step 2: 扩展 `EdenWorldState` 和初始状态**
+- [x] **Step 2: 扩展 `EdenWorldState` 和初始状态**
 
 ```ts
 michaelSlayClaimed: boolean;
@@ -280,7 +280,7 @@ luciferAwakenClaimed: false,
 hiddenTopicIds: [],
 ```
 
-- [ ] **Step 3: 在所有 normalizer/clone 按各函数真实参数名补默认值和数组展开**
+- [x] **Step 3: 在所有 normalizer/clone 按各函数真实参数名补默认值和数组展开**
 
 `withNpcWorldDefaults` 的 `base` 对象使用：
 
@@ -308,21 +308,21 @@ hiddenTopicIds: [...(state.hiddenTopicIds ?? [])],
 
 逐文件勾选：
 
-- [ ] `withNpcWorldDefaults`
-- [ ] `/api/world cloneWorldState`
-- [ ] `/api/world/tool cloneWorldState`
-- [ ] `normalizePuzzleState`
-- [ ] `cloneWorldStateForPuzzle`
-- [ ] `src/app/world/page.tsx normalizeWorldStateForClient`
-- [ ] `src/hooks/useWorldSave.ts normalizeWorldStateForClient`
+- [x] `withNpcWorldDefaults`
+- [x] `/api/world cloneWorldState`
+- [x] `/api/world/tool cloneWorldState`
+- [x] `normalizePuzzleState`
+- [x] `cloneWorldStateForPuzzle`
+- [x] `src/app/world/page.tsx normalizeWorldStateForClient`
+- [x] `src/hooks/useWorldSave.ts normalizeWorldStateForClient`
 
-- [ ] **Step 4: 加旧存档 HTTP smoke 与静态深拷贝防回归**
+- [x] **Step 4: 加旧存档 HTTP smoke 与静态深拷贝防回归**
 
 从状态中 `delete` 三个字段，分别过 `/api/world`、`/api/world/tool`、`/api/world/puzzle`，断言两个 boolean 为 false、数组为 `[]`。HTTP JSON 往返本身无法证明引用别名，因此不要写“通过 HTTP 修改响应数组并验证原对象”的无效测试。
 
 在 `scripts/test-world-visual-smoke.mjs` 增加静态防回归：逐个断言上述 7 个 normalizer/clone 都出现 `hiddenTopicIds: [...(` 的数组展开，而不是直接赋值。手动槽、autosave、legacy 与结束态的真实读档行为放到 Task 9–10 的 Playwright 矩阵验证。
 
-- [ ] **Step 5: 运行 typecheck 与 smoke**
+- [x] **Step 5: 运行 typecheck 与 smoke**
 
 ```powershell
 npm run typecheck
@@ -332,7 +332,7 @@ node scripts/test-world-visual-smoke.mjs
 
 Expected: 类型通过；隐藏结局触发测试仍失败，但旧存档字段测试通过。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```powershell
 git add src/game/world/types.ts src/game/world/puzzleRules.ts src/app/api/world/route.ts src/app/api/world/tool/route.ts src/app/world/page.tsx src/hooks/useWorldSave.ts scripts/test-world-smoke.mjs scripts/test-world-visual-smoke.mjs
@@ -348,7 +348,7 @@ git commit -m "feat(chapter1): add hidden ending state compatibility"
 - Modify: `src/game/world/endingTriggers.ts`
 - Test: `scripts/test-world-smoke.mjs`
 
-- [ ] **Step 1: 创建 `hiddenEndingRules.ts`**
+- [x] **Step 1: 创建 `hiddenEndingRules.ts`**
 
 ```ts
 import type { EdenWorldState, EdenNpcId } from "@/game/world/types";
@@ -399,7 +399,7 @@ export function canTriggerLuciferAwaken(
 
 不要从 `npcDialogues` 推导隐藏话题。
 
-- [ ] **Step 2: 扩展 `endingTriggers.ts`**
+- [x] **Step 2: 扩展 `endingTriggers.ts`**
 
 ```ts
 export function triggerMichaelSlay(state: EdenWorldState): void {
@@ -423,11 +423,11 @@ export function triggerLuciferAwaken(state: EdenWorldState): void {
 }
 ```
 
-- [ ] **Step 3: 修正类型导入**
+- [x] **Step 3: 修正类型导入**
 
 `AffinityApplyResult` 实际定义在 `npcRelationRules.ts`；本文件只需要 `{delta; newAffinity}` 内联结构，不导入该类型，避免规则模块之间不必要的耦合。
 
-- [ ] **Step 4: 运行 typecheck**
+- [x] **Step 4: 运行 typecheck**
 
 ```powershell
 npm run typecheck
@@ -435,7 +435,7 @@ npm run typecheck
 
 Expected: PASS。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```powershell
 git add src/game/world/hiddenEndingRules.ts src/game/world/endingTriggers.ts
@@ -451,7 +451,7 @@ git commit -m "feat(chapter1): define angel hidden ending rules"
 - Modify: `src/app/world/page.tsx`
 - Test: `scripts/test-world-smoke.mjs`
 
-- [ ] **Step 1: 扩展响应联合**
+- [x] **Step 1: 扩展响应联合**
 
 服务端与前端两处 `endingTriggered` 均改为：
 
@@ -459,7 +459,7 @@ git commit -m "feat(chapter1): define angel hidden ending rules"
 "eve_eats_fruit" | "god_arrives" | "michael_slay" | "lucifer_awaken"
 ```
 
-- [ ] **Step 2: 在 `applyNpcAffinity` 后立即判定**
+- [x] **Step 2: 在 `applyNpcAffinity` 后立即判定**
 
 在 `const aff = applyNpcAffinity(...)` 后、挑战开启逻辑前插入：
 
@@ -480,7 +480,7 @@ if (canTriggerMichaelSlay({ targetNpc, affinity: aff, state })) {
 
 不得在此之前消费 AP、增加注视或调用 Agent。
 
-- [ ] **Step 3: 运行米迦勒 smoke**
+- [x] **Step 3: 运行米迦勒 smoke**
 
 ```powershell
 node scripts/test-world-smoke.mjs http://127.0.0.1:3019
@@ -488,7 +488,7 @@ node scripts/test-world-smoke.mjs http://127.0.0.1:3019
 
 Expected: 米迦勒正反例全部通过；路西法和 UI 仍失败。
 
-- [ ] **Step 4: 提交**
+- [x] **Step 4: 提交**
 
 ```powershell
 git add src/app/api/world/route.ts src/app/world/page.tsx scripts/test-world-smoke.mjs
@@ -506,7 +506,7 @@ git commit -m "feat(chapter1): trigger Michael hidden failure"
 - Test: `scripts/test-world-smoke.mjs`
 - Test: `scripts/test-world-visual-smoke.mjs`
 
-- [ ] **Step 1: 扩展 `SceneAction` availability**
+- [x] **Step 1: 扩展 `SceneAction` availability**
 
 ```ts
 availability: {
@@ -520,7 +520,7 @@ availability: {
 };
 ```
 
-- [ ] **Step 2: 新增共享 `isSceneActionAvailable`**
+- [x] **Step 2: 新增共享 `isSceneActionAvailable`**
 
 ```ts
 export function isSceneActionAvailable(action: SceneAction, state: EdenWorldState): boolean {
@@ -546,7 +546,7 @@ export function isSceneActionAvailable(action: SceneAction, state: EdenWorldStat
 - `src/app/world/page.tsx`：改为 `getSceneActionsByLocation(state)`，并删除后续 `.filter((a) => !state.actionsThisSlot.sceneActionIds.includes(a.id))`，因为共享 validator 已包含同一时段去重；
 - `src/app/api/world/tool/route.ts`：删除旧的四参数 `getSceneActionsByLocation(locationId,timeOfDay,timeSlot,divineAttention)` 校验块，动作取出后只调用 `isSceneActionAvailable(action, state)`，避免 UI/API 两套条件漂移。
 
-- [ ] **Step 3: 新增动作内容**
+- [x] **Step 3: 新增动作内容**
 
 ```ts
 {
@@ -567,11 +567,11 @@ export function isSceneActionAvailable(action: SceneAction, state: EdenWorldStat
 }
 ```
 
-- [ ] **Step 4: tool route 删除旧校验并只调用共享校验**
+- [x] **Step 4: tool route 删除旧校验并只调用共享校验**
 
 在 `scene_action` 分支取 action 后，删除原四参数 `getSceneActionsByLocation(...)` 过滤和其后重复的 `actionsThisSlot.sceneActionIds` 分支；只调用 `isSceneActionAvailable(action,state)`。共享函数已同时保留“同一时段不可重复”和 `oncePerGame` 两层保护，因此现有非一次性动作也不会被伪造重复请求回归。失败返回现有 `ok:false` 契约，不消费 AP、不记录 action。
 
-- [ ] **Step 5: 页面新增显式热点**
+- [x] **Step 5: 页面新增显式热点**
 
 仅在 `getSceneActionsByLocation(state)` 包含该 action 时渲染：
 
@@ -589,7 +589,7 @@ export function isSceneActionAvailable(action: SceneAction, state: EdenWorldStat
 </button>
 ```
 
-- [ ] **Step 6: 运行 smoke**
+- [x] **Step 6: 运行 smoke**
 
 ```powershell
 node scripts/test-world-smoke.mjs http://127.0.0.1:3019
@@ -598,7 +598,7 @@ node scripts/test-world-visual-smoke.mjs
 
 Expected: 划水条件矩阵和静态入口通过。
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```powershell
 git add src/content/world/sceneActions.ts src/app/api/world/tool/route.ts src/app/world/page.tsx scripts/test-world-smoke.mjs scripts/test-world-visual-smoke.mjs
@@ -614,7 +614,7 @@ git commit -m "feat(chapter1): add Lucifer rowing secret"
 - Modify: `src/game/world/achievementRules.ts`
 - Test: `scripts/test-world-smoke.mjs`
 
-- [ ] **Step 1: 在好感结算后记录隐藏话题**
+- [x] **Step 1: 在好感结算后记录隐藏话题**
 
 仅 `targetNpc === "lucifer"` 时调用：
 
@@ -626,7 +626,7 @@ recordLuciferBoundaryTopic(state, playerInput);
 
 完整顺序固定为：`updateWorldMinds` → `applyNpcAffinity` → `recordLuciferBoundaryTopic` → `canTriggerLuciferAwaken` → 专用非流式最终回复 → 触发结局并返回。该快速路径必须放在待生效消耗品、神的注视、工具、失败阻断、AP、奖励和时段推进之前。
 
-- [ ] **Step 2: 在注视结算前加入快速路径**
+- [x] **Step 2: 在注视结算前加入快速路径**
 
 ```ts
 if (targetNpc === "lucifer" && canTriggerLuciferAwaken(state, targetNpc)) {
@@ -656,7 +656,7 @@ if (targetNpc === "lucifer" && canTriggerLuciferAwaken(state, targetNpc)) {
 
 这条路径不得经过 `shouldBlockWorldAgentReply`；任何 Provider 失败都保留 state 并用本地句触发结局。不得消费 AP、增加注视、执行 toolCall、发奖或推进时段。
 
-- [ ] **Step 3: 修正隐藏印记规则**
+- [x] **Step 3: 修正隐藏印记规则**
 
 ```ts
 if (state.hiddenTopicIds.includes("topic_lucifer_boundary")) {
@@ -670,7 +670,7 @@ if (state.endingId === "lucifer_awaken") {
 
 删除 `npcDialogues` 中 `topic_lucifer_boundary` 的旧检查和不存在的 `trigger_lucifer_hidden_ending` 检查。
 
-- [ ] **Step 4: 运行普通 world smoke**
+- [x] **Step 4: 运行普通 world smoke**
 
 ```powershell
 node scripts/test-world-smoke.mjs http://127.0.0.1:3019
@@ -678,7 +678,7 @@ node scripts/test-world-smoke.mjs http://127.0.0.1:3019
 
 Expected: 三条隐藏结局 API 场景和条件矩阵全部通过。
 
-- [ ] **Step 5: 用 fake provider 确定性验证空响应兜底**
+- [x] **Step 5: 用 fake provider 确定性验证空响应兜底**
 
 先启动仓库现有 `scripts/fake-provider.mjs`，再用独立端口启动配置为 fake provider 的生产服务：
 
@@ -699,7 +699,7 @@ node scripts/test-world-smoke.mjs http://127.0.0.1:3020 --provider-failure-only
 
 Expected: fake provider 日志命中 `200_empty_content`；smoke 断言 `lucifer_awaken` 仍触发、本地 reply 非空、`usedFallback=true`、`fallbackReason=llm_data_missing`，且 AP/turn/注视不结算。若 3020 被占用，换未占用端口并记录；不得终止无关进程。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```powershell
 git add src/app/api/world/route.ts src/game/world/achievementRules.ts scripts/test-world-smoke.mjs
@@ -718,7 +718,7 @@ git commit -m "feat(chapter1): awaken through Lucifer boundary"
 - Modify: `src/services/achievement/globalTracker.ts`
 - Test: `scripts/test-world-visual-smoke.mjs`
 
-- [ ] **Step 1: 新增第 29 枚印记**
+- [x] **Step 1: 新增第 29 枚印记**
 
 在结局类末尾新增：
 
@@ -734,7 +734,7 @@ git commit -m "feat(chapter1): awaken through Lucifer boundary"
 
 把注释从“结局类（5）”修正为“结局类（7）”。四类权威数量：探索 6、交互 9、玩法 7、结局 7，总数 29。
 
-- [ ] **Step 2: 在 `traceRules` 加精确分支**
+- [x] **Step 2: 在 `traceRules` 加精确分支**
 
 `michael_slay` summary：
 
@@ -750,7 +750,7 @@ git commit -m "feat(chapter1): awaken through Lucifer boundary"
 
 使用设计规格 §7.2 的固定 keyTurns；米迦勒 `failureReasons` 使用规格 §7.1 三条文本。
 
-- [ ] **Step 3: 更新 `EndingReview`**
+- [x] **Step 3: 更新 `EndingReview`**
 
 不要把 `michael_slay` 落到普通 god_arrives 分支。增加：
 
@@ -761,7 +761,7 @@ const isLuciferAwaken = endingId === "lucifer_awaken";
 
 标题：米迦勒“剑下之责”，路西法“被命名之前”。模块 4：米迦勒“为何失败”，路西法“为何能走到这里”。模块 1 使用设计规格 §7.1 独立复盘叙事，不能复用过场 beats。
 
-- [ ] **Step 4: 更新 `EndingsGallery`**
+- [x] **Step 4: 更新 `EndingsGallery`**
 
 ```ts
 {
@@ -780,7 +780,7 @@ const isLuciferAwaken = endingId === "lucifer_awaken";
 
 锁定态仍只显示“尚未达成的结局”。
 
-- [ ] **Step 5: 核查全局追踪**
+- [x] **Step 5: 核查全局追踪**
 
 `syncFromWorldState` 应继续记录任意非空 ending ID。以下常量必须原样保持：
 
@@ -788,11 +788,11 @@ const isLuciferAwaken = endingId === "lucifer_awaken";
 export const NORMAL_ENDING_IDS = ["eve_eats_fruit", "god_arrives", "life_fruit"] as const;
 ```
 
-- [ ] **Step 6: 增加视觉 smoke**
+- [x] **Step 6: 增加视觉 smoke**
 
 静态断言：第 29 枚印记存在、隐藏；Gallery 两条存在；`NORMAL_ENDING_IDS` 未含隐藏结局；`mark_hidden_ending` 读取真实 endingId。
 
-- [ ] **Step 7: 运行并提交**
+- [x] **Step 7: 运行并提交**
 
 ```powershell
 node scripts/test-world-visual-smoke.mjs
@@ -810,7 +810,7 @@ git commit -m "feat(chapter1): review and track angel endings"
 - Create: `src/content/world/hiddenEndings.ts`
 - Test: `scripts/test-world-visual-smoke.mjs`
 
-- [ ] **Step 1: 验证 Codex 资产**
+- [x] **Step 1: 验证 Codex 资产**
 
 ```powershell
 Get-Item public/assets/chapter1/images/escape_eden_ending.png
@@ -822,7 +822,7 @@ Get-Item public/assets/chapter1/images/achievements/mark_michael_slay.png
 
 用 Pillow/ImageMagick/文件元数据确认四张结局图为 1920×1080 PNG，印记图为 512×512 PNG。只做检查，不重新生图。
 
-- [ ] **Step 2: 注册图片**
+- [x] **Step 2: 注册图片**
 
 ```ts
 escapeEdenEnding: "/assets/chapter1/images/escape_eden_ending.png",
@@ -831,7 +831,7 @@ luciferAwakenEnding: "/assets/chapter1/images/lucifer_awaken_ending.png",
 luciferAwakenRevealEnding: "/assets/chapter1/images/lucifer_awaken_reveal_ending.png",
 ```
 
-- [ ] **Step 3: 创建 `hiddenEndings.ts`**
+- [x] **Step 3: 创建 `hiddenEndings.ts`**
 
 ```ts
 import { CHAPTER1_IMAGES } from "@/game/assets";
@@ -903,7 +903,7 @@ export function getHiddenEndingCinematic(id: WorldEndingId) {
 }
 ```
 
-- [ ] **Step 4: 扩展视觉 smoke 并运行**
+- [x] **Step 4: 扩展视觉 smoke 并运行**
 
 检查 5 个文件存在、4 个 registry key、3 套 beats、4 个路径不复用 Chapter 0 图片；路西法 `frames` 的 `startBeat` 必须为 0 和 3。
 
@@ -911,7 +911,7 @@ export function getHiddenEndingCinematic(id: WorldEndingId) {
 node scripts/test-world-visual-smoke.mjs
 ```
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```powershell
 # 五个 PNG 由 Codex 独立资产提交提供；先用 git ls-files 确认已跟踪，禁止重新生成、替换或改写。
@@ -929,7 +929,7 @@ git commit -m "feat(chapter1): register angel ending artwork"
 - Modify: `src/app/globals.css`
 - Test: `tests/e2e/chapter1-hidden-endings.spec.ts`
 
-- [ ] **Step 1: 先写失败的 Playwright 读档与过场路径测试**
+- [x] **Step 1: 先写失败的 Playwright 读档与过场路径测试**
 
 测试直接写入现有手动槽 1，不新增生产调试按钮。测试文件可相对导入初始状态：
 
@@ -990,7 +990,7 @@ type SeedSource = "manual" | "autosave" | "legacy";
 - 对旧存档删除三个新增字段，页面仍进入过场且不会崩溃。
 - 每条结局页面加载后读取 `eden:global:achievements`，断言对应 ID 已进入 `triggeredEndingIds`；同时 Task 7 静态断言 `NORMAL_ENDING_IDS` 仍精确等于 `eve_eats_fruit / god_arrives / life_fruit`。
 
-- [ ] **Step 2: 创建组件**
+- [x] **Step 2: 创建组件**
 
 ```tsx
 "use client";
@@ -1069,7 +1069,7 @@ export default function HiddenEndingCinematic({ content, onComplete }: Props) {
 
 路西法的 `frames` 在 `beatIndex=3`（第 4 段）切到第二张；`key={currentFrame.image}` 必须保留，确保 Next Image 真正更新。图片失败按路径独立记录，第一张 404 不得阻止第二张继续加载。
 
-- [ ] **Step 3: CSS**
+- [x] **Step 3: CSS**
 
 要求：全屏、字幕底部暗区、三种 tone、图片失败仍有渐变、按钮可聚焦、`prefers-reduced-motion` 关闭位移类动画。
 
@@ -1082,7 +1082,7 @@ export default function HiddenEndingCinematic({ content, onComplete }: Props) {
 .eden-hidden-ending-cinematic--awaken { background:linear-gradient(145deg,#082c30,#17102e); }
 ```
 
-- [ ] **Step 4: 运行单文件 e2e，确认页面尚未接线所以失败**
+- [x] **Step 4: 运行单文件 e2e，确认页面尚未接线所以失败**
 
 ```powershell
 npm run test:e2e -- tests/e2e/chapter1-hidden-endings.spec.ts --project=desktop-chromium
@@ -1090,7 +1090,7 @@ npm run test:e2e -- tests/e2e/chapter1-hidden-endings.spec.ts --project=desktop-
 
 Expected: FAIL，原因是 `/world` 尚未渲染 `HiddenEndingCinematic`（组件和 CSS 已存在，但页面接线刻意留到 Task 10）。若此时通过，先确认测试没有误命中旧的 EndingReview。
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```powershell
 git add src/components/world/HiddenEndingCinematic.tsx src/app/globals.css tests/e2e/chapter1-hidden-endings.spec.ts
@@ -1107,7 +1107,7 @@ git commit -m "feat(chapter1): play hidden ending cinematics"
 - Test: `tests/e2e/chapter1-hidden-endings.spec.ts`
 - Test: `scripts/test-world-visual-smoke.mjs`
 
-- [ ] **Step 1: 新增过场完成状态**
+- [x] **Step 1: 新增过场完成状态**
 
 ```ts
 const [hiddenEndingCinematicDone, setHiddenEndingCinematicDone] = useState(false);
@@ -1115,7 +1115,7 @@ const [hiddenEndingCinematicDone, setHiddenEndingCinematicDone] = useState(false
 
 当 `state.endingId` 变化时重置为 false；`handleRestart` 也重置。
 
-- [ ] **Step 2: ending render 先走过场**
+- [x] **Step 2: ending render 先走过场**
 
 ```tsx
 const hiddenEnding = getHiddenEndingCinematic(state.endingId);
@@ -1131,7 +1131,7 @@ if ((state.phase === "ending" || state.isEnded) && hiddenEnding && !hiddenEnding
 
 过场完成后才渲染现有 `EndingReview`。
 
-- [ ] **Step 3: 复盘背景不再复用 Chapter 0**
+- [x] **Step 3: 复盘背景不再复用 Chapter 0**
 
 ```ts
 const endingBg = state.endingId === "escape_eden"
@@ -1147,7 +1147,7 @@ const endingBg = state.endingId === "escape_eden"
 
 `endingTone` 为 `escape` / `failure` / `awaken`。
 
-- [ ] **Step 4: 结局音效**
+- [x] **Step 4: 结局音效**
 
 - `escape_eden`：复用 `playEndingSuccess()`。
 - `michael_slay`：复用 `playEndingFailure()`。
@@ -1155,7 +1155,7 @@ const endingBg = state.endingId === "escape_eden"
 
 不要只依赖 `/api/world` 的 `endingTriggered`；谜题 state 进入 `escape_eden` 时也必须播放一次。用 `useEffect` 观察 `state.endingId` 并用 ref 去重。
 
-- [ ] **Step 5: 运行 e2e、视觉 smoke、typecheck**
+- [x] **Step 5: 运行 e2e、视觉 smoke、typecheck**
 
 ```powershell
 npm run test:e2e -- tests/e2e/chapter1-hidden-endings.spec.ts --project=desktop-chromium
@@ -1165,7 +1165,7 @@ npm run typecheck
 
 Expected: Task 9 中三条手动槽用例、autosave、legacy、兼容 ended shape、旧字段缺失和图片失败降级全部 PASS；不允许只验证组件源文件存在。
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```powershell
 git add src/app/world/page.tsx src/app/globals.css tests/e2e/chapter1-hidden-endings.spec.ts scripts/test-world-visual-smoke.mjs
@@ -1184,7 +1184,7 @@ git commit -m "feat(chapter1): integrate angel ending presentation"
 - Modify: `doc/submit/社交媒体链接.md`
 - Test: `scripts/test-world-visual-smoke.mjs`
 
-- [ ] **Step 1: 同步 29 枚印记**
+- [x] **Step 1: 同步 29 枚印记**
 
 当前四类：探索 6、交互 9、玩法 7、结局 6，总数 28。新增后：探索 6、交互 9、玩法 7、结局 7，总数 29。
 
@@ -1198,7 +1198,7 @@ rg -n "28.*印记|28 个.*印记" README.md design doc/submit
 
 至少必须包含当前仍写 28 的 `doc/submit/社交媒体链接.md`。更新后重跑同一命令，允许命中的只能是明确标注为历史记录的段落；不要批量改 `doc/第一章/plan_docs` 旧任务证据。
 
-- [ ] **Step 2: 世界圣经补机密身份边界**
+- [x] **Step 2: 世界圣经补机密身份边界**
 
 只在路西法机密条目补：
 
@@ -1208,11 +1208,11 @@ rg -n "28.*印记|28 个.*印记" README.md design doc/submit
 
 不得写触发条件，不得放入未解锁图鉴文案。
 
-- [ ] **Step 3: 更新 AI 资产接入状态**
+- [x] **Step 3: 更新 AI 资产接入状态**
 
 保留 Codex 已记录的生成工具、Prompt 摘要、用途和路径；CodeBuddy 只追加：已注册到 `CHAPTER1_IMAGES`、已接入隐藏过场、验证日期。
 
-- [ ] **Step 4: 运行静态检查并提交当前设计/素材口径**
+- [x] **Step 4: 运行静态检查并提交当前设计/素材口径**
 
 ```powershell
 node scripts/test-world-visual-smoke.mjs
@@ -1228,7 +1228,7 @@ git commit -m "docs(chapter1): record angel hidden endings"
 - Modify only if a directly related failure requires a scoped fix
 - Do not update `docs/PROJECT_CONTEXT.md` with a PASS claim; Codex updates it after independent review
 
-- [ ] **Step 1: 检查工作区范围**
+- [x] **Step 1: 检查工作区范围**
 
 ```powershell
 git status --short
@@ -1237,7 +1237,7 @@ git diff --name-status $baseline..HEAD
 
 确认没有删除/移动 `doc/` 文件，没有把 `.superpowers/`、日志或构建临时文件加入提交。
 
-- [ ] **Step 2: 串行运行静态门禁**
+- [x] **Step 2: 串行运行静态门禁**
 
 ```powershell
 npm run typecheck
@@ -1249,7 +1249,7 @@ node scripts/test-world-visual-smoke.mjs
 
 Expected: 全部 exit 0。
 
-- [ ] **Step 3: 启动 mock 服务并运行 world smoke**
+- [x] **Step 3: 启动 mock 服务并运行 world smoke**
 
 终端 A：
 
@@ -1266,7 +1266,7 @@ node scripts/test-world-smoke.mjs http://127.0.0.1:3019
 
 若 3019 被占用，改用未占用端口并在报告中记录，不能终止不属于本任务的进程。
 
-- [ ] **Step 4: 运行桌面 e2e**
+- [x] **Step 4: 运行桌面 e2e**
 
 ```powershell
 npm run test:e2e -- tests/e2e/chapter1-hidden-endings.spec.ts tests/e2e/chapter1-mechanics.spec.ts --project=desktop-chromium
@@ -1274,7 +1274,7 @@ npm run test:e2e -- tests/e2e/chapter1-hidden-endings.spec.ts tests/e2e/chapter1
 
 Expected: 三条隐藏过场和既有机制全部 PASS。
 
-- [ ] **Step 5: 资产与密钥检查**
+- [x] **Step 5: 资产与密钥检查**
 
 验证：
 
@@ -1284,7 +1284,7 @@ Expected: 三条隐藏过场和既有机制全部 PASS。
 - `.env.local` 未被跟踪；
 - 三条隐藏结局不在 `NORMAL_ENDING_IDS`。
 
-- [ ] **Step 6: 人工桌面检查**
+- [x] **Step 6: 人工桌面检查**
 
 1920×1080：
 
@@ -1296,7 +1296,7 @@ Expected: 三条隐藏过场和既有机制全部 PASS。
 - 点击、Enter、Space、跳过均可进入复盘；
 - 图片 404 模拟下仍可读完整文案。
 
-- [ ] **Step 7: 最终门禁通过后追加 CodeBuddy 证据**
+- [x] **Step 7: 最终门禁通过后追加 CodeBuddy 证据**
 
 此时才更新 `doc/submit/CodeBuddy开发对话记录.md`，写入：
 
@@ -1313,7 +1313,7 @@ git add doc/submit/CodeBuddy开发对话记录.md
 git commit -m "docs(chapter1): record CodeBuddy angel ending evidence"
 ```
 
-- [ ] **Step 8: 仅在仍有本任务未提交文件时补提交，然后交给 Codex 验收**
+- [x] **Step 8: 仅在仍有本任务未提交文件时补提交，然后交给 Codex 验收**
 
 ```powershell
 git status --short
@@ -1333,16 +1333,22 @@ git diff --name-status $baseline..HEAD
 
 ---
 
+## 执行完成记录（2026-07-13）
+
+本计划的实现步骤、测试步骤和最终验收项已由 CodeBuddy 完成并提交；Codex 独立复验结果记录于 `docs/PROJECT_CONTEXT.md` 与 `doc/submit/CodeBuddy开发对话记录.md`。本计划勾选表示对应实现或验收证据已存在，不表示 Codex 代替 CodeBuddy 完成核心开发。
+
+独立复验门禁：`npm run build`、构建后 `npm run typecheck`、`npm run lint`、场景规则 65/65、视觉 smoke 265/265、mock world smoke 253/0、fake Provider fallback 7/0、desktop Chromium e2e 13/13。
+
 ## 最终 Definition of Done
 
-- [ ] 加百列：火焰剑 + 东园挣脱选项稳定触发 `escape_eden`。
-- [ ] 米迦勒：本次负向低语使好感归零，立即触发 `michael_slay`，无后续结算。
-- [ ] 路西法：夜晚四河分流 + 好感 100 + 晨星碎片 + 划水/边界话题，先回复再触发 `lucifer_awaken`。
-- [ ] 三条结局分别使用独占 1920×1080 过场图和完整点击推进文案；路西法第 4 段稳定切换第二张。
-- [ ] 米迦勒第 29 枚印记及 512×512 图标正常显示。
-- [ ] 旧存档、手动槽、autosave、legacy save、已结束存档兼容。
-- [ ] 三条结局进入跨局图鉴，但不污染三种普通结局统计。
-- [ ] Agent/图片/音频失败时结局闭环仍可达。
-- [ ] typecheck、lint、build、规则测试、world smoke、visual smoke、desktop e2e 全绿。
-- [ ] 无明文密钥、无 `doc/` 删除移动、无 `.superpowers/` 或临时日志误提交。
-- [ ] CodeBuddy 核心开发证据完整，Codex 只承担资产与独立验收角色。
+- [x] 加百列：火焰剑 + 东园挣脱选项稳定触发 `escape_eden`。
+- [x] 米迦勒：本次负向低语使好感归零，立即触发 `michael_slay`，无后续结算。
+- [x] 路西法：夜晚四河分流 + 好感 100 + 晨星碎片 + 划水/边界话题，先回复再触发 `lucifer_awaken`。
+- [x] 三条结局分别使用独占 1920×1080 过场图和完整点击推进文案；路西法第 4 段稳定切换第二张。
+- [x] 米迦勒第 29 枚印记及 512×512 图标正常显示。
+- [x] 旧存档、手动槽、autosave、legacy save、已结束存档兼容。
+- [x] 三条结局进入跨局图鉴，但不污染三种普通结局统计。
+- [x] Agent/图片/音频失败时结局闭环仍可达。
+- [x] typecheck、lint、build、规则测试、world smoke、visual smoke、desktop e2e 全绿。
+- [x] 无明文密钥、无 `doc/` 删除移动、无 `.superpowers/` 或临时日志误提交。
+- [x] CodeBuddy 核心开发证据完整，Codex 只承担资产与独立验收角色。

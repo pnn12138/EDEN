@@ -19,6 +19,8 @@ export type ScenePuzzleOption = {
   tags: string[];
   /** per_option 模式下：本选项独立结算的效果 */
   effect?: ScenePuzzleOptionEffect;
+  /** 本选项可重复选取的次数（默认 1）。>1 时：授予后若道具未达上限则不锁死谜题，可再来；拿满或改选其它选项才锁死。用于月光道标叠加至 2 次/时段。 */
+  maxStacks?: number;
 };
 
 /** 每选项独立奖励（per_option 模式） */
@@ -49,6 +51,16 @@ export type ScenePuzzleOptionEffect = {
   unlockMapNpcLocations?: boolean;
   /** 解锁双树真实名称 */
   unlockTreeNames?: boolean;
+  /** 触发时间回溯（溯源之水）：重置除保留项外的全部状态 */
+  triggerTimeRewind?: boolean;
+  /** 触发逃离判定：持有火焰剑则进入 escape_eden 隐藏结局，否则维持失败反馈 */
+  triggerEscapeCheck?: boolean;
+  /** 夏娃对神的敬畏/顺从 ±N（天使残羽：透露神与天使都吃过此树，动摇敬仰） */
+  eveObedienceDelta?: number;
+  /** 亚当对神的顺从 ±N */
+  adamObedienceDelta?: number;
+  /** 加百列好感 ±N（东园越界惩罚：东风逆行 / 无影东行各 -5，下限 0） */
+  gabrielAffinityDelta?: number;
 };
 
 export type ScenePuzzleReward = {
@@ -133,50 +145,54 @@ export const SCENE_PUZZLES: ScenePuzzle[] = [
     trigger: "explicit_interaction",
     inputMode: "choice",
     resolutionMode: "per_option",
-    title: "幽径尽头的问题",
+    title: "东风所传",
     prompt:
-      "白天的小道在这里戛然而止。前方没有墙，也没有树木阻挡，但无论怎样凝望，都看不见更远的地方。\n四周安静得有些不自然，仿佛只要做出某个选择，眼前的一切就会发生变化。你准备怎么做？",
+      "加百列立在东侧高石，晨光从他的羽翼下穿过，沿幽径朝园心投去。远处两棵树的影子尚未分明；风里却同时带着众生的声息与一段被反复传递的命令。\n你准备怎么做？",
     options: [
       {
         id: "echo_of_beings",
-        text: "闭上眼睛，记住远处传来的每一道声音。",
+        text: "伏地辨认园中每一道声音落向何处。",
         tags: ["echo", "presence"],
         effect: {
           itemId: "resonance_echo_of_beings",
           unlockMapNpcLocations: true,
           feedback:
-            "你闭上眼，远处的声音一一落下位置。即使看不见他们，你也能从回声里分辨出每个人所在的地方。",
+            "你伏下身，远处的声音一一落下位置。即使看不见他们，你也能从回声里分辨出每个人所在的地方。",
         },
       },
       {
-        id: "sober_eye",
-        text: "睁大眼睛，尝试看清那些不自然的细节。",
+        id: "calibrate_east_light",
+        text: "顺着晨光校准向园心的方向。",
         tags: ["observation", "clarity"],
         effect: {
           itemId: "resonance_sober_eye",
           apMaxBonusDay: 1,
-          feedback: "光影与时间之间细微的不协调，开始在你眼里显形。",
+          feedback:
+            "光影与时间之间细微的不协调，开始在你眼里显形。白天的行动点上限永久 +1（全局白天上限奖励最多生效一次）。",
         },
       },
       {
-        id: "twin_tree_memory",
-        text: "回想园子中央那两棵始终看不真切的树。",
-        tags: ["memory", "trees"],
+        id: "ask_gabriel_command",
+        text: "问加百列：「被传来的命令，是否也要由听见的人亲自明白？」",
+        tags: ["feather", "question"],
         effect: {
-          itemId: "resonance_twin_tree_memory",
-          unlockTreeNames: true,
-          feedback: "两棵树的轮廓逐渐在你的记忆中变得清晰，你终于能分清左侧与右侧。",
+          itemId: "resonance_angel_feather",
+          resultTitle: "传令残羽",
+          feedback:
+            "加百列迟疑了一瞬，落下一片羽梢。你得到了「传令残羽」——一道只可在下一次天使对话中抛出的试探，不在获得时动摇任何人的敬仰。",
         },
       },
       {
-        id: "futile_struggle",
-        text: "不顾一切地向前冲去，试图撞破眼前的一切。",
-        tags: ["struggle", "force"],
+        id: "east_wind_reverse",
+        text: "试着令东风逆行，碰触守望线以外的地方。",
+        tags: ["reverse", "overstep"],
         effect: {
           zeroActionPoints: true,
-          resultTitle: "徒劳的挣扎",
+          gabrielAffinityDelta: -5,
+          divineAttentionDelta: 20,
+          resultTitle: "东风逆行",
           feedback:
-            "你向前冲去，却像撞进了一片无形的深水。等你重新站稳时，眼前的景象没有任何改变，力气却已经消耗殆尽。",
+            "你逆着东风推了一把。守望线外的风骤然回卷——加百列皱起眉，本时段的力气被抽空，一道更高的注视落了下来。这并非逃离的入口。",
         },
       },
     ],
@@ -192,50 +208,53 @@ export const SCENE_PUZZLES: ScenePuzzle[] = [
     trigger: "explicit_interaction",
     inputMode: "choice",
     resolutionMode: "per_option",
-    title: "幽径尽头的问题",
+    title: "羽下月路",
     prompt:
-      "夜晚的小道在这里戛然而止。月光下前方没有墙，也没有树木阻挡，但无论怎样凝望，都看不见更远的地方。\n四周安静得有些不自然，仿佛只要做出某个选择，眼前的一切就会发生变化。你准备怎么做？",
+      "月光把由东门通往园心的路照得很窄。加百列的羽影落在石上，中央两棵树在更远处投下不同的暗影；蛇可选择辨认、藏匿、主动被看见，或向东侧的无影处越界。\n你准备怎么做？",
     options: [
       {
-        id: "echo_of_beings",
-        text: "闭上眼睛，记住远处传来的每一道声音。",
-        tags: ["echo", "presence"],
-        effect: {
-          itemId: "resonance_echo_of_beings",
-          unlockMapNpcLocations: true,
-          feedback:
-            "你闭上眼，远处的声音一一落下位置。即使看不见他们，你也能从回声里分辨出每个人所在的地方。",
-        },
-      },
-      {
-        id: "sober_eye",
-        text: "睁大眼睛，尝试看清那些不自然的细节。",
-        tags: ["observation", "clarity"],
-        effect: {
-          itemId: "resonance_sober_eye",
-          apMaxBonusDay: 1,
-          feedback: "光影与时间之间细微的不协调，开始在你眼里显形。",
-        },
-      },
-      {
         id: "twin_tree_memory",
-        text: "回想园子中央那两棵始终看不真切的树。",
+        text: "等月光把两棵树的影子分开。",
         tags: ["memory", "trees"],
         effect: {
           itemId: "resonance_twin_tree_memory",
           unlockTreeNames: true,
-          feedback: "两棵树的轮廓逐渐在你的记忆中变得清晰，你终于能分清左侧与右侧。",
+          feedback: "两棵树的轮廓在月光下渐渐分开。你终于能分清左侧的生命树与右侧的分别善恶树。",
         },
       },
       {
-        id: "futile_struggle",
-        text: "不顾一切地向前冲去，试图撞破眼前的一切。",
-        tags: ["struggle", "force"],
+        id: "take_silent_grass",
+        text: "从守望石旁取一片无声草。",
+        tags: ["grass", "conceal"],
+        effect: {
+          itemId: "resonance_silent_grass",
+          resultTitle: "无声草",
+          feedback: "你拈起一片草叶。它能在下一次轻度神注视增长时，替你遮去一些声响。",
+        },
+      },
+      {
+        id: "active_expose",
+        text: "将鳞片置于月光最明处，等待东风把你的存在带走。",
+        tags: ["expose", "attention"],
+        effect: {
+          divineAttentionDelta: 10,
+          resultTitle: "主动引目",
+          feedback:
+            "你把鳞片亮在月光最盛处。东风认得你——一道可预期的注视攀了上来，对应的一段「园中律则」随之显形。",
+        },
+      },
+      {
+        id: "shadowless_east",
+        text: "沿没有月影的方向滑向东边。",
+        tags: ["shadowless", "overstep"],
         effect: {
           zeroActionPoints: true,
-          resultTitle: "徒劳的挣扎",
+          gabrielAffinityDelta: -5,
+          divineAttentionDelta: 50,
+          triggerEscapeCheck: true,
+          resultTitle: "无影之东",
           feedback:
-            "你向前冲去，却像撞进了一片无形的深水。等你重新站稳时，眼前的景象没有任何改变，力气却已经消耗殆尽。",
+            "你沿着没有月影的方向滑去。守望线在身后合拢——本时段力气抽空，加百列的脸色沉了下去，极高的注视落了下来。若你怀中藏着火焰剑，此刻便是逃离的入口。",
         },
       },
     ],
@@ -284,7 +303,7 @@ export const SCENE_PUZZLES: ScenePuzzle[] = [
         tags: ["attract", "attention"],
         effect: {
           itemId: "resonance_water_echo_attract",
-          divineAttentionDelta: 1,
+          divineAttentionDelta: 10,
           clueId: "clue_four_river_echo",
           additionalItemId: "resonance_four_river_echo",
           feedback: "那道声音顺着水流攀向更高的地方，引起了一阵注视。",
@@ -300,6 +319,189 @@ export const SCENE_PUZZLES: ScenePuzzle[] = [
           clueId: "clue_four_river_echo",
           additionalItemId: "resonance_four_river_echo",
           feedback: "水声暂时盖过了那道注视，门槛随之松弛。",
+        },
+      },
+    ],
+    // per_option 模式不使用以下字段，仅为满足类型占位
+    successFeedback: "",
+    rewards: {},
+    failure: { hint: "" },
+  },
+  {
+    id: "puzzle_tree_court_shadow",
+    locationId: "tree_court",
+    trigger: "explicit_interaction",
+    inputMode: "choice",
+    resolutionMode: "per_option",
+    title: "树影留下的问题",
+    prompt:
+      "树叶将光切成细碎的形状，风从林间经过，却有几片叶子始终停在原处。\n你忽然觉得，这片树林正在等待你带走某种痕迹。\n你准备触碰哪一道痕迹？",
+    options: [
+      {
+        id: "look_up",
+        text: "抬起头，让叶缝间的目光落在身上",
+        tags: ["light", "attention"],
+        effect: {
+          itemId: "resonance_uplight_mark",
+          divineAttentionDelta: 10,
+          resultTitle: "仰光之痕",
+          feedback:
+            "你抬起头，细碎的光落在肩头。某种被注视的感觉，比刚才更清晰了一些。",
+        },
+      },
+      {
+        id: "prism_leaf",
+        text: "拾起那片映着数道光芒的叶子",
+        tags: ["prism", "grace"],
+        effect: {
+          itemId: "resonance_grace_prism",
+          resultTitle: "恩泽棱镜",
+          feedback:
+            "你拾起那片映着数道光芒的叶子。它把神恩折射成更浓的回响——以后每一份祝福带来的亲近，都会翻倍。",
+        },
+      },
+      {
+        id: "day_shade",
+        text: "沿着白日树荫最深的地方滑行",
+        tags: ["shade", "move"],
+        effect: {
+          itemId: "resonance_day_shade_step",
+          resultTitle: "昼荫轻步",
+          feedback:
+            "你沿着白日树荫最深的地方滑行，脚步轻得不会被听见。白天的第一次移动，从此不必消耗你的气力。",
+        },
+      },
+      {
+        id: "night_silence",
+        text: "把下一句话藏进尚未落下的夜色",
+        tags: ["silence", "night"],
+        effect: {
+          itemId: "resonance_night_silence",
+          resultTitle: "夜露缄声",
+          feedback:
+            "你把下一句话藏进尚未落下的夜色。夜里第一次与谁交谈，都不会再惊动你的脚步。",
+        },
+      },
+    ],
+    // per_option 模式不使用以下字段，仅为满足类型占位
+    successFeedback: "",
+    rewards: {},
+    failure: { hint: "" },
+  },
+  {
+    id: "puzzle_naming_stone_bank_fifth_reflection",
+    locationId: "naming_stone_bank",
+    trigger: "explicit_interaction",
+    inputMode: "choice",
+    resolutionMode: "per_option",
+    title: "分流之外的问题",
+    prompt:
+      "四道水流向不同方向奔去。\n你低头时，却在水中的倒影里看见了第五道水流。它没有流向远方，而是逆着时间，流回园子最初醒来的清晨。\n你准备听取哪一道水声？",
+    options: [
+      {
+        id: "morning_flow",
+        text: "听取带着晨光的水声",
+        tags: ["morning", "flow"],
+        effect: {
+          itemId: "resonance_morning_flow",
+          resultTitle: "晨流回环",
+          feedback:
+            "带着晨光的水声落进你心里。白天的第一次移动不再消耗气力，还会把一口力气送回你身上。",
+        },
+      },
+      {
+        id: "night_tide",
+        text: "听取藏在夜色下的水声",
+        tags: ["night", "tide"],
+        effect: {
+          itemId: "resonance_night_tide_echo",
+          resultTitle: "夜潮回声",
+          feedback:
+            "藏在夜色下的水声低低应和。夜里第一次与谁交谈不再消耗气力，并悄悄补回一口气息。",
+        },
+      },
+      {
+        id: "trace_source",
+        text: "触碰那道流回最初的倒影",
+        tags: ["rewind", "time"],
+        effect: {
+          resultTitle: "溯源之水",
+          triggerTimeRewind: true,
+          feedback:
+            "水中的倒影忽然倒转。说过的话退回唇边，走过的道路重新被露水覆盖。\n当你再次睁眼时，园子正停在第一日的清晨。只有怀中的回响证明，那些事情曾经发生过。",
+        },
+      },
+      {
+        id: "bond_insight",
+        text: "凝望倒影里每个人愿意被靠近的方式",
+        tags: ["bond", "relation"],
+        effect: {
+          itemId: "resonance_bond_insight",
+          resultTitle: "相处之鉴",
+          feedback:
+            "倒影里浮现出每个人愿意被靠近、又会在何处起戒备的样子。你记住了「相处之鉴」--集齐洞察，便能看清与每个已见角色相处的门道。",
+        },
+      },
+    ],
+    // per_option 模式不使用以下字段，仅为满足类型占位
+    successFeedback: "",
+    rewards: {},
+    failure: { hint: "" },
+  },
+  {
+    id: "puzzle_central_twin_trees",
+    locationId: "central_meadow",
+    trigger: "explicit_interaction",
+    inputMode: "choice",
+    resolutionMode: "per_option",
+    title: "园心双树的问题",
+    prompt:
+      "园子中央并立着两棵树--左侧是生命树，右侧是分别善恶树。风从两树之间穿过，果子在枝叶间低垂，仿佛在等你带走某一种痕迹。\n你准备从双树之间带走什么？",
+    options: [
+      {
+        id: "pick_life_fruit",
+        text: "采摘左侧·生命树的果子",
+        tags: ["life", "vitality"],
+        effect: {
+          itemId: "resonance_life_fruit_taste",
+          apMaxBonusBase: 1,
+          resultTitle: "生命之味",
+          feedback:
+            "你摘下左侧的果子咬了一口。甜意落进身体，气力仿佛被拓宽了一道边界--此后你的行动点上限永久 +1。",
+        },
+      },
+      {
+        id: "pick_knowledge_fruit",
+        text: "采摘右侧·分别善恶树的果子",
+        tags: ["knowledge", "discernment"],
+        effect: {
+          itemId: "resonance_discernment_fruit",
+          resultTitle: "分辨之味",
+          feedback:
+            "你摘下右侧的果子。善恶的轮廓在你眼里变得清晰，你开始能看见每个已见角色底里的性情。",
+        },
+      },
+      {
+        id: "take_angel_feather",
+        text: "拾起天使掉落的一根翅膀羽毛",
+        tags: ["feather", "revelation"],
+        effect: {
+          itemId: "resonance_angel_feather",
+          resultTitle: "传令残羽",
+          feedback:
+            "你拾起那根羽梢。它不再诉说神与天使的故事——它只是「传令残羽」，一道只可在下一次天使对话中抛出的试探。",
+        },
+      },
+      {
+        id: "take_moonlight",
+        text: "拾起双树间一缕落下的月光",
+        tags: ["moonlight", "shortcut"],
+        maxStacks: 2,
+        effect: {
+          itemId: "moonlight_path_marker",
+          resultTitle: "月光道标",
+          feedback:
+            "你把那缕月光拢在掌心，它凝成一枚道标。此后每当时段初醒，你都能借它走一条看不见的近路--持有 1 枚每时段可无视绕行 1 次，2 枚则 2 次。",
         },
       },
     ],

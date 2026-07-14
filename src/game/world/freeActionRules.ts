@@ -15,7 +15,7 @@
 
 import type { EdenWorldState } from "@/game/world/types";
 
-/** 本时段免费移动次数（派生）：各永久道具贡献之和 */
+/** 本时段免费移动次数（派生）：各永久道具贡献之和，但每时段最多 1 次（Task 4 Step 3） */
 export function getFreeMoveCharges(state: EdenWorldState): number {
   let n = 0;
   if (state.inventory.includes("gift_free_move")) n += 1; // 无羁之步：每时段 1 次
@@ -23,7 +23,8 @@ export function getFreeMoveCharges(state: EdenWorldState): number {
   if (state.inventory.includes("resonance_day_shade_step") && state.timeOfDay === "day") n += 1; // 昼荫轻步：仅白天 1 次
   // 晨流回环：仅白天 +1（且额外恢复 1AP，见 tool/route.ts）
   if (state.inventory.includes("resonance_morning_flow") && state.timeOfDay === "day") n += 1;
-  return n;
+  // 每时段最多一次免费移动：多件免费道具不再叠加
+  return Math.min(1, n);
 }
 
 /** 本时段免费对话次数（派生）：仅夜晚生效的永久道具贡献 */

@@ -76,3 +76,43 @@ srv_h2*.log
 smoke_verify_*.log
 .pptx_build/
   
+# CodeBuddy .superpowers
+.superpowers/
+
+# 独立图生视频测试产物（不提交）
+scripts/.i2v-output/
+
+# CodeBuddy 本地规划产物（不提交）
+.codebuddy/
+
+# 本地验证/构建产物（不提交）
+outputs/
+
+# 本地调试/验证临时文件（不提交）
+$null
+_dbg.txt
+ang_out.txt
+angel_log.txt
+att_out.txt
+attn_log.txt
+build_out.txt
+c1.txt
+c2.txt
+c3.txt
+c3_log.txt
+diff_stat.txt
+east_test_out.txt
+puz_out.txt
+puzzle_log.txt
+server_err.txt
+server_out.txt
+tsc_2r.txt
+tsc_t3.txt
+typecheck_out.txt
+tmp-ending-server.*
+tmp-fix-server*.err
+tmp-fix-server*.log
+
+# 本地辅助脚本（不提交）
+kill_port_3019.ps1
+run_smoke.ps1

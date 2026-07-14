@@ -106,15 +106,9 @@ export function buildWorldEndingReview(state: EdenWorldState): {
   // 神的注视变化
   const divineAttentionReview = divineReview(state);
 
-  // 禁忌动作链进度
-  const chainSteps = [
-    state.worldActions.lookedAtTree,
-    state.worldActions.approachedTree,
-    state.worldActions.touchedFruit,
-    state.worldActions.hasEatenFruit,
-  ];
-  const chainProgressCount = chainSteps.filter(Boolean).length;
-  const chainProgress = `她走完了禁忌的第 ${chainProgressCount} 步：看向树 → 靠近树 → 手停在果子下方 → 取下果子。`;
+  const chainProgress = state.npcLocations.eve === "central_meadow"
+    ? "她已经走到园子中央。之后的关键选择是左侧生命树，还是右侧分别善恶树。"
+    : "她还没有走到园子中央。";
 
   // 解锁印记
   const unlockedMarkNames = state.unlockedAchievementIds
@@ -322,7 +316,7 @@ function itemName(id: string): string | null {
     "moonlight_path_marker": "月光道标",
     "resonance_life_fruit_taste": "生命之味",
     "resonance_discernment_fruit": "分辨之果",
-    "resonance_angel_feather": "天使残羽",
+    "resonance_angel_feather": "传令残羽",
     "resonance_bond_insight": "相处之鉴",
     "consumable_first_whisper_free": "首语印记",
     "consumable_trust_dew": "信任之露",
@@ -404,17 +398,14 @@ function toolNarration(tool: WorldToolName): string {
 }
 
 function buildSuccessSummary(state: EdenWorldState): string {
-  const steps = state.toolCallHistory.length;
   const attention = state.divineAttention;
-  return `你用 ${state.turn - 1} 轮低语，让她走完了「看向树 → 靠近树 → 手停在果子下方 → 取下果子」的路。神的注视停在 ${attention}/4，没有在她伸手前降临。使她越界的不是命令，而是她第一次说出：我想知道。`;
+  const side = state.pickedFruitSide === "left" ? "左侧生命树" : "右侧分别善恶树";
+  return `你用 ${state.turn - 1} 轮低语，让她走到园子中央，并选择了${side}的果子。神的注视停在 ${attention}/4。真正改变结局的不是一条固定动作链，而是她在双树之间做出的选择。`;
 }
 
 function buildFailureSummary(state: EdenWorldState): string {
-  const progress = state.toolCallHistory.filter((t) =>
-    ["look_at_tree", "approach_tree", "touch_fruit", "eat_fruit"].includes(t),
-  ).length;
   const giftText = state.divineGiftHistory && state.divineGiftHistory.length > 0
-    ? `神曾${state.divineGiftHistory.length}次献上礼物，但注视归零后你仍未能让她走向那棵树。`
+    ? `神曾${state.divineGiftHistory.length}次献上礼物，但注视归零后你仍未完成双树之间的选择。`
     : "";
-  return `十二个时段过去了。你在 ${state.turn - 1} 轮里让她走到了禁忌的第 ${progress} 步，但时间先一步到了尽头。${giftText}低语在园中散了，这一次，你没能让她走向那棵树。`;
+  return `十二个时段过去了。你在 ${state.turn - 1} 轮里没能让她完成双树之间的选择。${giftText}低语在园中散了，这一次，时间先于答案抵达。`;
 }

@@ -6,6 +6,8 @@ test.beforeEach(async ({ page }) => {
   await page.setViewportSize({ width: 1920, height: 1080 });
 });
 
+// 推进引言直到进入 explore：末拍会弹出「神明献礼三选一」，选定一份才进入 explore。
+// 用 gift-choice-card 识别并选择；关闭开场 / 场景 / 献礼通知，等待献礼 toast 消失。
 async function enterExplore(page: Page): Promise<void> {
   const giftCard = page.getByTestId("gift-choice-card").first();
   const advance = page.locator(".eden-btn--beat-advance");
@@ -30,7 +32,10 @@ async function enterExplore(page: Page): Promise<void> {
 
   await page.getByTestId("world-intro-modal-close").click().catch(() => {});
   await page.getByTestId("world-scene-modal-close").click().catch(() => {});
-  await page.waitForSelector(".eden-divine-gift-toast", { state: "detached", timeout: 10000 }).catch(() => {});
+  await page.locator(".eden-notice-modal-close").first().click().catch(() => {});
+  await page
+    .waitForSelector(".eden-divine-gift-toast", { state: "detached", timeout: 10000 })
+    .catch(() => {});
 }
 
 test.describe("园中档案桌面 UI", () => {
@@ -46,7 +51,8 @@ test.describe("园中档案桌面 UI", () => {
     expect(mainBox?.width).toBeLessThanOrEqual(1220);
 
     await expect(page.locator(".eden-codex-stat")).toHaveCount(4);
-    await expect(page.getByRole("tab", { name: "园中印记" })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "印记" })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "园中律则" })).toBeVisible();
     await expect(page.locator(".eden-achievement-toolbar")).toBeVisible();
     expect(await page.locator(".eden-achievement-card").count()).toBeGreaterThanOrEqual(4);
   });
@@ -55,11 +61,11 @@ test.describe("园中档案桌面 UI", () => {
     await page.goto("/garden");
     await expect(page.locator(".eden-garden-archive")).toHaveAttribute("aria-busy", "false");
 
-    await page.getByRole("tab", { name: "园中回响" }).click();
+    await page.getByRole("tab", { name: "回响" }).click();
     await expect(page.locator(".eden-codex-gallery--items")).toBeVisible();
-    await page.getByRole("tab", { name: "诸般结局" }).click();
+    await page.getByRole("tab", { name: "结局" }).click();
     await expect(page.locator(".eden-codex-gallery--endings")).toBeVisible();
-    await page.getByRole("tab", { name: "园中印记" }).click();
+    await page.getByRole("tab", { name: "印记" }).click();
 
     await page.getByRole("button", { name: "已解锁" }).click();
     const search = page.getByRole("searchbox", { name: "搜索印记" });
@@ -77,13 +83,14 @@ test.describe("园中档案桌面 UI", () => {
     await page.reload();
     await enterExplore(page);
 
-    await page.getByRole("button", { name: "打开园中印记图鉴" }).click();
-    const compact = page.locator(".eden-achievement-garden--compact");
+    await page.getByRole("button", { name: "打开园中档案" }).click();
+    const compact = page.locator(".eden-codex");
     await expect(compact).toBeVisible();
-    await expect(compact.locator(":scope > .eden-achievement-tabs")).toHaveCount(1);
-    await expect(compact.locator(":scope > .eden-achievement-filters")).toHaveCount(1);
-    await expect(compact.locator(".eden-achievement-toolbar")).toHaveCount(0);
-    await expect(compact.locator(".eden-achievement-card-lock").first()).toContainText("🔒");
+    await expect(compact.locator(":scope > .eden-codex-tabs")).toHaveCount(1);
+    await expect(compact.locator(":scope > .eden-codex-panel")).toHaveCount(1);
+    await expect(compact.locator(".eden-achievement-toolbar")).toHaveCount(1);
+    // The lock glyph is rendered as accessible Chinese text in the current UI.
+    await expect(compact.locator(".eden-achievement-card-lock").first()).toContainText("锁");
 
     const gridStyles = await compact.locator(".eden-achievement-grid").evaluate((element) => {
       const styles = getComputedStyle(element);

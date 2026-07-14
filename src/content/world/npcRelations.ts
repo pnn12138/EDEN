@@ -71,7 +71,7 @@ export const NPC_RELATION_PROFILES: Partial<Record<EdenNpcId, NpcRelationProfile
     isAngel: false,
     initialAffinity: 10,
     initialObedience: 88,
-    likedInputTags: ["build_trust", "weaken_fear"],
+    likedInputTags: ["build_trust", "weaken_fear", "tempt_wisdom"],
     dislikedInputTags: ["direct_command"],
     strongSignals: ["妻子", "女人", "责任", "转述", "怎么想", "担心"],
     rewardItemId: "resonance_quiet_stone",
@@ -95,7 +95,7 @@ export const NPC_RELATION_PROFILES: Partial<Record<EdenNpcId, NpcRelationProfile
     isAngel: false,
     initialAffinity: 35,
     initialObedience: 60,
-    likedInputTags: ["weaken_fear", "build_trust"],
+    likedInputTags: ["weaken_fear", "build_trust", "tempt_wisdom"],
     dislikedInputTags: ["direct_command"],
     strongSignals: ["轻声", "慢慢", "观察", "安静", "别怕", "陪"],
     rewardItemId: "resonance_hedgehog_bristle",
@@ -160,10 +160,11 @@ export function getNpcRelationProfile(npcId: EdenNpcId): NpcRelationProfile | nu
   return NPC_RELATION_PROFILES[npcId] ?? null;
 }
 
-/** 好感阶段文案（UI 解锁后展示，不暴露数值） */
+/** 好感阶段文案（UI 解锁后展示，不暴露数值；支持突破 100） */
 export function affinityStageHint(affinity: number): string {
   if (affinity < 30) return "关系尚浅";
   if (affinity < 60) return "愿意透露更多";
   if (affinity < 100) return "正在等待你的回答";
-  return "赠礼已获得";
+  if (affinity < 130) return "赠礼已获得";
+  return "超出凡常的亲近";
 }

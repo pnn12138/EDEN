@@ -145,7 +145,19 @@ function normalizeWorldStateForClient(s: EdenWorldState): EdenWorldState {
       sceneActionIds: [...(s.actionsThisSlot?.sceneActionIds ?? [])],
       usedItemIds: [...(s.actionsThisSlot?.usedItemIds ?? [])],
       hasWhisperedToWoman: s.actionsThisSlot?.hasWhisperedToWoman ?? false,
+      hasGrantedPaidDayMoveAttention: s.actionsThisSlot?.hasGrantedPaidDayMoveAttention ?? false,
+      hasGrantedPaidNightDialogueAttention: s.actionsThisSlot?.hasGrantedPaidNightDialogueAttention ?? false,
+      moveCount: s.actionsThisSlot?.moveCount ?? 0,
     },
+    divineAttentionValue: s.divineAttentionValue ?? 0,
+    pendingDivineGiftChoice: s.pendingDivineGiftChoice ?? null,
+    unlockedDivineAttentionRuleIds: [...(s.unlockedDivineAttentionRuleIds ?? [])],
+    attentionRuleTriggerCounts: { ...(s.attentionRuleTriggerCounts ?? {}) },
+    michaelDivinePunishmentActive: s.michaelDivinePunishmentActive ?? false,
+    michaelExecutionPending: s.michaelExecutionPending ?? false,
+    luciferZeroAffinityGiftClaimed: s.luciferZeroAffinityGiftClaimed ?? false,
+    luciferSwimStage: s.luciferSwimStage ?? "none",
+    worldEventHistory: (s.worldEventHistory ?? []).map((e) => ({ ...e })),
   });
 }
 
@@ -210,6 +222,41 @@ function readLastActiveSlot(): SaveSlotIndex | null {
     /* noop */
   }
   return null;
+}
+
+/** 供首页存档选择器读取的四个手动槽位摘要（不包含后台自动保存）。 */
+export function getWorldSaveSlotMetas(): SaveSlotMeta[] {
+  return SAVE_SLOTS.map((i) => {
+    const r = readSlotDetailed(i);
+    if (r.status === "ok") {
+      const s = r.data.state;
+      return {
+        index: i,
+        empty: false,
+        corrupted: false,
+        savedAtLabel: formatClock(new Date(r.data.savedAt)),
+        chapterSceneLabel: `第一章 · ${LOCATION_NAMES[s.locationId] ?? s.locationId}`,
+        timeSlotLabel: timeSlotDisplay(s.timeSlot, s.dayIndex, s.timeOfDay),
+      };
+    }
+    return {
+      index: i,
+      empty: r.status === "empty",
+      corrupted: r.status === "corrupt",
+      savedAtLabel: null,
+      chapterSceneLabel: null,
+      timeSlotLabel: null,
+    };
+  });
+}
+
+/** 选择下次进入世界时应优先读取的手动槽位。 */
+export function selectWorldSaveSlot(i: SaveSlotIndex): void {
+  try {
+    window.localStorage.setItem(LAST_ACTIVE_KEY, String(i));
+  } catch {
+    /* localStorage 不可用时由世界页按常规优先级读取 */
+  }
 }
 
 export function useWorldSave({
@@ -373,30 +420,18 @@ export function useWorldSave({
     onReset();
   }, [onReset]);
 
+  /** 删除指定手动槽（保留其它槽与 autosave；损坏槽也可删除）。dirty 状态不受影响。 */
+  const deleteSlot = useCallback((i: SaveSlotIndex): void => {
+    try {
+      window.localStorage.removeItem(slotKey(i));
+    } catch {
+      /* localStorage 不可用时静默忽略 */
+    }
+  }, []);
+
   /** 槽位摘要（UI 用），每次调用读取 4 个槽位（不含 autosave） */
   const getSlotMetas = useCallback((): SaveSlotMeta[] => {
-    return SAVE_SLOTS.map((i) => {
-      const r = readSlotDetailed(i);
-      if (r.status === "ok") {
-        const s = r.data.state;
-        return {
-          index: i,
-          empty: false,
-          corrupted: false,
-          savedAtLabel: formatClock(new Date(r.data.savedAt)),
-          chapterSceneLabel: `第一章 · ${LOCATION_NAMES[s.locationId] ?? s.locationId}`,
-          timeSlotLabel: timeSlotDisplay(s.timeSlot, s.dayIndex, s.timeOfDay),
-        };
-      }
-      return {
-        index: i,
-        empty: r.status === "empty",
-        corrupted: r.status === "corrupt",
-        savedAtLabel: null,
-        chapterSceneLabel: null,
-        timeSlotLabel: null,
-      };
-    });
+    return getWorldSaveSlotMetas();
   }, []);
 
   /** 是否存在任一「正常」手动存档（不含 autosave） */
@@ -417,6 +452,7 @@ export function useWorldSave({
     lastActiveSlot,
     save,
     load,
+    deleteSlot,
     reset,
     getSlotMetas,
     hasAnySave,

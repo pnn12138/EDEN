@@ -2,7 +2,7 @@
 // 用于在 AI 接口无响应 / 卡死时可靠中断，避免界面长期 loading。
 // 超时后 fetch 抛出 AbortError，由调用方 catch 统一复位 isLoading 并提示。
 
-export const DEFAULT_FETCH_TIMEOUT_MS = 18_000;
+export const DEFAULT_FETCH_TIMEOUT_MS = 35_000;
 
 export async function fetchWithTimeout(
   url: string,

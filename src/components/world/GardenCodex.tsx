@@ -1,8 +1,8 @@
 "use client";
 
-// 园中档案（综合图鉴）容器：顶部分页 印记 / 回响 / 结局 + 跨局进度统计。
-// 印记分页复用 AchievementGarden；回响/结局为新增分页。
-// /garden 独立页使用本组件；世界页内浮窗仍直接用 AchievementGarden（仅印记）。
+// 园中档案（综合图鉴）容器：顶部分页 印记 / 回响 / 结局 / 园中律则。
+// 印记分页复用 AchievementGarden；回响/结局/律则为新增分页。
+// /garden 独立页与游戏内浮窗统一使用本组件（同一组四页签、同一排序）。
 
 import { useMemo, useState } from "react";
 import AchievementGarden from "./AchievementGarden";
@@ -11,6 +11,10 @@ import EndingsGallery from "./EndingsGallery";
 import { ACHIEVEMENTS } from "@/content/world/achievements";
 import { EDEN_ITEMS } from "@/content/world/items";
 import { getGlobalAchievementSummary } from "@/services/achievement/globalTracker";
+import {
+  DIVINE_ATTENTION_RULES,
+  getDivineAttentionRuleText,
+} from "@/content/world/divineAttentionArchive";
 
 type GardenCodexProps = {
   /** 已解锁印记 ID（本局 + 跨局合并） */
@@ -19,20 +23,24 @@ type GardenCodexProps = {
   collectedResonanceIds: string[];
   /** 跨局触发过的结局 ID */
   triggeredEndingIds: string[];
+  /** 玩家亲身触发过（已解锁）的律则 ID（按真实注视事件解锁，不在存档中预填） */
+  unlockedRuleIds?: string[];
 };
 
-type CodexTab = "marks" | "items" | "endings";
+type CodexTab = "marks" | "items" | "endings" | "rules";
 
 const TABS: { id: CodexTab; label: string }[] = [
-  { id: "marks", label: "园中印记" },
-  { id: "items", label: "园中回响" },
-  { id: "endings", label: "诸般结局" },
+  { id: "marks", label: "印记" },
+  { id: "items", label: "回响" },
+  { id: "endings", label: "结局" },
+  { id: "rules", label: "园中律则" },
 ];
 
 export default function GardenCodex({
   unlockedIds,
   collectedResonanceIds,
   triggeredEndingIds,
+  unlockedRuleIds = [],
 }: GardenCodexProps) {
   const [tab, setTab] = useState<CodexTab>("marks");
 
@@ -49,12 +57,16 @@ export default function GardenCodex({
     () => new Set(triggeredEndingIds.filter((id) => ["eve_eats_fruit", "god_arrives", "life_fruit"].includes(id))).size,
     [triggeredEndingIds],
   );
+  const rulesUnlocked = useMemo(
+    () => new Set(unlockedRuleIds),
+    [unlockedRuleIds],
+  );
 
   const stats: { label: string; value: string }[] = [
     { label: "印记", value: `${marksGot}/${ACHIEVEMENTS.length}` },
     { label: "回响", value: `${itemsGot}/${EDEN_ITEMS.length}` },
     { label: "结局", value: `${endingsGot}/3` },
-    { label: "注视峰值", value: `${summary.maxDivineAttention}` },
+    { label: "律则", value: `${rulesUnlocked.size}/${DIVINE_ATTENTION_RULES.length}` },
   ];
 
   return (
@@ -93,6 +105,40 @@ export default function GardenCodex({
         {tab === "marks" && <AchievementGarden unlockedIds={unlockedIds} />}
         {tab === "items" && <ItemsGallery collectedIds={collectedResonanceIds} />}
         {tab === "endings" && <EndingsGallery triggeredIds={triggeredEndingIds} />}
+        {tab === "rules" && (
+          <div className="eden-rules-panel">
+            <p className="eden-rules-intro">
+              你亲身惊动园中的注视，会在这里留下痕迹。尚未被看见的律则，不会提前泄露。
+            </p>
+            <div className="eden-rules-list">
+              {DIVINE_ATTENTION_RULES.map((rule) => {
+                const seen = rulesUnlocked.has(rule.id);
+                if (!seen) {
+                  return (
+                    <div
+                      key={rule.id}
+                      className="eden-rule-card eden-rule-card--locked"
+                      aria-label="尚未被看见的律则"
+                    >
+                      <span className="eden-rule-card-title">？？？</span>
+                      <p className="eden-rule-card-text">尚未被看见的律则</p>
+                    </div>
+                  );
+                }
+                return (
+                  <div
+                    key={rule.id}
+                    className="eden-rule-card eden-rule-card--seen"
+                    aria-label={rule.title}
+                  >
+                    <span className="eden-rule-card-title">✦ {rule.title}</span>
+                    <p className="eden-rule-card-text">{getDivineAttentionRuleText(rule.id)}</p>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

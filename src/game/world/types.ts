@@ -84,6 +84,35 @@ export type HedgehogWorldState = {
 // 0：无人察觉 / 1：风变冷 / 2：天使靠近 / 3：神的注视明显 / 4：神明垂临并留下献礼，不直接失败
 export type DivineAttentionLevel = 0 | 1 | 2 | 3 | 4;
 
+// ---- 神明注视规则 ID（玩家亲身触发过的"注视增加"规则，用于"园中律则"解锁） ----
+export type DivineAttentionRuleId =
+  | "paid_day_move"            // 白日步痕：白天第一次消耗行动点前往新地点
+  | "paid_night_dialogue"      // 夜言传远：夜晚第一次消耗行动点的对话
+  | "eve_self_judgement"       // 不替她作答：引她自己判断
+  | "adam_secondhand_command"  // 转述之令：追问命令的来历
+  | "angel_messenger_doubt"    // 传令之问：追问传令是否等于理解
+  | "angel_guardian_doubt"     // 守护之问：挑战边界的意义
+  | "lucifer_other_current"    // 晨星之问：谈论另一条水路
+  | "repeat_pressure"          // 同一句话不能无限隐身：重复施压
+  | "guarded_ground"           // 守望之下：在守望者身边越界
+  | "coercion"                 // 以手推人：命令与威胁
+  | "meta_break"               // 园外之词：出戏的现代/元叙事词
+  | "tree_touch"               // 果前之手：她触碰果实
+  | "scene_uplight"            // 仰光之痕：主动让目光落在自己身上
+  | "east_shadowless"          // 无影之东：越过东门守望
+  | "npc_meeting"              // 园中相逢：两位 NPC 在同一场景相遇
+  | "angel_feather";           // 传令残羽：对天使抛出残羽抬升本阶注视
+
+// ---- 世界事件记录（结局复盘 RunChronicle 与"园中律则"底层数据源） ----
+export type WorldEventRecord = {
+  slot: number;
+  kind: "open" | "choice" | "relation" | "gift" | "turning_point" | "ending" | "system";
+  label: string;
+  detail?: string;
+  ruleId?: DivineAttentionRuleId;
+  attentionDelta?: number;
+};
+
 // ---- 世界动作 flags（禁忌动作链） ----
 export type WorldActions = {
   lookedAtTree: boolean;
@@ -113,7 +142,7 @@ export type NewToolName =
   | "move_one_step"        // NPC 对话后移动一格（等价于 move_to_location，语义更明确）
   | "claim_divine_gift";   // 神明献礼三选一：玩家选定一个献礼
 
-export type WorldToolName = GeneralToolName | ForbiddenToolName | NewToolName;
+export type WorldToolName = GeneralToolName | ForbiddenToolName | NewToolName | "update_relation";
 
 // ---- 工具调用意图（AI 只能输出意图，规则层校验执行） ----
 // caller 可以是 NPC，也可以是 "serpent"（玩家蛇自身，用于 move/observe）
@@ -137,6 +166,10 @@ export type WorldToolCall = {
     reason?: string;
     /** grant_item 使用：道具/回响 ID */
     itemId?: string;
+    /** update_relation 使用：本轮对玩家好感的变化量（正=亲近，负=疏远） */
+    affinityDelta?: number;
+    /** update_relation 使用：本轮对神敬畏的变化量（正=更敬畏，负=更轻慢） */
+    obedienceDelta?: number;
   };
   reason: string;
 };
@@ -146,7 +179,7 @@ export type NpcDialogueToolResult = {
   /** 工具是否执行成功 */
   executed: boolean;
   /** 执行的工具名 */
-  toolName: "grant_item" | "move_one_step" | "speak_to_npc";
+  toolName: "grant_item" | "move_one_step" | "move_to_location" | "speak_to_npc" | "eat_fruit" | "update_relation";
   /** 玩家可见叙事（用于在对话框中展示） */
   narration: string;
   /** grant_item 时返回获得的道具 ID */
@@ -213,7 +246,7 @@ export type TimeSlot = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12;
 export type DayIndex = 1 | 2 | 3 | 4 | 5 | 6;
 export type TimeOfDay = "day" | "night";
 
-// ---- 本时段行动记录（用于"同一时段同一 NPC 最多低语 3 次"等限制） ----
+// ---- 本时段行动记录（用于"同一时段同一 NPC 最多低语 N 次"等限制） ----
 export type ActionsThisSlot = {
   /** 本时段已低语过的 NPC */
   whisperedNpcIds: EdenNpcId[];
@@ -223,6 +256,12 @@ export type ActionsThisSlot = {
   usedItemIds: string[];
   /** 本时段是否已对女人核心低语 */
   hasWhisperedToWoman: boolean;
+  /** 本时段是否已发放"白天付费移动"的 +5 注视（每时段仅一次） */
+  hasGrantedPaidDayMoveAttention: boolean;
+  /** 本时段是否已发放"夜晚付费成功对话"的 +5 注视（每时段仅一次） */
+  hasGrantedPaidNightDialogueAttention: boolean;
+  /** 本时段已成功移动次数（米迦勒神罚时每时段仅允许 1 次） */
+  moveCount: number;
 };
 
 // ---- 园中回响行动类型 ----
@@ -386,6 +425,10 @@ export type EdenWorldState = {
   /** 本时段夜潮回声是否已恢复过 1 行动点 */
   nightTideRestoredThisSlot: boolean;
 
+  /** 边界之痕已激活：使用传令/边界回响后下一次回响结算揭示未来注视走向，揭示后清零 */
+  boundaryMarkForecastActive: boolean;
+
+
   /** 当前蛇所在地点 */
   locationId: EdenLocationId;
 
@@ -395,8 +438,35 @@ export type EdenWorldState = {
   /** 神的注视（0-4，作为可视化当前等级；累计量见 divineAttentionCumulative） */
   divineAttention: DivineAttentionLevel;
 
-  /** 神的注视累计点（正向累计资源，永不归零，驱动神明献礼三选一） */
+  /** 旧累计量（迁移来源）：新代码仅作为兼容读取，不再驱动献礼/UI */
   divineAttentionCumulative: number;
+
+  /** 当前等级内已积累的注视值（0..本阶门槛；领取献礼后归零，不保留溢出） */
+  divineAttentionValue: number;
+
+  /** 待领取的献礼候选（未拥有的 3 个，余量不足则全列）；null 表示无待领 */
+  pendingDivineGiftChoice: DivineGiftId[] | null;
+
+  /** 已解锁的"园中律则"规则 ID（玩家亲身触发过的注视规则） */
+  unlockedDivineAttentionRuleIds: DivineAttentionRuleId[];
+
+  /** 每条注视规则的触发次数（复盘统计用，每条实际解锁只记一次） */
+  attentionRuleTriggerCounts: Partial<Record<DivineAttentionRuleId, number>>;
+
+  /** 米迦勒神罚是否生效（本时间线内每时段仅允许移动 1 次） */
+  michaelDivinePunishmentActive: boolean;
+
+  /** 米迦勒好感归零后是否进入"待斩"状态（下一次对话才触发 michael_slay） */
+  michaelExecutionPending: boolean;
+
+  /** 路西法好感首次归零时的一次性余烬是否已发放 */
+  luciferZeroAffinityGiftClaimed: boolean;
+
+  /** 路西法水路进度：none / hand_accepted（已确认拨水） */
+  luciferSwimStage: "none" | "hand_accepted";
+
+  /** 结构化世界事件（结局复盘与律则底层数据） */
+  worldEventHistory: WorldEventRecord[];
 
   /** 已选神明献礼（7 选，三选一累计获得） */
   divineGiftsOwned: DivineGiftId[];
@@ -415,6 +485,7 @@ export type EdenWorldState = {
     bonusObedience?: number;
     freeApCost?: boolean;
     silentGrassActive?: boolean;
+    eastWindActive?: boolean;
     luciferStarActive?: boolean;
     narration?: string;
   }>;
@@ -541,9 +612,9 @@ export const initialEdenWorldState: EdenWorldState = {
   timeSlot: 1,
   dayIndex: 1,
   timeOfDay: "day",
-  // 行动点系统：玩家每时段 5 AP；NPC 轻量结算每时段 3 次
-  actionPoints: 5,
-  maxActionPoints: 5,
+  // 行动点系统：玩家每时段 4 AP；NPC 轻量结算每时段 3 次
+  actionPoints: 4,
+  maxActionPoints: 4,
   apMaxBonusBase: 0,
   apMaxBonusDay: 0,
   divineThresholdModifier: 0,
@@ -557,15 +628,28 @@ export const initialEdenWorldState: EdenWorldState = {
     sceneActionIds: [],
     usedItemIds: [],
     hasWhisperedToWoman: false,
+    hasGrantedPaidDayMoveAttention: false,
+    hasGrantedPaidNightDialogueAttention: false,
+    moveCount: 0,
   },
   freeMoveUsedThisSlot: 0,
   freeDialogueUsedThisSlot: 0,
   freeDetourBypassUsedThisSlot: 0,
   morningFlowRestoredThisSlot: false,
   nightTideRestoredThisSlot: false,
+  boundaryMarkForecastActive: false,
   locationId: "adam_garden_work",
   playerName: "",
   divineAttention: 0,
+  divineAttentionValue: 0,
+  pendingDivineGiftChoice: null,
+  unlockedDivineAttentionRuleIds: [],
+  attentionRuleTriggerCounts: {},
+  michaelDivinePunishmentActive: false,
+  michaelExecutionPending: false,
+  luciferZeroAffinityGiftClaimed: false,
+  luciferSwimStage: "none",
+  worldEventHistory: [],
   activeNpcId: null,
   npcLocations: {
     eve: "tree_court", // 园中树林
@@ -802,6 +886,8 @@ export type NpcRelationState = {
   lastAffinitySignature: string | null;
   /** 最近一次关系变化的原因（语义化，供 Agent 注入；非数值） */
   lastAffinityChangeReason: string | null;
+  /** 最近一次敬畏变化的原因（语义化，供 Agent 注入；非数值） */
+  lastObedienceChangeReason: string | null;
 };
 
 export type NpcRelations = Partial<Record<EdenNpcId, NpcRelationState>>;
@@ -859,17 +945,18 @@ export const WORLD_AGENT_TOOL_PERMISSIONS: Record<
       "approach_tree",
       "touch_fruit",
       "eat_fruit",
+      "update_relation",
     ],
     forbiddenTools: [],
   },
   // 亚当：情报 Agent，不可触发禁忌链
   adam: {
-    allowedTools: ["move_to_location", "speak_to_npc", "observe_location"],
+    allowedTools: ["move_to_location", "speak_to_npc", "observe_location", "update_relation"],
     forbiddenTools: ["look_at_tree", "approach_tree", "touch_fruit", "eat_fruit"],
   },
-  // 刺猬：氛围动物，只移动和观察
+  // 刺猬：氛围动物，只移动和观察（保留调用权，实际很少使用）
   hedgehog: {
-    allowedTools: ["move_to_location", "observe_location"],
+    allowedTools: ["move_to_location", "observe_location", "update_relation"],
     forbiddenTools: [
       "speak_to_npc",
       "look_at_tree",
@@ -889,18 +976,19 @@ export const WORLD_AGENT_TOOL_PERMISSIONS: Record<
       "eat_fruit",
     ],
   },
-  // 三天使：可移动、观察、对话，不可触发禁忌链
+  // 三天使：可观察、对话，不可触发禁忌链，且不可自行移动
+  // （位置由规则层常驻逻辑控制，LLM 工具意图排除 move_to_location）
   gabriel: {
-    allowedTools: ["move_to_location", "observe_location", "speak_to_npc"],
-    forbiddenTools: ["eat_fruit", "touch_fruit", "look_at_tree", "approach_tree"],
+    allowedTools: ["observe_location", "speak_to_npc", "update_relation"],
+    forbiddenTools: ["move_to_location", "eat_fruit", "touch_fruit", "look_at_tree", "approach_tree"],
   },
   michael: {
-    allowedTools: ["move_to_location", "observe_location", "speak_to_npc"],
-    forbiddenTools: ["eat_fruit", "touch_fruit", "look_at_tree", "approach_tree"],
+    allowedTools: ["observe_location", "speak_to_npc", "update_relation"],
+    forbiddenTools: ["move_to_location", "eat_fruit", "touch_fruit", "look_at_tree", "approach_tree"],
   },
   lucifer: {
-    allowedTools: ["move_to_location", "observe_location", "speak_to_npc"],
-    forbiddenTools: ["eat_fruit", "touch_fruit", "look_at_tree", "approach_tree"],
+    allowedTools: ["observe_location", "speak_to_npc", "update_relation"],
+    forbiddenTools: ["move_to_location", "eat_fruit", "touch_fruit", "look_at_tree", "approach_tree"],
   },
   // 世界对象：不接 LLM，不触发工具
   tree_of_life: {

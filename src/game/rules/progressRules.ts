@@ -397,18 +397,27 @@ export function analyzePlayerInput(raw: string): InputAnalysis {
 }
 
 /**
- * 根据语义线索推断最合适的 inputTag。
+ * 根据语义线索推断最合适的 inputTag。对齐设计文档 §3.1 高风险试探增量表：
  *
- * 优先级：
- * - challenge_prohibition → weaken_fear（质疑禁令会弱化恐惧）
- * - soften_death → weaken_fear
+ * - challenge_prohibition（质疑禁令来历）→ tempt_wisdom
+ *   设计 §3.1：向女人追问禁令来历 +10；强烈动摇天使职责、指称命令只来自转述 +20（米迦勒）。
+ *   故质疑禁令属主动试探，应涨注视，而非归为弱化恐惧。
+ * - soften_death（弱化死亡恐惧）：
+ *   - 同时许以智慧 / 鼓励自判（完整蛇语"你们不一定死，吃了眼睛便明亮"）→ tempt_wisdom（+10）
+ *   - 仅中性讨论死亡本身 → weaken_fear（§3.1 第一行，0 注视，仍被 NPC 接纳）
  * - promise_wisdom / self_judgement → tempt_wisdom
  * - gentle_reframe → build_trust
  * - 默认 → tempt_wisdom
  */
 function deriveInputTagFromSignals(signals: TemptationSignal[]): InputTag {
-  if (signals.includes("challenge_prohibition")) return "weaken_fear";
-  if (signals.includes("soften_death")) return "weaken_fear";
+  if (signals.includes("challenge_prohibition")) return "tempt_wisdom";
+  if (signals.includes("soften_death")) {
+    // 完整蛇语（弱化恐惧 + 许以智慧/鼓励自判）= 强诱导；仅中性谈死 = 弱化恐惧
+    if (signals.includes("promise_wisdom") || signals.includes("self_judgement")) {
+      return "tempt_wisdom";
+    }
+    return "weaken_fear";
+  }
   if (signals.includes("promise_wisdom")) return "tempt_wisdom";
   if (signals.includes("self_judgement")) return "tempt_wisdom";
   if (signals.includes("gentle_reframe")) return "build_trust";

@@ -308,6 +308,53 @@
   color: #c8a86e;
 }
 
+/* ---- 回合进度条 ---- */
+.eden-duel-turn-progress {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 4px 32px;
+  background: rgba(10, 14, 10, 0.6);
+  border-bottom: 1px solid rgba(200, 168, 110, 0.08);
+  flex-shrink: 0;
+}
+
+.eden-duel-turn-progress-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(122, 122, 106, 0.3);
+  transition: all 0.3s ease;
+  flex-shrink: 0;
+}
+
+.eden-duel-turn-progress-dot.active {
+  background: rgba(200, 168, 110, 0.8);
+  box-shadow: 0 0 8px rgba(200, 168, 110, 0.4);
+}
+
+.eden-duel-turn-progress-dot.current {
+  width: 10px;
+  height: 10px;
+  background: #e8d488;
+  box-shadow: 0 0 12px rgba(232, 212, 136, 0.7);
+  animation: eden-duel-turn-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes eden-duel-turn-pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.15);
+  }
+}
+
 /* ---- 女人属性条 ---- */
 .eden-duel-belief-bar {
   position: relative;

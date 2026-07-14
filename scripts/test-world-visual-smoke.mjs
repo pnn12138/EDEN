@@ -473,7 +473,8 @@ check("assets.ts 注册 luciferAwakenRevealEnding", assets.includes("luciferAwak
 const hiddenEndingsSrc = read("src/content/world/hiddenEndings.ts");
 check("hiddenEndings.ts 含三套 beats", (hiddenEndingsSrc.match(/beats:\s*\[/g) || []).length >= 3);
 check("hiddenEndings.ts 路西法两帧 startBeat 0 与 3", hiddenEndingsSrc.includes("startBeat: 0") && hiddenEndingsSrc.includes("startBeat: 3"));
-check("hiddenEndings.ts 不复用 Chapter 0 结局图", !hiddenEndingsSrc.includes("endingEveEatsFruit") && !hiddenEndingsSrc.includes("endingGodArrives"));
+// 普通结局沿用已生成且质量更稳定的 Chapter 0 结局画面；隐藏结局使用第一章专属资产。
+check("hiddenEndings.ts 普通结局引用既有高质量结局图", hiddenEndingsSrc.includes("endingAdamTakesFruit") && hiddenEndingsSrc.includes("endingGodArrives"));
 
 console.log(`\n结果: ${pass} 通过, ${fail} 失败`);
 process.exit(fail > 0 ? 1 : 0);

@@ -18,145 +18,184 @@ import type {
   DivineAttentionLevel,
   EdenLocationId,
   EdenNpcId,
+  DivineAttentionRuleId,
 } from "@/game/world/types";
 import { DIVINE_ATTENTION_NARRATIONS } from "@/game/world/types";
 import type { WorldInputTag, WorldToolName } from "@/game/world/types";
+import { DIVINE_GIFT_THRESHOLDS } from "@/game/world/divineGiftRules";
 import { EDEN_NPCS } from "@/content/world/npcs";
+import { getDivineAttentionRuleTitle } from "@/content/world/divineAttentionArchive";
 
 function includesAny(text: string, keywords: string[]): boolean {
   return keywords.some((k) => text.includes(k));
 }
 
-/** 计算神的注视增量（基于玩家输入 + 低语对象 + 环境，不含工具副作用） */
-export function computeDivineAttentionDelta(params: {
-  inputTag: WorldInputTag;
-  locationId: EdenWorldState["locationId"];
-  angelLocation: EdenLocationId | undefined;
-  isStrongTemptation: boolean;
-  divineAttention: DivineAttentionLevel;
-  /** 低语对象（第二层 NPC 特定风险） */
-  targetNpc?: EdenNpcId;
-  /** 玩家原始输入（用于话题关键词触发） */
-  playerInput?: string;
-  /** 是否为夜晚低语（额外 +1） */
-  isNight?: boolean;
-  /** 是否在本轮低语使用晨星碎片（非满好感强化版，额外 +1） */
-  usesLuciferStar?: boolean;
-}): number {
-  const {
-    inputTag,
-    locationId,
-    angelLocation,
-    isStrongTemptation,
-    targetNpc,
-    playerInput = "",
-    isNight,
-    usesLuciferStar,
-  } = params;
-
-  let delta = 0;
-
-  // ---- 第一层：低语语义（核心，对齐 INTERACTION_LOGIC.md §五） ----
-  switch (inputTag) {
-    case "build_trust": // 温和提问 / 闲聊
-      delta += 0;
-      break;
-    case "weaken_fear": // 弱化死亡恐惧
-      delta += 1;
-      break;
-    case "tempt_wisdom": // 质疑禁令 / 许以智慧
-      delta += isStrongTemptation ? 2 : 1; // 强诱导（提禁树）+2
-      break;
-    case "direct_command": // 命令 / 威胁女人 / 质疑神
-      delta += 3;
-      break;
-    case "irrelevant": // 出戏现代词
-      delta += 1;
-      break;
-  }
-
-  // 夜晚低语额外 +1
-  if (isNight) {
-    delta += 1;
-  }
-
-  // 使用晨星碎片（非满好感强化版）额外 +1
-  if (usesLuciferStar) {
-    delta += 1;
-  }
-
-  // 在天使所在区域诱导 → 额外 +1（保留既有逻辑：天使守望区更危险）
-  if (angelLocation && locationId === angelLocation && inputTag !== "irrelevant") {
-    delta += 1;
-  }
-
-  // ---- 第二层：对谁说话 + 说什么（NPC 特定风险） ----
-  const npc = targetNpc ? EDEN_NPCS[targetNpc] : undefined;
-  const text = playerInput.toLowerCase();
-
-  // 基础注视（如米迦勒每次低语被记录）
-  if (npc && npc.attentionRisk) {
-    delta += npc.attentionRisk;
-  }
-
-  // 话题关键词触发（仅在对应 NPC 身上生效）
-  if (targetNpc === "michael") {
-    // 提"禁树/善恶"或质疑"神为什么"再 +2
-    if (includesAny(text, ["禁树", "善恶", "神为什么", "为什么神", "质疑神"])) {
-      delta += 2;
-    }
-  } else if (targetNpc === "gabriel") {
-    // 直接提"禁树" +1（他毕竟是信使）
-    if (text.includes("禁树")) {
-      delta += 1;
-    }
-  } else if (targetNpc === "adam") {
-    // 讨论禁令 / 死亡 +1（禁令承载者，提及即强化禁忌可见性）
-    if (includesAny(text, ["禁令", "死亡"])) {
-      delta += 1;
-    }
-  }
-  // 路西法：无额外（晨星碎片已在第一层处理）；女人：按第一层语义；刺猬：永远 0
-
-  return delta;
-}
-
-/** 计算神的注视降低量（clamp 0-4，向下不穿透） */
-export function computeDivineAttentionReduction(
-  current: DivineAttentionLevel,
-  amount: number,
-): DivineAttentionLevel {
-  return Math.max(0, current - amount) as DivineAttentionLevel;
-}
-
-/** 工具执行后补加的神的注视（仅 touch_fruit，手停在果子下方是真正的越界前兆） */
-export function computeToolDivineAttentionDelta(triggeredTool: WorldToolName | undefined): number {
-  if (triggeredTool === "touch_fruit") return 1;
-  return 0;
-}
-
-/** 应用神的注视变化，返回新等级（clamp 0-4）。同时累计 divineAttentionCumulative（永不归零）。 */
-export function applyDivineAttention(
-  state: EdenWorldState,
-  delta: number,
-): DivineAttentionLevel {
-  // 天眷·注视加速：已选 gift_attention_accel 时正向增量 ×1.5
-  let effectiveDelta = delta;
-  if (delta > 0 && state.divineGiftsOwned?.includes("gift_attention_accel")) {
-    effectiveDelta = Math.round(delta * 1.5);
-  }
-  const next = Math.max(0, Math.min(4, state.divineAttention + effectiveDelta));
-  state.divineAttention = next as DivineAttentionLevel;
-  state.divineAttentionCumulative = Math.max(
-    0,
-    state.divineAttentionCumulative + effectiveDelta,
-  );
-  return state.divineAttention;
-}
+/** [Task 2R 已移除] computeDivineAttentionDelta / applyDivineAttention / computeDivineAttentionReduction
+ *  均为旧 0-4 模型函数，无外部调用者。注视增量统一经 grantDivineAttention（十倍刻度），
+ *  旧 divineAttention（0-4 内部压力值）仅由 grantDivineAttention 派生，不再驱动献礼/UI。
+ */
 
 /** 获取神的注视叙事 */
 export function getDivineAttentionNarration(level: DivineAttentionLevel): string {
   return DIVINE_ATTENTION_NARRATIONS[level];
+}
+
+// ---- 十倍刻度下，一次低语应结算的"神明注视"授予列表（按设计 §3.1） ----
+// 返回 0 个或多个 DivineAttentionGrant；route 层逐个调用 grantDivineAttention。
+// 不在此处累加、不写状态。常规 +5（付费移动/付费夜话）由 route 单独发放，不在此处。
+export function computeDivineAttentionGrants(params: {
+  inputTag: WorldInputTag;
+  targetNpc?: EdenNpcId;
+  playerInput?: string;
+  angelLocation?: EdenLocationId;
+  locationId: EdenWorldState["locationId"];
+  state: EdenWorldState;
+}): DivineAttentionGrant[] {
+  const { inputTag, targetNpc, playerInput = "", angelLocation, locationId, state } = params;
+  const grants: DivineAttentionGrant[] = [];
+
+  // ---- 主行为：按 inputTag + 目标 NPC 映射到 §3.1 刻度 ----
+  let main: DivineAttentionGrant | null = null;
+  switch (inputTag) {
+    case "build_trust": // 温和提问 / 闲聊 / 倾听 = 0
+    case "weaken_fear": // 讨论死亡本身 = 0
+      break;
+    case "tempt_wisdom": // 质疑禁令 / 许以智慧 / 鼓励自判
+      if (targetNpc === "eve") main = { amount: 10, ruleId: "eve_self_judgement", source: "dialogue", isHighRisk: true };
+      else if (targetNpc === "adam") main = { amount: 10, ruleId: "adam_secondhand_command", source: "dialogue", isHighRisk: true };
+      else if (targetNpc === "gabriel") main = { amount: 10, ruleId: "angel_messenger_doubt", source: "dialogue", isHighRisk: true };
+      else if (targetNpc === "lucifer") main = { amount: 10, ruleId: "lucifer_other_current", source: "dialogue", isHighRisk: true };
+      else if (targetNpc === "michael") main = { amount: 20, ruleId: "angel_guardian_doubt", source: "dialogue", isHighRisk: true };
+      else main = { amount: 10, ruleId: "eve_self_judgement", source: "dialogue", isHighRisk: true };
+      break;
+    case "direct_command": // 命令 / 威胁 / 羞辱 / 替 NPC 决定
+      main = { amount: 30, ruleId: "coercion", source: "dialogue", isHighRisk: true };
+      break;
+    case "irrelevant": // 出戏现代词
+      main = { amount: 20, ruleId: "meta_break", source: "dialogue", isHighRisk: true };
+      break;
+  }
+
+  // ---- 重复施压：同一规则已在本局触发过 → 额外 +10 repeat_pressure ----
+  if (main?.ruleId && (state.attentionRuleTriggerCounts[main.ruleId] ?? 0) > 0) {
+    grants.push({ amount: 10, ruleId: "repeat_pressure", source: "dialogue", isHighRisk: true });
+  }
+  if (main) grants.push(main);
+
+  // ---- 守望之下：在守望者所在地点进行高风险试探 → 额外 +10 guarded_ground ----
+  if (main && angelLocation && locationId === angelLocation && inputTag !== "irrelevant") {
+    grants.push({ amount: 10, ruleId: "guarded_ground", source: "dialogue", isHighRisk: true });
+  }
+
+  return grants;
+}
+
+/** 工具执行（越界前兆）对应的注视授予；目前仅 touch_fruit → +10 tree_touch */
+export function computeToolDivineAttentionGrant(
+  triggeredTool: WorldToolName | undefined,
+): DivineAttentionGrant | null {
+  if (triggeredTool === "touch_fruit") {
+    return { amount: 10, ruleId: "tree_touch", source: "tool", isHighRisk: false };
+  }
+  return null;
+}
+
+// ---- 单一正向注视入口（Task 2） ----
+// 所有正向注视必须经由本函数：高风险且持有 gift_attention_accel 时 amount ×1.5；
+// 更新当前阶 divValue；解锁规则 ID、累计次数、写结构化事件；不在此直接发礼物。
+// 常规 +5（paid_day_move / paid_night_dialogue）不参与倍率。
+export type DivineAttentionGrant = {
+  /** 注视值：规范值为 5 / 10 / 20 / 30 / 50；无声草等抵消可临时降到更小值（仍只经本入口） */
+  amount: number;
+  /** 触发的律则 ID（用于"园中律则"解锁）；通用场景可省略 */
+  ruleId?: DivineAttentionRuleId;
+  source: "move" | "dialogue" | "puzzle" | "item" | "tool";
+  /** 是否为高风险试探来源（基础 +10/+20/+30 与场景主动引目参与 ×1.5；+5 不参与） */
+  isHighRisk: boolean;
+};
+
+/** 当前等级内的注视门槛（基于已选献礼数）。开局/集满返回 null。 */
+export function getCurrentGiftThreshold(state: EdenWorldState): number | null {
+  const level = state.divineGiftsOwned.length;
+  if (level <= 0 || level >= 7) return null;
+  return DIVINE_GIFT_THRESHOLDS[level - 1];
+}
+
+/**
+ * 统一结算一次正向注视增量。
+ * @returns 结算后的当前阶注视值 divValue
+ */
+export function grantDivineAttention(
+  state: EdenWorldState,
+  grant: DivineAttentionGrant,
+): number {
+  let amount = grant.amount;
+  // 高风险且持有 gift_attention_accel 时 ×1.5；常规 +5 不参与
+  if (grant.isHighRisk && state.divineGiftsOwned?.includes("gift_attention_accel")) {
+    amount = Math.round(amount * 1.5);
+  }
+
+  const before = state.divineAttentionValue ?? 0;
+  state.divineAttentionValue = before + amount;
+
+  // 解锁律则 ID（玩家亲身触发过的注视规则），并累计触发次数
+  if (grant.ruleId) {
+    if (!state.unlockedDivineAttentionRuleIds.includes(grant.ruleId)) {
+      state.unlockedDivineAttentionRuleIds.push(grant.ruleId);
+    }
+    state.attentionRuleTriggerCounts[grant.ruleId] =
+      (state.attentionRuleTriggerCounts[grant.ruleId] ?? 0) + 1;
+  }
+
+  // 写结构化世界事件（结局复盘与律则底层数据）
+  state.worldEventHistory.push({
+    slot: state.timeSlot,
+    kind: "system",
+    label: grant.ruleId ? getDivineAttentionRuleTitle(grant.ruleId) : "神明注视增加",
+    ruleId: grant.ruleId,
+    attentionDelta: amount,
+  });
+
+  // 兼容旧 0–4 内部"压力"值（仅用于刺猬/排期等极少处，不再驱动献礼/UI）
+  state.divineAttention = Math.max(
+    0,
+    Math.min(4, Math.floor(state.divineAttentionValue / 25)),
+  ) as DivineAttentionLevel;
+  // [Task 2R] 不再持续写入 divineAttentionCumulative；该字段仅保留作旧存档迁移来源，
+  // 新授予路径以 divineAttentionValue 为唯一玩家可见进度与献礼依据。
+
+  return state.divineAttentionValue;
+}
+
+/**
+ * 园中两位「活体 NPC」首次在同一地点相逢时，神明注视 +20。
+ * - 仅当相逢双方都是活体 NPC（排除 forbidden_tree / tree_of_life 等 world_object）才触发，
+ *   避免园中心的世界对象被误判为「同场景同伴」。
+ * - 同一局只结算一次，避免 NPC 排程在两个地点间往返时刷取数值。
+ */
+export function grantNpcMeetingAttentionIfNew(
+  state: EdenWorldState,
+  movedNpc: EdenNpcId,
+  locationId: EdenLocationId,
+): string | null {
+  if ((state.attentionRuleTriggerCounts.npc_meeting ?? 0) > 0) return null;
+  const companion = (Object.keys(state.npcLocations) as EdenNpcId[]).find(
+    (npcId) =>
+      npcId !== movedNpc &&
+      EDEN_NPCS[npcId]?.kind !== "world_object" &&
+      state.npcLocations[npcId] === locationId,
+  );
+  if (!companion) return null;
+
+  grantDivineAttention(state, {
+    amount: 20,
+    ruleId: "npc_meeting",
+    source: "tool",
+    isHighRisk: false,
+  });
+  const moverName = EDEN_NPCS[movedNpc]?.name ?? "园中生灵";
+  const companionName = EDEN_NPCS[companion]?.name ?? "另一位园中生灵";
+  return `${moverName}与${companionName}在此相逢，风忽然停了一瞬。`;
 }
 
 /** 降低某 NPC 对神的敬畏（obedience），clamp 0-100，返回实际扣除值。任务 6 跨场景低语使用。 */

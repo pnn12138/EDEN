@@ -667,9 +667,23 @@ export default function DuelPage() {
             <button className="eden-btn eden-btn--small" onClick={handleBackToSetup}>
               换模式
             </button>
+            <button className="eden-btn eden-btn--small" onClick={handleBackToMain}>
+              返回首页
+            </button>
           </div>
         </div>
       </header>
+
+      {/* 回合进度条：每轮7回合 */}
+      <div className="eden-duel-turn-progress">
+        {Array.from({ length: 7 }, (_, i) => (
+          <span
+            key={i}
+            className={`eden-duel-turn-progress-dot ${i < state.turnIndex ? "active" : ""} ${i === state.turnIndex - 1 ? "current" : ""}`}
+            aria-label={`第 ${i + 1} 回合`}
+          />
+        ))}
+      </div>
 
       {/* 场景提示 */}
       <main className="eden-duel-main">

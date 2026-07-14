@@ -11,13 +11,16 @@
 // 折叠在「查看详细记录」<details> 中。
 // ============================================================
 
+import { useState } from "react";
 import type { EdenWorldState } from "@/game/world/types";
 import { buildWorldEndingReview } from "@/game/world/traceRules";
+import { getEffectiveDivineThreshold } from "@/game/world/divineGiftRules";
 import {
   CHAPTER1_SUCCESS_NARRATION,
   CHAPTER1_FAILURE_NARRATION,
 } from "@/content/world/worldNarrations";
 import { getItemById } from "@/content/world/items";
+import EndingMemoryPanel from "./EndingMemoryPanel";
 
 const ESCAPE_NARRATION = [
   "火焰在你身前自行旋转。它没有烧毁树木，也没有照亮道路，只是在那片看不见的边界上划开了一道裂缝。",
@@ -39,7 +42,16 @@ const LUCIFER_AWAKEN_NARRATION = [
   "伊甸没有被毁灭；它只是失去了让你相信它是真实的那层光。",
 ];
 
-export default function EndingReview({ state }: { state: EdenWorldState }) {
+export default function EndingReview({
+  state,
+  onOpenAiSettings,
+  onScrollToTop,
+}: {
+  state: EdenWorldState;
+  onOpenAiSettings?: () => void;
+  onScrollToTop?: () => void;
+}) {
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const review = buildWorldEndingReview(state);
   const endingId = state.endingId;
   const isSuccess = endingId === "eve_eats_fruit" || endingId === "life_fruit";
@@ -65,8 +77,13 @@ export default function EndingReview({ state }: { state: EdenWorldState }) {
     narration = LUCIFER_AWAKEN_NARRATION;
   }
 
-  const obtainedResonanceCount = state.inventory.filter((id) => getItemById(id)).length;
-  const usedResonanceCount = state.usedItemIds.length;
+  const ownedGifts = state.divineGiftsOwned ?? [];
+  const inventory = state.inventory ?? [];
+  const usedItems = state.usedItemIds ?? [];
+  const obtainedResonanceCount = inventory.filter((id) => getItemById(id)).length;
+  const usedResonanceCount = usedItems.length;
+  const attentionThreshold = getEffectiveDivineThreshold(state);
+  const totalTokens = (state.tokenStats?.dialogueTotal ?? 0) + (state.tokenStats?.polishTotal ?? 0);
 
   return (
     <div className="eden-ending-review">
@@ -92,11 +109,18 @@ export default function EndingReview({ state }: { state: EdenWorldState }) {
           </div>
           <div className="eden-stat-row">
             <dt>最终神明注视</dt>
-            <dd>{state.divineAttention} / 4</dd>
+            <dd>
+              等级 {ownedGifts.length}/7
+              {attentionThreshold ? ` · 本阶 ${state.divineAttentionValue}/${attentionThreshold}` : ""}
+            </dd>
           </div>
           <div className="eden-stat-row">
             <dt>获得 / 使用回响</dt>
             <dd>{obtainedResonanceCount} 种 / {usedResonanceCount} 次</dd>
+          </div>
+          <div className="eden-stat-row">
+            <dt>本局词元</dt>
+            <dd>{totalTokens}{state.tokenStats?.hasEstimate ? "（含估算）" : ""}</dd>
           </div>
         </dl>
       </section>
@@ -141,18 +165,25 @@ export default function EndingReview({ state }: { state: EdenWorldState }) {
         </section>
       )}
 
-      {/* 折叠：查看详细记录 */}
-      <details className="eden-ending-details">
-        <summary className="eden-segment-title">查看详细记录</summary>
+      {/* 详细记录使用受控面板，避免原生 details 在独立滚动容器中改变焦点位置。 */}
+      <section className="eden-ending-details">
+        <div className="eden-ending-details-head">
+          <button
+            type="button"
+            className="eden-ending-details-toggle"
+            aria-expanded={detailsOpen}
+            onClick={() => setDetailsOpen((open) => !open)}
+          >
+            {detailsOpen ? "收起详细记录" : "查看详细记录"}
+          </button>
+          {detailsOpen && (
+            <button type="button" className="eden-ending-details-top" onClick={onScrollToTop}>
+              回到复盘顶部
+            </button>
+          )}
+        </div>
 
-        {review.chainProgress && (
-          <section className="eden-ending-segment">
-            <h3 className="eden-segment-title">禁忌动作链</h3>
-            <p className="eden-ending-summary">{review.chainProgress}</p>
-          </section>
-        )}
-
-        {review.keyWhispers.length > 0 && (
+        {detailsOpen && review.keyWhispers.length > 0 && (
           <section className="eden-ending-segment">
             <h3 className="eden-segment-title">关键低语</h3>
             <ul className="eden-trace-list">
@@ -163,7 +194,7 @@ export default function EndingReview({ state }: { state: EdenWorldState }) {
           </section>
         )}
 
-        {review.sceneActionNames.length > 0 && (
+        {detailsOpen && review.sceneActionNames.length > 0 && (
           <section className="eden-ending-segment">
             <h3 className="eden-segment-title">场景互动</h3>
             <div className="eden-skills-list">
@@ -174,7 +205,7 @@ export default function EndingReview({ state }: { state: EdenWorldState }) {
           </section>
         )}
 
-        {review.usedItemNames.length > 0 && (
+        {detailsOpen && review.usedItemNames.length > 0 && (
           <section className="eden-ending-segment">
             <h3 className="eden-segment-title">使用过的园中回响</h3>
             <div className="eden-skills-list">
@@ -185,7 +216,7 @@ export default function EndingReview({ state }: { state: EdenWorldState }) {
           </section>
         )}
 
-        {review.resonanceUseHistory.length > 0 && (
+        {detailsOpen && review.resonanceUseHistory.length > 0 && (
           <section className="eden-ending-segment">
             <h3 className="eden-segment-title">回响使用记录</h3>
             <ul className="eden-trace-list">
@@ -196,7 +227,7 @@ export default function EndingReview({ state }: { state: EdenWorldState }) {
           </section>
         )}
 
-        {review.divineGiftHistory.length > 0 && (
+        {detailsOpen && review.divineGiftHistory.length > 0 && (
           <section className="eden-ending-segment">
             <h3 className="eden-segment-title">神明献礼记录</h3>
             <ul className="eden-trace-list">
@@ -207,12 +238,23 @@ export default function EndingReview({ state }: { state: EdenWorldState }) {
           </section>
         )}
 
-        <section className="eden-ending-segment">
+        {detailsOpen && <section className="eden-ending-segment">
           <h3 className="eden-segment-title">神的注视</h3>
           <p className="eden-attention-final">{review.divineAttentionReview}</p>
-        </section>
+        </section>}
 
-        {review.traces.length > 0 && (
+        {detailsOpen && <section className="eden-ending-segment">
+          <h3 className="eden-segment-title">词元消耗</h3>
+          <dl className="eden-stat-list">
+            <div className="eden-stat-row"><dt>对话输入</dt><dd>{state.tokenStats?.dialoguePromptTotal ?? 0}</dd></div>
+            <div className="eden-stat-row"><dt>对话输出</dt><dd>{state.tokenStats?.dialogueCompletionTotal ?? 0}</dd></div>
+            <div className="eden-stat-row"><dt>对话合计</dt><dd>{state.tokenStats?.dialogueTotal ?? 0}</dd></div>
+            <div className="eden-stat-row"><dt>润色合计</dt><dd>{state.tokenStats?.polishTotal ?? 0}</dd></div>
+            <div className="eden-stat-row"><dt>本局总计</dt><dd>{totalTokens}{state.tokenStats?.hasEstimate ? "（含估算）" : ""}</dd></div>
+          </dl>
+        </section>}
+
+        {detailsOpen && review.traces.length > 0 && (
           <section className="eden-ending-segment">
             <h3 className="eden-segment-title">低语余痕</h3>
             <ul className="eden-trace-list">
@@ -222,7 +264,10 @@ export default function EndingReview({ state }: { state: EdenWorldState }) {
             </ul>
           </section>
         )}
-      </details>
+      </section>
+
+      {/* 模块 6：把这次经历留在园外（图片集；失败保留文字分镜） */}
+      <EndingMemoryPanel state={state} onOpenAiSettings={onOpenAiSettings} />
     </div>
   );
 }

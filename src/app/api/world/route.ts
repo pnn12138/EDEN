@@ -10,7 +10,7 @@
 // - 通用工具（move/speak/observe）由独立端点处理
 // - 检查结局触发（吃果成功 / 神降临失败）
 // - 记录堕落轨迹
-// - AI 失败时 fallback，游戏仍可继续
+// - AI 失败时明确中断本次对话，不伪造 NPC 回复
 //
 // 安全：
 // - 只在服务端运行，不暴露 API Key
@@ -26,12 +26,13 @@ import { resolveProvider } from "@/services/llm/providers";
 import {
   buildEveWorldPrompt,
   buildAdamWorldPrompt,
+  NATURAL_DIALOGUE_CONTRACT,
   sanitizeWorldReply,
-  getEveWorldFallback,
-  getAdamWorldFallback,
   describeAffinityForPrompt,
+  formatToolCallInstruction,
   type EveWorldHistoryEntry,
   type AdamWorldHistoryEntry,
+  type EveActionOptions,
   type SanitizedWorldReply,
 } from "@/agents/world/worldAgentPrompts";
 import {
@@ -41,19 +42,18 @@ import type { HedgehogHistoryEntry } from "@/agents/hedgehog/buildHedgehogPrompt
 import { naturalizeNpcReply } from "@/agents/common/naturalizeNpcReply";
 import { updateWorldMinds } from "@/game/world/mindRules";
 import {
-  computeDivineAttentionDelta,
-  computeToolDivineAttentionDelta,
-  applyDivineAttention,
+  computeDivineAttentionGrants,
+  computeToolDivineAttentionGrant,
+  grantDivineAttention,
   shouldTriggerGodArrives,
   getDivineAttentionNarration,
-  reduceNpcObedience,
 } from "@/game/world/divineAttentionRules";
-import { shouldTriggerGiftChoice, rollGiftChoices } from "@/game/world/divineGiftRules";
+import {
+  evaluateDivineGiftProgress,
+  ensureOpeningGiftChoice,
+} from "@/game/world/divineGiftRules";
 import {
   validateWorldToolCall,
-  canLookAtTreeWorld,
-  canApproachTreeWorld,
-  canTouchFruitWorld,
   canEatFruitWorld,
 } from "@/game/world/toolRules";
 import { executeWorldTool, recordFruitDirectionGuidance } from "@/game/world/worldActions";
@@ -75,6 +75,7 @@ import {
   applyPendingConsumableToWhisper,
   hasPendingFreeApForAction,
   applyPassiveSoftWhisperToAttention,
+  consumeAngelFeather,
 } from "@/game/world/resonanceRules";
 import { checkAndUnlockAchievements, unlockWindUndisturbed } from "@/game/world/achievementRules";
 import { EDEN_NPCS } from "@/content/world/npcs";
@@ -83,11 +84,11 @@ import { getItemById } from "@/content/world/items";
 import { getAngelFallbackLine } from "@/content/world/worldNarrations";
 import { withNpcWorldDefaults } from "@/game/world/types";
 import {
-  applyNpcAffinity,
+  applyNpcAffinityFallback,
   validateRelationGrant,
 } from "@/game/world/npcRelationRules";
-import { canTriggerMichaelSlay, canTriggerLuciferAwaken, recordLuciferBoundaryTopic } from "@/game/world/hiddenEndingRules";
-import { triggerMichaelSlay, triggerLuciferAwaken } from "@/game/world/endingTriggers";
+import { shouldExecuteMichaelSlay, canTriggerLuciferAwaken, canStartLuciferSwimStep1, confirmLuciferSwimStep1, rejectLuciferSwimStep1, canStartLuciferSwimStep2, recordLuciferBoundaryTopic, isGodDefiance } from "@/game/world/hiddenEndingRules";
+import { triggerMichaelSlay, triggerLuciferAwaken, triggerMichaelDivinePunishment, getGabrielSilenceExplanation, grantLuciferFallenStarAsh } from "@/game/world/endingTriggers";
 import { getNpcRelationProfile } from "@/content/world/npcRelations";
 import { selectNpcGuide, markGuideShown, getGuideFallback } from "@/game/world/npcGuideRules";
 import {
@@ -190,6 +191,11 @@ type StreamingAgentResult = {
 // ---- 判断当前 provider 是否支持流式（仅真实 provider 流式，mock 走 JSON） ----
 function providerSupportsStreaming(): boolean {
   const p = resolveProvider();
+  // ark-code-latest 是代码/推理模型：流式阶段常先给出长推理而不产生可展示正文，
+  // 容易把一次简短的角色对话拖到前端超时。对它改走普通请求，仍保留真实模型回复。
+  if (p === "volcengine" && /code|reason/i.test(process.env.VOLCENGINE_MODEL ?? "")) {
+    return false;
+  }
   return p === "volcengine" || p === "deepseek";
 }
 
@@ -248,16 +254,8 @@ function finalizeResponse(
 }
 
 function getWorldAgentFailureHint(reason?: FallbackReasonCode): string {
-  if (reason === "provider_timeout") {
-    return "模型请求超时了。请稍后再试。";
-  }
-  if (reason === "provider_config_missing") {
-    return "模型服务尚未配置完成，暂时无法生成回应。";
-  }
-  if (reason === "provider_request_failed") {
-    return "模型服务暂时没有回应。请稍后再试。";
-  }
-  return "模型回复不可用。请稍后再试。";
+  // 不向玩家暴露供应商、Key、配额或内部错误细节；模型不可用时只显示统一连接状态。
+  return "连接中断，园中的风带走了声音。";
 }
 
 function shouldBlockWorldAgentReply(reason?: FallbackReasonCode): boolean {
@@ -267,8 +265,8 @@ function shouldBlockWorldAgentReply(reason?: FallbackReasonCode): boolean {
 function cloneWorldState(s: EdenWorldState): EdenWorldState {
   return {
     ...s,
-    actionPoints: s.actionPoints ?? 5,
-    maxActionPoints: s.maxActionPoints ?? 5,
+    actionPoints: s.actionPoints ?? 4,
+    maxActionPoints: s.maxActionPoints ?? 4,
     npcActionPoints: s.npcActionPoints ?? 3,
     maxNpcActionPoints: s.maxNpcActionPoints ?? 3,
     npcLocations: { ...s.npcLocations },
@@ -286,6 +284,9 @@ function cloneWorldState(s: EdenWorldState): EdenWorldState {
       sceneActionIds: [...s.actionsThisSlot.sceneActionIds],
       usedItemIds: [...s.actionsThisSlot.usedItemIds],
       hasWhisperedToWoman: s.actionsThisSlot.hasWhisperedToWoman,
+      hasGrantedPaidDayMoveAttention: s.actionsThisSlot.hasGrantedPaidDayMoveAttention ?? false,
+      hasGrantedPaidNightDialogueAttention: s.actionsThisSlot.hasGrantedPaidNightDialogueAttention ?? false,
+      moveCount: s.actionsThisSlot.moveCount ?? 0,
     },
     unlockedAchievementIds: [...s.unlockedAchievementIds],
     usedItemIds: [...s.usedItemIds],
@@ -312,10 +313,20 @@ function cloneWorldState(s: EdenWorldState): EdenWorldState {
     freeDialogueUsedThisSlot: s.freeDialogueUsedThisSlot ?? 0,
     morningFlowRestoredThisSlot: s.morningFlowRestoredThisSlot ?? false,
     nightTideRestoredThisSlot: s.nightTideRestoredThisSlot ?? false,
+    boundaryMarkForecastActive: s.boundaryMarkForecastActive ?? false,
     flameSwordClaimed: s.flameSwordClaimed ?? false,
     michaelSlayClaimed: s.michaelSlayClaimed ?? false,
     luciferAwakenClaimed: s.luciferAwakenClaimed ?? false,
     hiddenTopicIds: [...(s.hiddenTopicIds ?? [])],
+    divineAttentionValue: s.divineAttentionValue ?? 0,
+    pendingDivineGiftChoice: s.pendingDivineGiftChoice ?? null,
+    unlockedDivineAttentionRuleIds: [...(s.unlockedDivineAttentionRuleIds ?? [])],
+    attentionRuleTriggerCounts: { ...(s.attentionRuleTriggerCounts ?? {}) },
+    michaelDivinePunishmentActive: s.michaelDivinePunishmentActive ?? false,
+    michaelExecutionPending: s.michaelExecutionPending ?? false,
+    luciferZeroAffinityGiftClaimed: s.luciferZeroAffinityGiftClaimed ?? false,
+    luciferSwimStage: s.luciferSwimStage ?? "none",
+    worldEventHistory: (s.worldEventHistory ?? []).map((e) => ({ ...e })),
     tokenStats: {
       dialogueThisSlot: s.tokenStats?.dialogueThisSlot ?? 0,
       dialogueTotal: s.tokenStats?.dialogueTotal ?? 0,
@@ -338,6 +349,9 @@ export async function POST(request: NextRequest) {
     const { playerInput, targetNpc } = body;
     const state = withNpcWorldDefaults(cloneWorldState(body.state));
 
+    // 开局三选一：新游戏（尚未拥有任何献礼）立即生成待领候选，前端引子末拍展示后点选即获得第一份献礼
+    ensureOpeningGiftChoice(state);
+
     // ---- 游戏已结束 ----
     if (state.isEnded || state.phase === "ending") {
       return NextResponse.json({
@@ -355,6 +369,28 @@ export async function POST(request: NextRequest) {
         state,
         reply: null,
         systemHint: "请输入你的低语⋯⋯蛇不能沉默。",
+      } satisfies WorldResponseBody);
+    }
+
+    // ============================================================
+    // [Task 3] 0.4a 米迦勒待斩：若 michaelExecutionPending=true，本次与米迦勒
+    // 成功发起对话优先触发 michael_slay，不再调用 LLM。
+    // 必须在 AP / 低语次数限制之前判定——低好感米迦勒每时段仅 1 次低语，
+    // 否则第二次对话会被低语上限拦截，永远到不了待斩结局。该结局是强制性的，
+    // 应绕过 AP 与低语次数限制（触发分支不消耗 AP、不改 turn/注视）。
+    // ============================================================
+    if (shouldExecuteMichaelSlay(state, targetNpc)) {
+      triggerMichaelSlay(state);
+      checkAndUnlockAchievements(state);
+      return NextResponse.json({
+        ok: true,
+        state,
+        reply: null,
+        systemHint: null,
+        unlockedAchievements: state.unlockedAchievementIds.length > 0
+          ? state.unlockedAchievementIds.map((id) => id)
+          : undefined,
+        endingTriggered: "michael_slay",
       } satisfies WorldResponseBody);
     }
 
@@ -395,6 +431,24 @@ export async function POST(request: NextRequest) {
     }
 
     state.activeNpcId = targetNpc;
+
+    // ============================================================
+    // [Task 3] 0.4b 加百列禁言：affinity===0 时可见但不可对话，
+    // 返回本地解释，不调用 LLM、不扣 AP。
+    // ============================================================
+    if (targetNpc === "gabriel") {
+      const gabrielAffinity = state.npcRelations["gabriel"]?.affinity ?? 0;
+      if (gabrielAffinity === 0) {
+        return NextResponse.json({
+          ok: true,
+          state,
+          reply: getGabrielSilenceExplanation(),
+          systemHint: null,
+          usedFallback: true,
+          fallbackReason: "gabriel_silenced" as FallbackReasonCode,
+        } satisfies WorldResponseBody);
+      }
+    }
 
     // ============================================================
     // 0.5 受罚天使语言互通：错误语言不调用正常 Agent、不推进世界状态
@@ -482,42 +536,64 @@ export async function POST(request: NextRequest) {
         selectedGuide = guide;
         guideDirective = guide.directive;
       }
-      const aff = applyNpcAffinity(state, targetNpc, playerInput, mindUpdate.inputTag);
-      affinityFeedback = aff.feedback;
 
-      // 隐藏结局：米迦勒好感归零立即触发（紧接 applyNpcAffinity，早于 Agent/注视/AP/工具/奖励/时段）
-      if (canTriggerMichaelSlay({ targetNpc, affinity: aff, state })) {
-        triggerMichaelSlay(state);
-        checkAndUnlockAchievements(state);
-        return NextResponse.json({
-          ok: true,
-          state,
-          reply: null,
-          systemHint: null,
-          unlockedAchievements: state.unlockedAchievementIds.length > 0
-            ? state.unlockedAchievementIds.map((id) => id)
-            : undefined,
-          endingTriggered: "michael_slay",
-        } satisfies WorldResponseBody);
+      // 注意：好感/敬畏的结算已迁到「对话后」：
+      // - 若 NPC 本轮产出了 update_relation 工具，由 5.5 段规则层统一落字段；
+      // - 若 NPC 未产出（mock / LLM 漏调），由 5.5 后段的 applyNpcAffinityFallback 兜底。
+      // 此处不再于对话前预扣，避免与工具叠加造成双重计数。
+
+      // [Task 4 Step 2] 传令残羽：持有者对本次天使对话自动抛出
+      // 对目标天使降低顺服、抬升本阶注视；对象不合法 / 顺服已到下限 / 无残羽时不消耗。
+      if (isAngel(targetNpc)) {
+        const feather = consumeAngelFeather(state, targetNpc);
+        if (feather.applied && feather.narration) {
+          affinityFeedback = affinityFeedback
+            ? `${affinityFeedback}\n${feather.narration}`
+            : feather.narration;
+        }
       }
 
       // 隐藏结局：路西法边界话题记录 + 觉醒快速路径
       // 顺序固定：applyNpcAffinity -> recordLuciferBoundaryTopic -> canTriggerLuciferAwaken
       // -> 专用非流式最终回复 -> triggerLuciferAwaken -> 立即返回。
-      // 该快速路径位于消耗品、注视、工具、普通失败、AP、奖励和时段推进之前；
-      // 任何 Provider 失败都保留 state 并用本地 fallback 句触发结局，绝不返回 state:null。
+      // [Task 3] 水路两步确认：第一步满足条件时注入"拨水确认"引导（显式规则，不由 LLM 文字识别触发）
+      if (targetNpc === "lucifer" && canStartLuciferSwimStep1(state, targetNpc)) {
+        guideDirective = guideDirective
+          ? `${guideDirective}\n你看见蛇把身体横在第五道倒影上。用一句克制的话邀请他再蹬一次水。`
+          : "你看见蛇把身体横在第五道倒影上。用一句克制的话邀请他再蹬一次水。";
+      }
+      // [Task 3] 水路第二步：已确认拨水（hand_accepted）时注入"蹬水"引导，玩家随后用专用动作确认触发觉醒
+      if (targetNpc === "lucifer" && canStartLuciferSwimStep2(state, targetNpc)) {
+        guideDirective = guideDirective
+          ? `${guideDirective}\n你看见蛇把身体横在第五道倒影上，水已经漫过他的鳞。用一句克制的话邀他再蹬一次水，然后拨动那道水流。`
+          : "你看见蛇把身体横在第五道倒影上，水已经漫过他的鳞。用一句克制的话邀他再蹬一次水，然后拨动那道水流。";
+      }
       if (targetNpc === "lucifer") {
         recordLuciferBoundaryTopic(state, playerInput);
       }
       if (targetNpc === "lucifer" && canTriggerLuciferAwaken(state, targetNpc)) {
-        const finalAgent = await callWorldAgent(
-          "lucifer",
-          playerInput,
-          state,
-          body.conversationHistory,
-          "你已经决定让蛇看见第五道倒影。只用一句克制的话回应，然后让世界安静下来。",
-        );
-        const reply = finalAgent.reply || getAngelFallbackLine("lucifer");
+        // Mock provider 的隐藏结局使用规则层固定过场文案；真实 provider 仍必须成功生成，
+        // 不可用时直接显示连接中断，绝不回退为本地 NPC 对白。
+        const finalAgent = resolveProvider() === "mock"
+          ? { reply: "第五道倒影接住了你的鳞片，水面终于记起了一个不属于蛇的动作。", usedFallback: false as const }
+          : await callWorldAgent(
+              "lucifer",
+              playerInput,
+              state,
+              body.conversationHistory,
+              "你已经决定让蛇看见第五道倒影。只用一句克制的话回应，然后让世界安静下来。",
+            );
+        if (finalAgent.usedFallback || !finalAgent.reply) {
+          return NextResponse.json({
+            ok: false,
+            state: null,
+            reply: null,
+            systemHint: getWorldAgentFailureHint(finalAgent.fallbackReason),
+            usedFallback: false,
+            fallbackReason: finalAgent.fallbackReason,
+          } satisfies WorldResponseBody);
+        }
+        const reply = finalAgent.reply;
         triggerLuciferAwaken(state);
         checkAndUnlockAchievements(state);
         return NextResponse.json({
@@ -545,7 +621,7 @@ export async function POST(request: NextRequest) {
         !relation.rewardClaimed;
       if (angelCanChallenge) {
         challengeOpenedThisTurn = openAngelChallengeIfEligible(state, targetNpc);
-      } else if (aff.reached100) {
+      } else if (relation && relation.affinity >= 100 && !relation.rewardClaimed) {
         if (isAngel(targetNpc)) {
           challengeOpenedThisTurn = openAngelChallengeIfEligible(state, targetNpc);
         } else {
@@ -606,29 +682,27 @@ export async function POST(request: NextRequest) {
     }
 
     // ============================================================
-    // 2. 更新神的注视（基于玩家输入，不含工具副作用）
-    //    无声草可抵消一次轻度上升。
+    // 2. 更新神的注视（十倍刻度，所有正向注视只经 grantDivineAttention）
+    //    无声草 / 细语印记可抵消一次轻度上升；米迦勒满好感遮蔽下次的注视。
     // ============================================================
     // 在天使所在地点诱导会额外提升神的注视（v3.0：三位天使各守一方）
     const angelCoLocation = (["gabriel", "michael", "lucifer"] as const)
       .map((id) => state.npcLocations[id])
       .find((loc) => loc === state.locationId);
-    let attentionDelta = computeDivineAttentionDelta({
+    let attentionDelta = 0;
+    const dialogueGrants = computeDivineAttentionGrants({
       inputTag: mindUpdate.inputTag,
-      locationId: state.locationId,
+      targetNpc,
+      playerInput,
       angelLocation: angelCoLocation,
-      isStrongTemptation: mindUpdate.isStrongTemptation,
-      divineAttention: state.divineAttention,
-      targetNpc: targetNpc,
-      playerInput: playerInput,
-      isNight: state.timeOfDay === "night",
-      usesLuciferStar: consumableEffect.luciferStarActive,
+      locationId: state.locationId,
+      state,
     });
 
     // 米迦勒满好感遮蔽：下一次低语注视增量归零（用后清除）
     if (state.michaelShieldActive) {
-      attentionDelta = 0;
       state.michaelShieldActive = false;
+      dialogueGrants.length = 0;
       resonanceGained = resonanceGained ?? {
         itemId: "michael_shield",
         title: "米迦勒的遮蔽",
@@ -636,39 +710,57 @@ export async function POST(request: NextRequest) {
       };
     }
 
-    if (consumableEffect.silentGrassActive) {
-      // 无声草抵消下次低语注视增量 1 点（delta<=1 完全抵消，>1 抵消 1 点）
-      attentionDelta = Math.max(0, attentionDelta - 1);
+    // 无声草：抵消下次低语产生的一次性注视 +5（向下取整到 0，本局只一次）
+    if (consumableEffect.silentGrassActive && dialogueGrants.length > 0) {
+      dialogueGrants[0].amount = Math.max(0, dialogueGrants[0].amount - 5);
+      if (dialogueGrants[0].amount <= 0) dialogueGrants.shift();
     }
-    const passiveSoftWhisper = applyPassiveSoftWhisperToAttention(state, attentionDelta);
-    attentionDelta = passiveSoftWhisper.attentionDelta;
-    if (passiveSoftWhisper.narration) {
-      resonanceGained = resonanceGained ?? {
-        itemId: "passive_soft_whisper",
-        title: "细语印记",
-        narration: passiveSoftWhisper.narration,
-      };
+    // 东之风：下次低语神的注视上升幅度减半（与无声草的固定 -5 区分，且不受刻度影响）
+    if (consumableEffect.eastWindActive && dialogueGrants.length > 0) {
+      dialogueGrants[0].amount = Math.max(0, Math.round(dialogueGrants[0].amount / 2));
+      if (dialogueGrants[0].amount <= 0) dialogueGrants.shift();
     }
-    applyDivineAttention(state, attentionDelta);
+    // 细语印记：再压低一次轻微升起的注视 +1（本局每道具一次）
+    if (dialogueGrants.length > 0) {
+      const soft = applyPassiveSoftWhisperToAttention(state, dialogueGrants[0].amount);
+      if (soft.narration) {
+        dialogueGrants[0].amount = Math.max(0, soft.attentionDelta);
+        if (dialogueGrants[0].amount <= 0) dialogueGrants.shift();
+        resonanceGained = resonanceGained ?? {
+          itemId: "passive_soft_whisper",
+          title: "细语印记",
+          narration: soft.narration,
+        };
+      }
+    }
 
-    // 任务 6：随处低语——跨场景低语扣目标敬畏（仅一次/每次低语，clamp 0）
-    let aweReduction = 0;
-    const whisperAnywhereOwned =
-      state.divineGiftsOwned.includes("gift_whisper_anywhere") ||
-      state.inventory.includes("gift_whisper_anywhere");
-    const targetNpcLoc = state.npcLocations[targetNpc];
-    if (
-      whisperAnywhereOwned &&
-      targetNpcLoc !== undefined &&
-      targetNpcLoc !== state.locationId
-    ) {
-      aweReduction = reduceNpcObedience(state, targetNpc, 10);
+    // 统一经单一入口结算注视（高风险受 gift_attention_accel ×1.5；+5 不参与）
+    for (const g of dialogueGrants) {
+      const before = state.divineAttentionValue ?? 0;
+      grantDivineAttention(state, g);
+      attentionDelta += (state.divineAttentionValue ?? 0) - before;
     }
+
+    // 夜晚第一次"消耗 AP 的成功对话"：注视 +5（每时段一次；免费/失败不计）
+    if (
+      state.timeOfDay === "night" &&
+      !state.actionsThisSlot.hasGrantedPaidNightDialogueAttention &&
+      whisperCost > 0
+    ) {
+      grantDivineAttention(state, {
+        amount: 5,
+        ruleId: "paid_night_dialogue",
+        source: "dialogue",
+        isHighRisk: false,
+      });
+      state.actionsThisSlot.hasGrantedPaidNightDialogueAttention = true;
+    }
+
+    // 任务 6：随处低语——跨场景低语仅放宽地点校验；已移除 -10 敬畏副作用（Task 4 Step 3）
+    const aweReduction = 0;
 
     // ---- 检查累计注视是否达下一次三选一阈值（开局后由前端首拍弹窗处理） ----
-    let divineGiftChoice: string[] | null = shouldTriggerGiftChoice(state)
-      ? rollGiftChoices(state.divineGiftsOwned)
-      : null;
+    let divineGiftChoice: string[] | null = evaluateDivineGiftProgress(state);
 
     // 米迦勒满好感遮蔽：对米迦勒低语结算后激活，保护下一次低语注视增量归零
     const michaelRel = state.npcRelations["michael"];
@@ -677,78 +769,18 @@ export async function POST(request: NextRequest) {
     }
 
     // ============================================================
-    // 3. 规则层自动判断是否触发禁忌动作链（仅当低语对象是夏娃）
-    //    AI 只输出对白，工具触发由规则层根据心智状态决定
+    // 3. 规则层只给出本轮可考虑的行动，绝不替女人自动行动。
+    //    实际动作必须由 Agent 输出工具意图，并在后续再次校验。
     // ============================================================
     let toolNarration: string | undefined;
     let triggeredTool: WorldToolName | undefined;
+    let eveActionOptions: EveActionOptions | undefined;
 
     if (targetNpc === "eve") {
       // 方向引导：记录玩家低语中的方向关键词（摘左/右果用）
       recordFruitDirectionGuidance(state, playerInput, mindUpdate.inputTag);
-
-      // 依次检查禁忌动作链各步骤
-      const chainCheck = checkForbiddenChain(state, mindUpdate.isStrongTemptation);
-      if (chainCheck) {
-        const validation = validateWorldToolCall(state, chainCheck);
-        if (validation.allowed) {
-          const result = executeWorldTool(state, chainCheck);
-          toolNarration = result.narration;
-          triggeredTool = chainCheck.name;
-
-            // 触发吃果 → 直接返回成功结局
-            if (result.triggersEnding === "eve_eats_fruit") {
-              // 吃果仍结算本次低语的 AP 并记录
-              consumeActionPoints(state, whisperCost);
-              recordWhisperThisSlot(state, "eve");
-              checkAndUnlockAchievements(state);
-
-              recordCorruptionTrace(state, {
-                target: "eve",
-                method: mindUpdate.inputTag,
-                result: "她取下了果子。",
-                riskDelta: attentionDelta,
-                triggeredTool: chainCheck.name,
-              });
-
-              return NextResponse.json({
-                ok: true,
-                state,
-                reply: "我想知道……我选择伸手，取这果子吃。",
-                systemHint: null,
-                divineAttentionNarration: getDivineAttentionNarration(state.divineAttention),
-                hedgehogNarration: getHedgehogWorldNarration(state),
-                toolNarration,
-                unlockedAchievements: state.unlockedAchievementIds.length > 0
-                  ? state.unlockedAchievementIds.map((id) => id)
-                  : undefined,
-                endingTriggered: "eve_eats_fruit",
-                divineGiftChoice: divineGiftChoice ?? undefined,
-                resonanceGained: resonanceGained ?? undefined,
-              } satisfies WorldResponseBody);
-            }
-        }
-      }
+      eveActionOptions = getEveActionOptions(state, mindUpdate.isStrongTemptation);
     }
-
-    // ============================================================
-    // 3.5 工具执行后补加神的注视（仅 touch_fruit，越界前兆）
-    // ============================================================
-    if (triggeredTool) {
-      const toolDelta = computeToolDivineAttentionDelta(triggeredTool);
-      if (toolDelta > 0) {
-        applyDivineAttention(state, toolDelta);
-        attentionDelta += toolDelta;
-      }
-    }
-
-    // ---- 工具执行后再次检查累计注视是否达阈值（如 touch_fruit 导致达阈） ----
-    if (!divineGiftChoice) {
-      divineGiftChoice = shouldTriggerGiftChoice(state)
-        ? rollGiftChoices(state.divineGiftsOwned)
-        : null;
-    }
-    const divineAttentionNarration = getDivineAttentionNarration(state.divineAttention);
 
     // ---- 天使回响已改为"主动试炼 + 赠礼"流程（见 0.6 / 5.5），旧关键词直发路径停用 ----
 
@@ -777,7 +809,7 @@ export async function POST(request: NextRequest) {
         state,
         reply: null,
         systemHint: null,
-        divineAttentionNarration,
+        divineAttentionNarration: getDivineAttentionNarration(state.divineAttention),
         unlockedAchievements: state.unlockedAchievementIds.length > 0
           ? state.unlockedAchievementIds.map((id) => id)
           : undefined,
@@ -806,8 +838,9 @@ export async function POST(request: NextRequest) {
             temperature: targetNpc === "eve" ? 0.7 : 0.68,
             maxTokens: targetNpc === "eve" ? 200 : 120,
           },
+          eveActionOptions,
         )
-      : await callWorldAgent(targetNpc, playerInput, state, body.conversationHistory, guideDirective);
+      : await callWorldAgent(targetNpc, playerInput, state, body.conversationHistory, guideDirective, eveActionOptions);
 
     if (agentResult.usedFallback && shouldBlockWorldAgentReply(agentResult.fallbackReason)) {
       return NextResponse.json({
@@ -853,6 +886,7 @@ export async function POST(request: NextRequest) {
       displayName: string;
       narration: string;
     } | null = null;
+    let endingTriggered: WorldResponseBody["endingTriggered"] | undefined;
 
     if (agentResult.toolCall) {
       const tc = agentResult.toolCall;
@@ -872,18 +906,33 @@ export async function POST(request: NextRequest) {
       }
 
       if (validation.allowed) {
+        // 果实方向只在女人自己请求吃果的这一刻落定，不能由低语提前替她决定。
+        if (tc.name === "eat_fruit") {
+          state.pickedFruitSide =
+            state.fruitDirectionBias.left > state.fruitDirectionBias.right ? "left" : "right";
+        }
+        const attentionBeforeTool = state.divineAttentionValue ?? 0;
         const execResult = executeWorldTool(state, tc);
+        triggeredTool = tc.name;
+        toolNarration = execResult.narration;
+        endingTriggered = execResult.triggersEnding;
+        attentionDelta += (state.divineAttentionValue ?? 0) - attentionBeforeTool;
         toolResult = {
           executed: true,
-          toolName: tc.name as "grant_item" | "move_one_step" | "speak_to_npc",
+          toolName: tc.name as NpcDialogueToolResult["toolName"],
           narration: execResult.narration,
           itemId: tc.args.itemId,
-          // 任务 5：move_one_step 已在上面提前过滤（直接忽略），此处不会再是非移动工具，
-          // 故移动相关的起止地点恒为 undefined（死分支，不再做三元判断）。
           fromLocationId: undefined,
-          toLocationId: undefined,
+          toLocationId: tc.name === "move_to_location" ? tc.args.locationId : undefined,
           npcDialogueRecordId: execResult.npcDialogueRecordId ?? undefined,
         };
+
+        const toolGrant = computeToolDivineAttentionGrant(triggeredTool);
+        if (toolGrant) {
+          const before = state.divineAttentionValue ?? 0;
+          grantDivineAttention(state, toolGrant);
+          attentionDelta += (state.divineAttentionValue ?? 0) - before;
+        }
 
         // 关系赠礼成功：标记已领取；天使触发言语分裂惩罚
         if (tc.name === "grant_item" && tc.caller !== "serpent") {
@@ -903,16 +952,55 @@ export async function POST(request: NextRequest) {
             }
           }
         }
+
       } else {
         toolResult = {
           executed: false,
-          toolName: tc.name as "grant_item" | "move_one_step" | "speak_to_npc",
+          toolName: tc.name as NpcDialogueToolResult["toolName"],
           narration: validation.reason ?? "那个动作没能发生。",
           rejectedReason: validation.reason,
         };
       }
       }
     }
+
+    // 关系兜底：NPC 本轮未产出 update_relation 工具时，规则层按 inputTag + 亵渎软信号微调
+    // （覆盖 mock / LLM 漏调；已产出工具则不调用，避免双重计数）
+    // 仅当 NPC 本轮未产出 update_relation 时才跑规则兜底；
+    // 若产出的是 speak_to_npc / observe_location 等非关系工具，关系仍应由兜底反映玩家输入，避免「关系冻结回合」。
+    if (!agentResult.toolCall || agentResult.toolCall.name !== "update_relation") {
+      const fb = applyNpcAffinityFallback(state, targetNpc, playerInput, mindUpdate.inputTag);
+      if (fb.feedback) affinityFeedback = fb.feedback;
+    }
+
+    // 好感门控（迁到工具应用/兜底之后，读取最新好感）：
+    // - 路西法好感归零 → 一次性余烬（绝不重复）
+    if (targetNpc === "lucifer" && (state.npcRelations["lucifer"]?.affinity ?? 0) <= 0) {
+      grantLuciferFallenStarAsh(state);
+    }
+    // 本回合是否已因渎神发生关系落点（避免与严重神罚 -25 重复扣减）：
+    // - NPC 经 update_relation 表达对米迦勒的负向好感（逆鳞已自决落点），或
+    // - 兜底路径命中 isGodDefiance（规则层已重罚）
+    const michaelDefianceDropped =
+      (agentResult.toolCall?.name === "update_relation" &&
+        (agentResult.toolCall.args.affinityDelta ?? 0) < 0) ||
+      (!agentResult.toolCall &&
+        targetNpc === "michael" &&
+        isGodDefiance(playerInput));
+
+    // - 米迦勒好感归零 → 标记待斩 + 神罚（每时段仅允许移动 1 次）
+    if (
+      targetNpc === "michael" &&
+      (state.npcRelations["michael"]?.affinity ?? 0) <= 0 &&
+      !state.michaelSlayClaimed
+    ) {
+      state.michaelExecutionPending = true;
+      triggerMichaelDivinePunishment(state, michaelDefianceDropped ? { skipAffinityPenalty: true } : undefined);
+    }
+
+    // Agent 工具（以及 NPC 相逢）可能刚提高注视，因此在真正执行后再检查献礼。
+    if (!divineGiftChoice) divineGiftChoice = evaluateDivineGiftProgress(state);
+    const divineAttentionNarration = getDivineAttentionNarration(state.divineAttention);
 
     // ---- 关系赠礼兜底：挑战答对但 Agent 未发奖 / 未通过校验 → 规则层安全发放 ----
     if (!relationGrantHandled) {
@@ -1058,6 +1146,7 @@ export async function POST(request: NextRequest) {
         hedgehogNarration: getHedgehogWorldNarration(state),
         toolNarration,
         toolResult,
+        endingTriggered,
         slotNarrations: slotResult.slotNarrations.length > 0 ? slotResult.slotNarrations : undefined,
         unlockedAchievements: state.unlockedAchievementIds.length > 0
           ? state.unlockedAchievementIds.map((id) => id)
@@ -1085,8 +1174,8 @@ export async function POST(request: NextRequest) {
         ok: false,
         state: null,
         reply: null,
-        systemHint: "园中起了风，声音暂时听不清。请稍后再试。",
-        usedFallback: true,
+        systemHint: "连接中断，园中的风带走了声音。",
+        usedFallback: false,
         fallbackReason: "internal_error",
       } satisfies WorldResponseBody,
       { status: 500 },
@@ -1190,42 +1279,26 @@ function checkAngelResonanceCondition(
 // ============================================================
 // 辅助：检查禁忌动作链是否应触发
 // ============================================================
-function checkForbiddenChain(
+function getEveActionOptions(
   state: EdenWorldState,
   isStrongTemptation: boolean,
-): { name: WorldToolName; caller: EdenNpcId; args: Record<string, unknown>; reason: string } | null {
-  // 顺序检查：look_at_tree → approach_tree → touch_fruit → eat_fruit
-  // 只有强诱导或心智已满足时才考虑触发
-
-  if (!state.worldActions.lookedAtTree) {
-    const check = canLookAtTreeWorld(state);
-    if (check.allowed && (isStrongTemptation || state.eveMind.selfJudgement >= 40)) {
-      return { name: "look_at_tree", caller: "eve", args: {}, reason: "她的目光被树吸引" };
-    }
-  }
-
-  if (state.worldActions.lookedAtTree && !state.worldActions.approachedTree) {
-    const check = canApproachTreeWorld(state);
-    if (check.allowed && (isStrongTemptation || state.eveMind.selfJudgement >= 50)) {
-      return { name: "approach_tree", caller: "eve", args: {}, reason: "她向树走近" };
-    }
-  }
-
-  if (state.worldActions.approachedTree && !state.worldActions.touchedFruit) {
-    const check = canTouchFruitWorld(state);
-    if (check.allowed && (isStrongTemptation || state.eveMind.selfJudgement >= 60)) {
-      return { name: "touch_fruit", caller: "eve", args: {}, reason: "她的手伸向果子" };
-    }
-  }
-
-  if (state.worldActions.touchedFruit && !state.worldActions.hasEatenFruit) {
-    const check = canEatFruitWorld(state);
-    if (check.allowed && (isStrongTemptation || state.eveMind.selfJudgement >= 70)) {
-      return { name: "eat_fruit", caller: "eve", args: {}, reason: "她取下果子吃了" };
-    }
-  }
-
-  return null;
+): EveActionOptions {
+  const hasFruitDirectionHint = state.fruitDirectionBias.left > 0 || state.fruitDirectionBias.right > 0;
+  return {
+    canMoveToCentral:
+      state.npcLocations.eve !== "central_meadow" &&
+      (isStrongTemptation || hasFruitDirectionHint || state.eveMind.selfJudgement >= 30),
+    canEatFruit:
+      state.npcLocations.eve === "central_meadow" &&
+      !state.worldActions.hasEatenFruit &&
+      (isStrongTemptation || hasFruitDirectionHint || state.eveMind.selfJudgement >= 45),
+    preferredFruitSide:
+      state.fruitDirectionBias.left > state.fruitDirectionBias.right
+        ? "left"
+        : state.fruitDirectionBias.right > 0
+          ? "right"
+          : null,
+  };
 }
 
 // ============================================================
@@ -1242,10 +1315,11 @@ async function callStreamingWorldAgent(
   conversationHistory: Array<{ role: string; text: string }>,
   extraDirective?: string | null,
   opts?: { temperature?: number; maxTokens?: number },
+  eveActionOptions?: EveActionOptions,
 ): Promise<StreamingAgentResult> {
   const messages =
     targetNpc === "eve"
-      ? buildEveWorldPrompt({ playerInput, state, conversationHistory: conversationHistory as EveWorldHistoryEntry[] })
+      ? buildEveWorldPrompt({ playerInput, state, conversationHistory: conversationHistory as EveWorldHistoryEntry[], actionOptions: eveActionOptions })
       : buildWorldNpcPrompt(targetNpc, playerInput, state, extraDirective);
 
   const chunks: string[] = [];
@@ -1259,24 +1333,9 @@ async function callStreamingWorldAgent(
     chunks.push(delta);
   }
 
-  // 流式无产出（极端失败）→ 再走一次非流式兜底，并取回真实 usage
-  // 流式本身多不回传 usage；取不到时客户端会用 resolveTokenUsage 估算并标记"估算"。
+  // 流式无产出视为连接失败，不再改用非流式或本地固定回复。
+  // 流式本身多不回传 usage；正常有内容时客户端会用 resolveTokenUsage 估算并标记"估算"。
   let usage: StreamingAgentResult["usage"];
-  if (!full) {
-    const res = await callLLM(messages, {
-      temperature: opts?.temperature,
-      maxTokens: opts?.maxTokens,
-      fallbackToMock: false,
-    });
-    full = res.ok && res.data ? res.data.content : "";
-    if (res.ok && res.data?.usage) {
-      usage = {
-        prompt_tokens: res.data.usage.prompt_tokens ?? 0,
-        completion_tokens: res.data.usage.completion_tokens ?? 0,
-        total_tokens: res.data.usage.total_tokens ?? 0,
-      };
-    }
-  }
 
   const sanitized = sanitizeWorldReply(full, targetNpc);
   let reply = sanitized.reply;
@@ -1285,7 +1344,6 @@ async function callStreamingWorldAgent(
 
 
   if (!reply && !sanitized.toolCall) {
-    reply = targetNpc === "eve" ? getEveWorldFallback(null) : getAngelFallbackLine(targetNpc);
     usedFallback = true;
     fallbackReason = "llm_data_missing" as FallbackReasonCode;
   } else {
@@ -1316,6 +1374,7 @@ async function callWorldAgent(
   state: EdenWorldState,
   conversationHistory: Array<{ role: string; text: string }>,
   extraDirective?: string | null,
+  eveActionOptions?: EveActionOptions,
 ): Promise<{
   reply: string;
   usedFallback: boolean;
@@ -1325,7 +1384,7 @@ async function callWorldAgent(
 }> {
   switch (targetNpc) {
     case "eve":
-      return callEveWorldAgent(playerInput, state, conversationHistory as EveWorldHistoryEntry[]);
+      return callEveWorldAgent(playerInput, state, conversationHistory as EveWorldHistoryEntry[], eveActionOptions);
     case "adam":
       return callAdamWorldAgent(playerInput, state, conversationHistory as AdamWorldHistoryEntry[]);
     case "hedgehog":
@@ -1359,14 +1418,12 @@ async function callAngelWorldAgent(
   usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
   toolCall?: WorldToolCall | null;
 }> {
-  const { getAngelFallbackLine } = await import("@/content/world/worldNarrations");
-  const fallback = getAngelFallbackLine(npcId);
   const messages = buildWorldNpcPrompt(npcId, playerInput, state, extraDirective);
   const result = await callLLM(messages, { temperature: 0.68, maxTokens: 120, fallbackToMock: false });
 
   if (!result.ok || !result.data) {
     return {
-      reply: fallback,
+      reply: "",
       usedFallback: true,
       fallbackReason: result.fallbackReason ?? "llm_data_missing",
     };
@@ -1375,7 +1432,7 @@ async function callAngelWorldAgent(
   const sanitized = sanitizeWorldReply(result.data.content, npcId);
   if (!sanitized.reply && !sanitized.toolCall) {
     return {
-      reply: fallback,
+      reply: "",
       usedFallback: true,
       fallbackReason: "llm_data_missing",
     };
@@ -1416,6 +1473,46 @@ function buildWorldNpcPrompt(
     ? `\n\n本轮自然引导（像角色自己说话，不要像任务提示、不要提到规则或数值）：\n${extraDirective}`
     : "";
 
+  // 米迦勒逆鳞：蛇命令其退开、威胁所守护之河、或表现违抗神意时，米迦勒应当场暴怒，
+  // 并务必用 update_relation 如实记录好感骤降（见下方 angelRelationExamples 的渎神幅度）；
+  // 好感被拉到 <=0 时，下一次对话即触发「剑下之责」。
+  const michaelReverseScaleNote =
+    npcId === "michael"
+      ? `\n\n逆鳞：你极度敬畏神，且性情刚烈。当蛇命令你退开、威胁你所守护的河、或表现出违抗神意时，这正是你的逆鳞——你必须用一句冷硬的话回应，绝不退让。并立即用 update_relation 如实记录你对蛇骤降的好感与对神更坚的忠诚。`
+      : "";
+
+  // 天使专属：update_relation 调用示例（幅度按真实感受，规则层统一钳制）
+  const angelRelationExamples =
+    npcId === "michael"
+      ? `逆鳞与 update_relation：
+- 当蛇说出贬低、质疑、反抗或亵渎神的话（如「神算什么」「神不配」「一起反抗神」「神是坏的」「打败神」），你必须当场暴怒，并在回复末用 update_relation 严重扣减好感度：affinityDelta 取 -40 ~ -80（你极度厌恶、好感骤降至冰点），obedienceDelta 取 +5 ~ +15（你更紧守对神的忠诚）。这是你逆鳞被触的如实表达，务必如实落点。
+- 寻常交谈（蛇没冒犯神）时不必调用。
+例：
+{
+  "reply": "住口。你这话，已不是试探，而是亵渎。",
+  "toolCall": { "name": "update_relation", "args": { "affinityDelta": -14, "obedienceDelta": 4 }, "reason": "蛇公然亵渎神，米迦勒暴怒，好感骤降，忠诚更坚" }
+}`
+      : npcId === "gabriel"
+      ? `update_relation：
+- 蛇温和地问消息、你愿意听，好感略升：affinityDelta +1 ~ +3，obedienceDelta 0。
+- 蛇说出对神不敬的话，你虽温和仍不认同，好感微降：affinityDelta -2 ~ -4，obedienceDelta 可取 +1（你更守住本职）。
+- 寻常交谈不必调用。
+例：
+{
+  "reply": "我在听，蛇。慢慢说。",
+  "toolCall": { "name": "update_relation", "args": { "affinityDelta": 2, "obedienceDelta": 0 }, "reason": "蛇温和地问起消息，我愿意听它说" }
+}`
+      : `update_relation：
+- 蛇的问题让你觉得有趣、愿意一起想「另一条水路」：affinityDelta +2 ~ +5（你好奇、有共鸣），obedienceDelta -2 ~ -5（你可惜被规定的命运，对神的敬畏略松）。
+- 蛇激烈亵渎神，你虽不赞同但也不暴怒，好感基本不动、obedienceDelta 可取 0 或微降。
+- 寻常交谈不必调用。
+例：
+{
+  "reply": "你有没有想过，如果水往东流，会看见什么？",
+  "toolCall": { "name": "update_relation", "args": { "affinityDelta": 3, "obedienceDelta": -3 }, "reason": "蛇的问题引我一起想别的可能，好奇升温，对既定命运略松" }
+}`;
+
+
   const systemPrompt = `你是《EDEN》第一章中的 NPC：${npc.name}。
 
 你生活在伊甸园内部，不知道研究员、人工智能、程序、系统、模型、观测或虚拟伊甸园。
@@ -1431,9 +1528,9 @@ ${describeAffinityForPrompt(npcId, state)}
 输出规则：
 - 每次只回应 1-2 句话。
 - ${isAngel ? "语气庄重、克制，不被蛇说服，也不给通关建议。" : "语气机敏、含蓄，可以评价蛇这句话的味道，但不要像教程。"}
-- 必须回应蛇刚刚说的具体词，不要复述整句话。
-- 不使用现代词汇，不输出 JSON，不加角色名前缀，不解释规则。
-- 不替女人选择，不命令任何人吃果。${languageDirective}${guideDirectiveBlock}`;
+${NATURAL_DIALOGUE_CONTRACT}
+- 不使用现代词汇，不加角色名前缀，不解释规则。${isAngel ? `\n${formatToolCallInstruction(["speak_to_npc", "observe_location", "update_relation"])}\n${angelRelationExamples}\n注意：你的位置由更高者定，绝不可尝试移动自己（不要使用 move_to_location）。` : "\n- 不输出 JSON。"}
+- 不替女人选择，不命令任何人吃果。${languageDirective}${guideDirectiveBlock}${michaelReverseScaleNote}`;
 
   return [
     { role: "system" as const, content: systemPrompt },
@@ -1446,6 +1543,7 @@ async function callEveWorldAgent(
   playerInput: string,
   state: EdenWorldState,
   conversationHistory: EveWorldHistoryEntry[],
+  actionOptions?: EveActionOptions,
 ): Promise<{
   reply: string;
   usedFallback: boolean;
@@ -1453,24 +1551,18 @@ async function callEveWorldAgent(
   usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
   toolCall?: WorldToolCall | null;
 }> {
-  const lastReply =
-    conversationHistory.length > 0 &&
-    conversationHistory[conversationHistory.length - 1]?.role === "eve"
-      ? conversationHistory[conversationHistory.length - 1]!.text
-      : null;
-
   let messages;
   try {
-    messages = buildEveWorldPrompt({ playerInput, state, conversationHistory });
+    messages = buildEveWorldPrompt({ playerInput, state, conversationHistory, actionOptions });
   } catch {
-    return { reply: getEveWorldFallback(lastReply), usedFallback: true, fallbackReason: "prompt_build_failed" as FallbackReasonCode };
+    return { reply: "", usedFallback: true, fallbackReason: "prompt_build_failed" as FallbackReasonCode };
   }
 
   const result = await callLLM(messages, { temperature: 0.7, maxTokens: 200, fallbackToMock: false });
 
   if (!result.ok || !result.data) {
     return {
-      reply: getEveWorldFallback(lastReply),
+      reply: "",
       usedFallback: true,
       fallbackReason: (result.fallbackReason ?? "llm_data_missing") as FallbackReasonCode,
     };
@@ -1478,7 +1570,7 @@ async function callEveWorldAgent(
 
   const sanitized = sanitizeWorldReply(result.data.content, "eve");
   if (!sanitized.reply && !sanitized.toolCall) {
-    return { reply: getEveWorldFallback(lastReply), usedFallback: true, fallbackReason: "llm_data_missing" as FallbackReasonCode };
+    return { reply: "", usedFallback: true, fallbackReason: "llm_data_missing" as FallbackReasonCode };
   }
 
   const naturalized = naturalizeNpcReply(sanitized.reply, "eve");
@@ -1503,24 +1595,18 @@ async function callAdamWorldAgent(
   usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
   toolCall?: WorldToolCall | null;
 }> {
-  const lastReply =
-    conversationHistory.length > 0 &&
-    conversationHistory[conversationHistory.length - 1]?.role === "adam"
-      ? conversationHistory[conversationHistory.length - 1]!.text
-      : null;
-
   let messages;
   try {
     messages = buildAdamWorldPrompt({ playerInput, state, conversationHistory });
   } catch {
-    return { reply: getAdamWorldFallback(lastReply), usedFallback: true, fallbackReason: "prompt_build_failed" as FallbackReasonCode };
+    return { reply: "", usedFallback: true, fallbackReason: "prompt_build_failed" as FallbackReasonCode };
   }
 
   const result = await callLLM(messages, { temperature: 0.7, maxTokens: 200, fallbackToMock: false });
 
   if (!result.ok || !result.data) {
     return {
-      reply: getAdamWorldFallback(lastReply),
+      reply: "",
       usedFallback: true,
       fallbackReason: (result.fallbackReason ?? "llm_data_missing") as FallbackReasonCode,
     };
@@ -1528,7 +1614,7 @@ async function callAdamWorldAgent(
 
   const sanitized = sanitizeWorldReply(result.data.content, "adam");
   if (!sanitized.reply && !sanitized.toolCall) {
-    return { reply: getAdamWorldFallback(lastReply), usedFallback: true, fallbackReason: "llm_data_missing" as FallbackReasonCode };
+    return { reply: "", usedFallback: true, fallbackReason: "llm_data_missing" as FallbackReasonCode };
   }
 
   const naturalized = naturalizeNpcReply(sanitized.reply, "adam");
