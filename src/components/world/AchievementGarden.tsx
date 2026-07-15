@@ -222,7 +222,7 @@ export default function AchievementGarden({ unlockedIds, compact }: AchievementG
                 {/* 本地静态图标，使用 <img> 以保留 onError 兜底隐藏 */}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={`${ICON_BASE}/${mark.id}.png`}
+                  src={`${ICON_BASE}/${mark.id}.webp`}
                   alt={mark.name}
                   loading="lazy"
                   onError={(e) => {

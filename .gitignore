@@ -152,3 +152,7 @@ tests/
 AGENTS.md
 README.md
 
+# 本地资源压缩预览/备份（不提交）
+public/assets/.optimized/
+public/assets/_originals/
+

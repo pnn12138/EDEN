@@ -4,38 +4,38 @@
 // ============================================================
 
 export const CHAPTER0_IMAGES = {
-  edenBackground: "/assets/chapter0/images/eden_background.png",
-  evePortrait: "/assets/chapter0/images/eve_portrait.png",
-  serpentIcon: "/assets/chapter0/images/serpent_icon.png",
-  forbiddenFruit: "/assets/chapter0/images/forbidden_fruit.png",
-  endingEveEatsFruit: "/assets/chapter0/images/ending_eve_eats_fruit.png",
-  endingGodArrives: "/assets/chapter0/images/ending_god_arrives.png",
+  edenBackground: "/assets/chapter0/images/eden_background.webp",
+  evePortrait: "/assets/chapter0/images/eve_portrait.webp",
+  serpentIcon: "/assets/chapter0/images/serpent_icon.webp",
+  forbiddenFruit: "/assets/chapter0/images/forbidden_fruit.webp",
+  endingEveEatsFruit: "/assets/chapter0/images/ending_eve_eats_fruit.webp",
+  endingGodArrives: "/assets/chapter0/images/ending_god_arrives.webp",
 
   // 成功结局剧情过场图（初次堕落事件链）
-  endingAdamTakesFruit: "/assets/chapter0/images/ending_adam_takes_fruit_v2.png",
-  endingExileFromEden: "/assets/chapter0/images/ending_exile_from_eden_v2.png",
+  endingAdamTakesFruit: "/assets/chapter0/images/ending_adam_takes_fruit_v2.webp",
+  endingExileFromEden: "/assets/chapter0/images/ending_exile_from_eden_v2.webp",
 
   // 第二伊甸园候选素材（非破坏性新增）
-  secondEdenBackground: "/assets/chapter0/images/second_eden_background_candidate.png",
-  secondEdenPrologueBackground: "/assets/chapter0/images/second_eden_prologue_background.png",
-  secondEdenForbiddenFruit: "/assets/chapter0/images/second_eden_forbidden_fruit_candidate.png",
-  secondEdenEvePortrait: "/assets/chapter0/images/second_eden_eve_portrait_candidate.png",
+  secondEdenBackground: "/assets/chapter0/images/second_eden_background_candidate.webp",
+  secondEdenPrologueBackground: "/assets/chapter0/images/second_eden_prologue_background.webp",
+  secondEdenForbiddenFruit: "/assets/chapter0/images/second_eden_forbidden_fruit_candidate.webp",
+  secondEdenEvePortrait: "/assets/chapter0/images/second_eden_eve_portrait_candidate.webp",
 
   // 创世 CG（Beat 1 使用）
-  genesisCreationLight: "/assets/chapter0/images/genesis_creation_light_candidate.png",
+  genesisCreationLight: "/assets/chapter0/images/genesis_creation_light_candidate.webp",
 
   // 夏娃全身立绘（对话阶段场景人物层）
-  eveFullbodySprite: "/assets/chapter0/images/eve_fullbody_sprite_candidate.png",
+  eveFullbodySprite: "/assets/chapter0/images/eve_fullbody_sprite_candidate.webp",
 
   // 对话背景 v2（自然干地空地，可放置双角色立绘）
-  edenDialogueBackgroundV2: "/assets/chapter0/images/eden_dialogue_background_v2.png",
+  edenDialogueBackgroundV2: "/assets/chapter0/images/eden_dialogue_background_v2.webp",
 
   // 亚当全身立绘 v2（对话阶段场景人物层，可被选中对话）
-  adamFullbodySprite: "/assets/chapter0/images/adam_fullbody_sprite_v2.png",
+  adamFullbodySprite: "/assets/chapter0/images/adam_fullbody_sprite_v2.webp",
 
   // 伊甸园小动物：刺猬（场景氛围角色，不参与通关逻辑）
   // v2 为半写实透明 PNG 立绘（850x708，绿幕 chroma-key 抠图）；旧 hedgehog_sprite.svg 为废弃占位素材，保留存档
-  hedgehogSprite: "/assets/chapter0/images/hedgehog_sprite_v2.png",
+  hedgehogSprite: "/assets/chapter0/images/hedgehog_sprite_v2.webp",
 } as const;
 
 export const CHAPTER0_AUDIO = {
@@ -48,22 +48,22 @@ export const CHAPTER0_AUDIO = {
 } as const;
 
 export const CHAPTER1_IMAGES = {
-  edenWorldMap: "/assets/chapter1/images/eden_world_map_final.png",
+  edenWorldMap: "/assets/chapter1/images/eden_world_map_final.webp",
   // 最终地点背景：由 Codex 生成图接入（2026-06-22）
   // 旧 v3 WebP 保留作为回滚路径，不再引用
-  centralMeadow: "/assets/chapter1/images/location_central_meadow_final.png",
-  fourRiverSource: "/assets/chapter1/images/location_four_river_source_final.png",
-  adamGardenWork: "/assets/chapter1/images/location_adam_garden_work_final.png",
-  treeCourt: "/assets/chapter1/images/location_tree_court_final.png",
-  eastGardenPath: "/assets/chapter1/images/location_east_garden_path_final.png",
-  namingStoneBank: "/assets/chapter1/images/location_naming_stone_bank_final.png",
+  centralMeadow: "/assets/chapter1/images/location_central_meadow_final.webp",
+  fourRiverSource: "/assets/chapter1/images/location_four_river_source_final.webp",
+  adamGardenWork: "/assets/chapter1/images/location_adam_garden_work_final.webp",
+  treeCourt: "/assets/chapter1/images/location_tree_court_final.webp",
+  eastGardenPath: "/assets/chapter1/images/location_east_garden_path_final.webp",
+  namingStoneBank: "/assets/chapter1/images/location_naming_stone_bank_final.webp",
   // 三位天使独立透明立绘（v3.0：加百列 / 米迦勒 / 路西法）
-  gabrielSprite: "/assets/chapter1/images/npc_gabriel_sprite.png",
-  michaelSprite: "/assets/chapter1/images/npc_michael_sprite.png",
+  gabrielSprite: "/assets/chapter1/images/npc_gabriel_sprite.webp",
+  michaelSprite: "/assets/chapter1/images/npc_michael_sprite.webp",
   // 路西法立绘复用乌列尔（其前身）透明立绘；原 npc_lucifer_sprite.png 为 colorType=2 实色背景图，已废弃
-  luciferSprite: "/assets/chapter1/images/npc_uriel_sprite.png",
+  luciferSprite: "/assets/chapter1/images/npc_uriel_sprite.webp",
   // 圆润版刺猬透明立绘（1254x1254 RGBA），第一章万物受名处专用
-  hedgehogRoundedSprite: "/assets/chapter1/images/npc_hedgehog_rounded_final.png",
+  hedgehogRoundedSprite: "/assets/chapter1/images/npc_hedgehog_rounded_final.webp",
   // 夜景背景（2026-06-22 Codex 生成）
   centralMeadowNight: "/assets/chapter1/images/location_central_meadow_final_night_1920.webp",
   fourRiverSourceNight: "/assets/chapter1/images/location_eden_river_night_1920.webp",
@@ -74,10 +74,10 @@ export const CHAPTER1_IMAGES = {
   // 园子中央终局夜景
   centralMeadowFinalNight: "/assets/chapter1/images/location_central_meadow_final_night_1920.webp",
   // 三位天使隐藏结局专属过场图（1920x1080 PNG，由 Codex 生成，2026-07-13）
-  escapeEdenEnding: "/assets/chapter1/images/escape_eden_ending.png",
-  michaelSlayEnding: "/assets/chapter1/images/michael_slay_ending.png",
-  luciferAwakenEnding: "/assets/chapter1/images/lucifer_awaken_ending.png",
-  luciferAwakenRevealEnding: "/assets/chapter1/images/lucifer_awaken_reveal_ending.png",
+  escapeEdenEnding: "/assets/chapter1/images/escape_eden_ending.webp",
+  michaelSlayEnding: "/assets/chapter1/images/michael_slay_ending.webp",
+  luciferAwakenEnding: "/assets/chapter1/images/lucifer_awaken_ending.webp",
+  luciferAwakenRevealEnding: "/assets/chapter1/images/lucifer_awaken_reveal_ending.webp",
 } as const;
 
 export const CHAPTER1_AUDIO = {
